@@ -62,44 +62,12 @@ namespace nbd {
   void pvc_fw(const Vector& X, const Matrix& Us, const Matrix& Uc, Vector& Xs, Vector& Xc);
 
   void pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Matrix& Uc, Vector& X);
-
-  struct CSC {
-    int64_t M;
-    int64_t N;
-    int64_t NNZ;
-    std::vector<int64_t> CSC_COLS;
-    std::vector<int64_t> CSC_ROWS;
-  };
-
-  struct CSR {
-    int64_t M;
-    int64_t N;
-    int64_t NNZ;
-    std::vector<int64_t> CSR_ROWS;
-    std::vector<int64_t> CSR_COLS;
-  };
   
   typedef std::vector<Matrix> Matrices;
   typedef std::vector<Vector> Vectors;
 
-  void lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j);
+  //void cpsVectors(char updwn, const Vectors& Xs, Vectors& Xt);
 
-  void toCSR(CSR& rels_csr, const CSC& rels_csc);
-
-  void cVectors(Vectors& Xs, int64_t n, const int64_t* dims);
-
-  int64_t ctoVectors(Vectors& Xs, const double* X);
-
-  int64_t cbkVectors(double* X, const Vectors& Xs);
-
-  void cpsVectors(char updwn, const Vectors& Xs, Vectors& Xt);
-
-  void cMatrices(Matrices& Ms, const CSC& rels, const int64_t* Ydims, const int64_t* Xdims);
-
-  int64_t ctoMatrices(Matrices& Ms, const double* M);
-
-  int64_t cbkMatrices(double* M, const Matrices& Ms);
-
-  void cpsMatrices(Matrices& Mup, const CSC& rels_up, const Matrices& Mlow, const CSC& rels_low);
+  //void cpsMatrices(Matrices& Mup, const CSC& rels_up, const Matrices& Mlow, const CSC& rels_low);
 
 };

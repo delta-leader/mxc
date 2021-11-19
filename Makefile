@@ -3,11 +3,14 @@ CC	= g++ -O3 -I.
 MPI_CC	= mpicxx -O3 -I.
 LC	= -lm -llapacke -lblas
 
-all: main build_tree linalg kernel sps_basis sps_umv dist
-	$(MPI_CC) main.o build_tree.o linalg.o kernel.o sps_basis.o sps_umv.o dist.o $(LC)
+all: main domain bodies linalg kernel sps_basis sps_umv dist
+	$(MPI_CC) main.o domain.o bodies.o linalg.o kernel.o sps_basis.o sps_umv.o dist.o $(LC)
 
-build_tree: build_tree.cxx build_tree.hxx
-	$(CC) -c build_tree.cxx
+domain: domain.cxx domain.hxx
+	$(CC) -c domain.cxx
+
+bodies: bodies.cxx bodies.hxx
+	$(CC) -c bodies.cxx
 
 linalg: linalg.cxx linalg.hxx
 	$(CC) -c linalg.cxx

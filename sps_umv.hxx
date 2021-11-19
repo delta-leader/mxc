@@ -1,5 +1,6 @@
 
 #pragma once
+#include "domain.hxx"
 #include "linalg.hxx"
 
 namespace nbd {
@@ -27,7 +28,6 @@ namespace nbd {
   void A_co_bk(Vectors& Xc, const Matrices& A_co, const CSC& rels, const Vectors& Xo);
 
   struct Node {
-    CSC RELS;
     Matrices A;
     Matrices A_cc;
     Matrices A_co;
@@ -35,14 +35,7 @@ namespace nbd {
     Matrices A_oo;
   };
 
-  struct DistNode {
-    Node SELF;
-    std::vector<int64_t> NGB_RANKS;
-    std::vector<Node> NGB_FROM_NODES;
-    std::vector<Node> NGB_TO_NODES;
-  };
-
-  typedef std::vector<DistNode> Nodes;
+  typedef std::vector<Node> Nodes;
 
   
 

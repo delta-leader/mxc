@@ -194,74 +194,7 @@ void nbd::pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Mat
   mvec('N', Us, Xs, X, 1., 1.);
 }
 
-void nbd::lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j) {
-  if (j < 0 || j >= rels.N)
-  { ij = -1; return; }
-  int64_t k = std::distance(rels.CSC_ROWS.data(), 
-    std::find(rels.CSC_ROWS.data() + rels.CSC_COLS[j], rels.CSC_ROWS.data() + rels.CSC_COLS[j + 1], i));
-  if (k < rels.CSC_COLS[j + 1])
-    ij = k;
-}
-
-void nbd::toCSR(CSR& rels_csr, const CSC& rels_csc) {
-  rels_csr.M = rels_csc.M;
-  rels_csr.N = rels_csc.N;
-  rels_csr.NNZ = rels_csc.NNZ;
-
-  rels_csr.CSR_ROWS.resize(rels_csr.M + 1);
-  rels_csr.CSR_COLS.resize(rels_csr.NNZ);
-
-  std::vector<int64_t> counts(rels_csr.M);
-  std::fill(counts.begin(), counts.end(), 0);
-  for (int64_t j = 0; j < rels_csc.N; j++)
-    for (int64_t ij = rels_csc.CSC_COLS[j]; ij < rels_csc.CSC_COLS[j + 1]; ij++) {
-      int64_t i = rels_csc.CSC_ROWS[ij];
-      counts[i] = counts[i] + 1;
-    }
-
-  rels_csr.CSR_ROWS[0] = 0;
-  for (int64_t i = 1; i <= rels_csr.M; i++)
-    rels_csr.CSR_ROWS[i] = rels_csr.CSR_ROWS[i - 1] + counts[i - 1];
-  std::fill(counts.begin(), counts.end(), 0);
-
-  for (int64_t j = 0; j < rels_csc.N; j++)
-    for (int64_t ij = rels_csc.CSC_COLS[j]; ij < rels_csc.CSC_COLS[j + 1]; ij++) {
-      int64_t i = rels_csc.CSC_ROWS[ij];
-      int64_t ci = counts[i];
-      int64_t loc_i = ci + rels_csr.CSR_ROWS[i];
-      rels_csr.CSR_COLS[loc_i] = j;
-      counts[i] = ci + 1;
-    }
-}
-
-
-void nbd::cVectors(Vectors& Xs, int64_t n, const int64_t* dims) {
-  Xs.resize(n);
-  for (int64_t i = 0; i < n; i++)
-    cVector(Xs[i], dims[i]);
-}
-
-int64_t nbd::ctoVectors(Vectors& Xs, const double* X) {
-  const double* Xi = X;
-  for (int64_t i = 0; i < Xs.size(); i++) {
-    int64_t dim = Xs[i].N;
-    std::copy(Xi, Xi + dim, Xs[i].X.data());
-    Xi = Xi + dim;
-  }
-  return std::distance(X, Xi);
-}
-
-int64_t nbd::cbkVectors(double* X, const Vectors& Xs) {
-  double* Xi = X;
-  for (int64_t i = 0; i < Xs.size(); i++) {
-    int64_t dim = Xs[i].N;
-    std::copy(Xs[i].X.data(), Xs[i].X.data() + dim, Xi);
-    Xi = Xi + dim;
-  }
-  return std::distance(X, Xi);
-}
-
-void nbd::cpsVectors(char updwn, const Vectors& Xs, Vectors& Xt) {
+/*void nbd::cpsVectors(char updwn, const Vectors& Xs, Vectors& Xt) {
   if (updwn == 'U' || updwn == 'u') {
     for (int64_t i = 0; i < Xt.size(); i++) {
       const Vector& c1 = Xs[i << 1];
@@ -278,38 +211,6 @@ void nbd::cpsVectors(char updwn, const Vectors& Xs, Vectors& Xt) {
       std::copy(&Xs[i].X[c1.N], &Xs[i].X[c1.N + c2.N], &c2.X[0]);
     }
   }
-}
-
-
-void nbd::cMatrices(Matrices& Ms, const CSC& rels, const int64_t* Ydims, const int64_t* Xdims) {
-  Ms.resize(rels.NNZ);
-  for (int64_t j = 0; j < rels.N; j++)
-    for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
-      int64_t i = rels.CSC_ROWS[ij];
-      cMatrix(Ms[ij], Ydims[i], Xdims[j]);
-    }
-}
-
-int64_t nbd::ctoMatrices(Matrices& Ms, const double* M) {
-  const double* Mi = M;
-  for (int64_t i = 0; i < Ms.size(); i++) {
-    int64_t y = Ms[i].M;
-    int64_t x = Ms[i].N;
-    std::copy(Mi, Mi + y * x, Ms[i].A.data());
-    Mi = Mi + y * x;
-  }
-  return std::distance(M, Mi);
-}
-
-int64_t nbd::cbkMatrices(double* M, const Matrices& Ms) {
-  double* Mi = M;
-  for (int64_t i = 0; i < Ms.size(); i++) {
-    int64_t y = Ms[i].M;
-    int64_t x = Ms[i].N;
-    std::copy(Ms[i].A.data(), Ms[i].A.data() + y * x, Mi);
-    Mi = Mi + y * x;
-  }
-  return std::distance(M, Mi);
 }
 
 void nbd::cpsMatrices(Matrices& Mup, const CSC& rels_up, const Matrices& Mlow, const CSC& rels_low) {
@@ -344,5 +245,5 @@ void nbd::cpsMatrices(Matrices& Mup, const CSC& rels_up, const Matrices& Mlow, c
         cpyMatToMat(m11.M, m11.N, m11, Mup[ij], 0, 0, Mup[ij].M - m11.M, Mup[ij].N - m11.N);
       }
     }
-}
+}*/
 

@@ -1,5 +1,5 @@
 
-#include "build_tree.hxx"
+#include "bodies.hxx"
 
 #include "mpi.h"
 #include <cstdlib>
@@ -7,12 +7,12 @@
 
 using namespace nbd;
 
-void nbd::DistributeBodies(LocalBodies& bodies) {
-  int64_t my_ind = bodies.SELF_I;
-  int64_t my_rank = bodies.RANKS[my_ind];
-  int64_t nboxes = bodies.BOXES;
+void nbd::DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi) {
+  int64_t my_ind = gi.SELF_I;
+  int64_t my_rank = gi.NGB_RNKS[my_ind];
+  int64_t nboxes = gi.BOXES;
   int64_t dim = bodies.DIM;
-  const std::vector<int64_t>& neighbors = bodies.RANKS;
+  const std::vector<int64_t>& neighbors = gi.NGB_RNKS;
 
   int64_t my_nbody = bodies.NBODIES[my_ind] * dim;
   int64_t my_offset = bodies.OFFSETS[my_ind * nboxes];

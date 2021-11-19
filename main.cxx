@@ -1,6 +1,6 @@
 
 
-#include "build_tree.hxx"
+#include "bodies.hxx"
 #include "sps_basis.hxx"
 #include "sps_umv.hxx"
 
@@ -37,11 +37,11 @@ int main(int argc, char* argv[]) {
   Local_Partition(local, domain, mpi_rank, mpi_size, theta);
 
   Random_bodies(bodies, domain, local, 100 ^ mpi_rank);
-  DistributeBodies(bodies);
+  DistributeBodies(bodies, local.MY_IDS.back());
 
-  CSC rels;
   Matrices A;
-  BlockCSC(A, rels, l2d(), local, bodies);
+  BlockCSC(A, l2d(), local, bodies);
+  CSC& rels = local.MY_IDS.back().RELS;
 
   printf("%d: %ld %ld %ld\n", mpi_rank, rels.M, rels.N, A.size());
 
