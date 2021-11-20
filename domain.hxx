@@ -26,6 +26,7 @@ namespace nbd {
     int64_t BOXES;
     int64_t SELF_I;
     std::vector<int64_t> NGB_RNKS;
+    std::vector<int64_t> COMM_RNKS;
     CSC RELS;
   };
 

@@ -1,82 +1,84 @@
 
 #include "sps_umv.hxx"
-#include "sps_basis.hxx"
 
 using namespace nbd;
 
-void nbd::split_A(Matrices& A_out, const CSC& rels, const Matrices& A, const Matrices& U, const Matrices& V) {
-  A_out.resize(rels.NNZ);
+void nbd::splitA(Matrices& A_out, const GlobalIndex& gi, const Matrices& A, const Matrices& U, const Matrices& V) {
+  const CSC& rels = gi.RELS;
+  const Matrix* vlocal = &V[gi.SELF_I * gi.BOXES];
 
-  for (int64_t x = 0; x < rels.N; x++)
+  for (int64_t x = 0; x < rels.N; x++) {
     for (int64_t yx = rels.CSC_COLS[x]; yx < rels.CSC_COLS[x + 1]; yx++) {
       int64_t y = rels.CSC_ROWS[yx];
-      utav(U[y], A[yx], V[x], A_out[yx]);
+      int64_t box_y;
+      Lookup_GlobalI(box_y, gi, y);
+      utav(U[box_y], A[yx], vlocal[x], A_out[yx]);
     }
+  }
 }
 
-void nbd::factor_Acc(Matrices& A_cc, const CSC& rels) {
+void nbd::factorAcc(Matrices& A_cc, const GlobalIndex& gi) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
 
-  for (int64_t i = 0; i < rels.M; i++) {
+  for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
-    lookupIJ(ii, rels, i, i);
+    lookupIJ(ii, rels, i + lbegin, i);
     Matrix& A_ii = A_cc[ii];
-    lu_decomp(A_ii);
+    chol_decomp(A_ii);
 
     for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
       int64_t y = rels.CSC_ROWS[yi];
-      if (y > i)
+      if (y > i + lbegin)
         trsm_lowerA(A_cc[yi], A_ii);
     }
   }
 }
 
-void nbd::factor_Alow(Matrices& Alow, const CSC& rels_low, Matrices& A_cc, const CSC& rels_cc) {
-  for (int64_t x = 0; x < rels_low.N; x++) {
-    int64_t xx;
-    lookupIJ(xx, rels_cc, x, x);
-    const Matrix& A_xx = A_cc[xx];
-    for (int64_t yx = rels_low.CSC_COLS[x]; yx < rels_low.CSC_COLS[x + 1]; yx++)
-      trsm_lowerA(Alow[yx], A_xx);
+void factorAoc(Matrices& A_oc, const Matrices& A_cc, const GlobalIndex& gi) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
+
+  for (int64_t i = 0; i < rels.N; i++) {
+    int64_t ii;
+    lookupIJ(ii, rels, i + lbegin, i);
+    const Matrix& A_ii = A_cc[ii];
+    for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++)
+      trsm_lowerA(A_oc[yi], A_ii);
   }
 }
 
-void nbd::factor_Aup(Matrices& Aup, const CSC& rels_up, Matrices& A_cc, const CSC& rels_cc) {
-  
-}
+void nbd::schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
 
-void nbd::schur_cmplm_low(Matrices& S_oo, const Matrices& A_oc, const CSC& rels_oc, const Matrices& A_co, const CSC& rels_co) {
-  for (int64_t x = 0; x < rels_oc.N; x++) {
-    int64_t xx;
-    lookupIJ(xx, rels_co, x, x);
-    const Matrix& A_xx = A_co[xx];
-    for (int64_t yx = rels_oc.CSC_COLS[x]; yx < rels_oc.CSC_COLS[x + 1]; yx++) {
-      const Matrix& A_yx = A_oc[yx];
-      Matrix& S_yx = S_oo[yx];
-      mmult('N', 'N', A_yx, A_xx, S_yx, -1., 1.);
+  for (int64_t i = 0; i < rels.N; i++) {
+    int64_t ii;
+    lookupIJ(ii, rels, i + lbegin, i);
+    const Matrix& A_iit = A_oc[ii];
+    for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
+      const Matrix& A_yi = A_oc[yi];
+      Matrix& S_yi = S[yi];
+      mmult('N', 'T', A_yi, A_iit, S_yi, -1., 0.);
     }
   }
 }
 
-void nbd::schur_cmplm_up(Matrices& S_oo, const Matrices& A_oc, const CSC& rels_oc, const Matrices& A_co, const CSC& rels_co) {
-  
-}
+void nbd::axatLocal(Matrices& A, const GlobalIndex& gi) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
 
-void nbd::schur_cmplm_diag(Matrices& S_oo, const Matrices& A_oc, const Matrices& A_co, const CSC& rels) {
-  schur_cmplm_up(S_oo, A_oc, rels, A_co, rels);
-
-  for (int64_t x = 0; x < rels.N; x++) {
-    int64_t xx;
-    lookupIJ(xx, rels, x, x);
-    const Matrix& A_xx = A_co[xx];
-    for (int64_t yx = rels.CSC_COLS[x]; yx < rels.CSC_COLS[x + 1]; yx++) {
-      int64_t y = rels.CSC_ROWS[yx];
-      if (y == x)
-        continue;
-      const Matrix& A_yx = A_oc[yx];
-      Matrix& S_yx = S_oo[yx];
-      mmult('N', 'N', A_yx, A_xx, S_yx, -1., 1.);
+  for (int64_t i = 0; i < rels.N; i++)
+    for (int64_t ji = rels.CSC_COLS[i]; ji < rels.CSC_COLS[i + 1]; ji++) {
+      int64_t j = rels.CSC_ROWS[ji];
+      if (j > i + lbegin) {
+        Matrix& A_ji = A[ji];
+        int64_t ij;
+        lookupIJ(ij, rels, i + lbegin, j - lbegin);
+        Matrix& A_ij = A[ij];
+        axat(A_ji, A_ij);
+      }
     }
-  }
 }
 
 void nbd::A_cc_fw(Vectors& Xc, const Matrices& A_cc, const CSC& rels) {

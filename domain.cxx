@@ -147,6 +147,11 @@ void nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, i
     gi.SELF_I = std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_rank));
     int64_t ilocal = std::max((int64_t)0, i - loDomain.MY_LEVEL);
     gi.BOXES = (int64_t)1 << ilocal;
+    
+    int64_t mask = rank - my_rank << lvl_diff;
+    gi.COMM_RNKS.resize(len);
+    for (int64_t r = 0; r < len; r++)
+      gi.COMM_RNKS[r] = (gi.NGB_RNKS[r] << lvl_diff) | mask;
 
     int64_t y = (int64_t)1 << i;
     int64_t xbegin = my_rank * gi.BOXES;

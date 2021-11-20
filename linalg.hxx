@@ -21,13 +21,9 @@ namespace nbd {
 
   void cVector(Vector& vec, int64_t n);
 
-  int64_t cpyFromMatrix(const Matrix& mat, double* m);
+  void cpyFromMatrix(char trans, const Matrix& A, double* v);
 
-  int64_t cpyToMatrix(Matrix& mat, const double* m);
-
-  int64_t cpyFromVector(const Vector& vec, double* v);
-
-  int64_t cpyToVector(Vector& vec, const double* v);
+  void maxpy(Matrix& A, const double* v, double alpha);
 
   void cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_t y1, int64_t x1, int64_t y2, int64_t x2);
 
@@ -43,19 +39,19 @@ namespace nbd {
 
   void minv(char ta, char lr, Matrix& A, Matrix& B);
 
-  void lu_decomp(Matrix& A);
+  void chol_decomp(Matrix& A);
 
-  void trsm_lowerA(Matrix& A, const Matrix& U);
-
-  void trsm_upperA(Matrix& A, const Matrix& L);
+  void trsm_lowerA(Matrix& A, const Matrix& L);
 
   void utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C);
 
-  void lu_solve(Vector& X, const Matrix& A);
+  void axat(Matrix& A, Matrix& AT);
+
+  void chol_solve(Vector& X, const Matrix& A);
 
   void fw_solve(Vector& X, const Matrix& L);
 
-  void bk_solve(Vector& X, const Matrix& U);
+  void bk_solve(Vector& X, const Matrix& L);
 
   void mvec(char ta, const Matrix& A, const Vector& X, Vector& B, double alpha, double beta);
 

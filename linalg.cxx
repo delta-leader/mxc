@@ -20,32 +20,20 @@ void nbd::cVector(Vector& vec, int64_t n) {
   vec.N = n;
 }
 
-int64_t nbd::cpyFromMatrix(const Matrix& mat, double* m) {
-  int64_t size = mat.M * mat.N;
-  if (m != nullptr && size > 0)
-    std::copy(&mat.A[0], &mat.A[size], m);
-  return size;
+void nbd::cpyFromMatrix(char trans, const Matrix& A, double* V) {
+  int64_t iv = A.M;
+  int64_t incv = 1;
+  if (trans == 'T' || trans == 't') {
+    iv = 1;
+    incv = A.N;
+  }
+  for (int64_t j = 0; j < A.N; j++)
+    cblas_dcopy(A.M, &A.A[j * A.M], 1, &V[j * iv], incv);
 }
 
-int64_t nbd::cpyToMatrix(Matrix& mat, const double* m) {
-  int64_t size = mat.M * mat.N;
-  if (m != nullptr && size > 0)
-    std::copy(&m[0], &m[size], &mat.A[0]);
-  return size;
-}
-
-int64_t nbd::cpyFromVector(const Vector& vec, double* v) {
-  int64_t size = vec.N;
-  if (v != nullptr && size > 0)
-    std::copy(&vec.X[0], &vec.X[size], v);
-  return size;
-}
-
-int64_t nbd::cpyToVector(Vector& vec, const double* v) {
-  int64_t size = vec.N;
-  if (v != nullptr && size > 0)
-    std::copy(&v[0], &v[size], &vec.X[0]);
-  return size;
+void nbd::maxpy(Matrix& A, const double* v, double alpha) {
+  int64_t size = A.M * A.N;
+  cblas_daxpy(size, alpha, v, 1, A.A.data(), 1);
 }
 
 void nbd::cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_t y1, int64_t x1, int64_t y2, int64_t x2) {
@@ -126,33 +114,12 @@ void nbd::minv(char ta, char lr, Matrix& A, Matrix& B) {
   }
 }
 
-void nbd::lu_decomp(Matrix& A) {
-  int64_t m = A.M;
-  int64_t n = A.N;
-  int64_t lda = A.M;
-  int64_t k = std::min(m, n);
-  double* a = A.A.data();
-
-  for (int64_t i = 0; i < k; i++) {
-    double p = 1. / a[i + i * lda];
-    int64_t mi = m - i - 1;
-    int64_t ni = n - i - 1;
-
-    double* ax = a + i + i * lda + 1;
-    double* ay = a + i + i * lda + lda;
-    double* an = ay + 1;
-
-    cblas_dscal(mi, p, ax, 1);
-    cblas_dger(CblasColMajor, mi, ni, -1., ax, 1, ay, lda, an, lda);
-  }
+void nbd::chol_decomp(Matrix& A) {
+  LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A.M, A.A.data(), A.M);
 }
 
-void nbd::trsm_lowerA(Matrix& A, const Matrix& U) {
-  cblas_dtrsm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, A.M, A.N, 1., U.A.data(), U.M, A.A.data(), A.M);
-}
-
-void nbd::trsm_upperA(Matrix& A, const Matrix& L) {
-  cblas_dtrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, A.M, A.N, 1., L.A.data(), L.M, A.A.data(), A.M);
+void nbd::trsm_lowerA(Matrix& A, const Matrix& L) {
+  cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, A.M, A.N, 1., L.A.data(), L.M, A.A.data(), A.M);
 }
 
 void nbd::utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
@@ -164,17 +131,24 @@ void nbd::utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
   mmult('N', 'N', work, VT, C, 1., 0.);
 }
 
-void nbd::lu_solve(Vector& X, const Matrix& A) {
+void nbd::axat(Matrix& A, Matrix& AT) {
+  for (int64_t j = 0; j < A.N; j++)
+    cblas_daxpy(A.M, 1., &AT.A[j], AT.M, &A.A[j * A.M], 1);
+  for (int64_t i = 0; i < A.M; i++)
+    cblas_dcopy(A.N, &A.A[i], A.M, &AT.A[i * AT.M], 1);
+}
+
+void nbd::chol_solve(Vector& X, const Matrix& A) {
   fw_solve(X, A);
   bk_solve(X, A);
 }
 
 void nbd::fw_solve(Vector& X, const Matrix& L) {
-  cblas_dtrsv(CblasColMajor, CblasLower, CblasNoTrans, CblasUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
+  cblas_dtrsv(CblasColMajor, CblasLower, CblasNoTrans, CblasNonUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
 }
 
-void nbd::bk_solve(Vector& X, const Matrix& U) {
-  cblas_dtrsv(CblasColMajor, CblasUpper, CblasNoTrans, CblasNonUnit, X.N, U.A.data(), U.M, X.X.data(), 1);
+void nbd::bk_solve(Vector& X, const Matrix& L) {
+  cblas_dtrsv(CblasColMajor, CblasLower, CblasTrans, CblasNonUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
 }
 
 void nbd::mvec(char ta, const Matrix& A, const Vector& X, Vector& B, double alpha, double beta) {
