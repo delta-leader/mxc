@@ -17,13 +17,16 @@ namespace nbd {
     int64_t N;
   };
 
+  typedef std::vector<Matrix> Matrices;
+  typedef std::vector<Vector> Vectors;
+
   void cMatrix(Matrix& mat, int64_t m, int64_t n);
 
   void cVector(Vector& vec, int64_t n);
 
   void cpyFromMatrix(char trans, const Matrix& A, double* v);
 
-  void maxpy(Matrix& A, const double* v, double alpha);
+  void maxpby(Matrix& A, const double* v, double alpha, double beta);
 
   void cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_t y1, int64_t x1, int64_t y2, int64_t x2);
 
@@ -47,6 +50,8 @@ namespace nbd {
 
   void axat(Matrix& A, Matrix& AT);
 
+  void madd(Matrix& A, const Matrix& B);
+
   void chol_solve(Vector& X, const Matrix& A);
 
   void fw_solve(Vector& X, const Matrix& L);
@@ -58,12 +63,7 @@ namespace nbd {
   void pvc_fw(const Vector& X, const Matrix& Us, const Matrix& Uc, Vector& Xs, Vector& Xc);
 
   void pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Matrix& Uc, Vector& X);
-  
-  typedef std::vector<Matrix> Matrices;
-  typedef std::vector<Vector> Vectors;
 
-  //void cpsVectors(char updwn, const Vectors& Xs, Vectors& Xt);
 
-  //void cpsMatrices(Matrices& Mup, const CSC& rels_up, const Matrices& Mlow, const CSC& rels_low);
 
 };

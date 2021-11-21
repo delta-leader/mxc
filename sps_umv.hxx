@@ -1,7 +1,7 @@
 
 #pragma once
-#include "domain.hxx"
-#include "linalg.hxx"
+
+#include "sps_basis.hxx"
 
 namespace nbd {
 
@@ -24,6 +24,14 @@ namespace nbd {
   void schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi);
 
   void axatLocal(Matrices& A, const GlobalIndex& gi);
+
+  void allocNodes(Nodes& nodes, const LocalDomain& domain);
+
+  void allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo);
+
+  void factorNode(Node& n, const GlobalIndex& gi, const Base& basis);
+
+  void nextNode(Node& Anext, const GlobalIndex& Gnext, const Node& Aprev, const GlobalIndex& Gprev);
 
   void A_cc_fw(Vectors& Xc, const Matrices& A_cc, const CSC& rels);
 

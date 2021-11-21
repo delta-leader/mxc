@@ -31,8 +31,12 @@ void nbd::cpyFromMatrix(char trans, const Matrix& A, double* V) {
     cblas_dcopy(A.M, &A.A[j * A.M], 1, &V[j * iv], incv);
 }
 
-void nbd::maxpy(Matrix& A, const double* v, double alpha) {
+void nbd::maxpby(Matrix& A, const double* v, double alpha, double beta) {
   int64_t size = A.M * A.N;
+  if (beta == 0.)
+    std::fill(A.A.data(), A.A.data() + size, 0.);
+  else if (beta != 1.)
+    cblas_dscal(size, beta, A.A.data(), 1);
   cblas_daxpy(size, alpha, v, 1, A.A.data(), 1);
 }
 
@@ -125,8 +129,6 @@ void nbd::trsm_lowerA(Matrix& A, const Matrix& L) {
 void nbd::utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
   Matrix work;
   cMatrix(work, U.N, A.N);
-  cMatrix(C, U.N, VT.N);
-
   mmult('T', 'N', U, A, work, 1., 0.);
   mmult('N', 'N', work, VT, C, 1., 0.);
 }
@@ -136,6 +138,11 @@ void nbd::axat(Matrix& A, Matrix& AT) {
     cblas_daxpy(A.M, 1., &AT.A[j], AT.M, &A.A[j * A.M], 1);
   for (int64_t i = 0; i < A.M; i++)
     cblas_dcopy(A.N, &A.A[i], A.M, &AT.A[i * AT.M], 1);
+}
+
+void nbd::madd(Matrix& A, const Matrix& B) {
+  int64_t size = A.M * A.N;
+  cblas_daxpy(size, 1., &B.A[0], 1, &A.A[0], 1);
 }
 
 void nbd::chol_solve(Vector& X, const Matrix& A) {
@@ -186,38 +193,5 @@ void nbd::pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Mat
     }
   }
 }
-
-void nbd::cpsMatrices(Matrices& Mup, const CSC& rels_up, const Matrices& Mlow, const CSC& rels_low) {
-  for (int64_t j = 0; j < rels_up.N; j++)
-    for (int64_t ij = rels_up.CSC_COLS[j]; ij < rels_up.CSC_COLS[j + 1]; ij++) {
-      int64_t i = rels_up.CSC_ROWS[ij];
-      zeroMatrix(Mup[ij]);
-      
-      int64_t i00, i01, i10, i11;
-      lookupIJ(i00, rels_low, i << 1, j << 1);
-      lookupIJ(i01, rels_low, i << 1, (j << 1) + 1);
-      lookupIJ(i10, rels_low, (i << 1) + 1, j << 1);
-      lookupIJ(i11, rels_low, (i << 1) + 1, (j << 1) + 1);
-
-      if (i00 > 0) {
-        const Matrix& m00 = Mlow[i00];
-        cpyMatToMat(m00.M, m00.N, m00, Mup[ij], 0, 0, 0, 0);
-      }
-
-      if (i01 > 0) {
-        const Matrix& m01 = Mlow[i01];
-        cpyMatToMat(m01.M, m01.N, m01, Mup[ij], 0, 0, 0, Mup[ij].N - m01.N);
-      }
-
-      if (i10 > 0) {
-        const Matrix& m10 = Mlow[i10];
-        cpyMatToMat(m10.M, m10.N, m10, Mup[ij], 0, 0, Mup[ij].M - m10.M, 0);
-      }
-
-      if (i11 > 0) {
-        const Matrix& m11 = Mlow[i11];
-        cpyMatToMat(m11.M, m11.N, m11, Mup[ij], 0, 0, Mup[ij].M - m11.M, Mup[ij].N - m11.N);
-      }
-    }
-}*/
+*/
 

@@ -57,45 +57,78 @@ void nbd::DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi) {
   }
 }
 
-
 void nbd::DistributeMatricesList(Matrices& lis, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];
   int64_t nboxes = gi.BOXES;
   const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
-  std::vector<MPI_Request> requests(neighbors.size() * nboxes);
+  std::vector<MPI_Request> requests(neighbors.size());
+
+  std::vector<int64_t> LENS(neighbors.size());
+  std::vector<double*> DATA(neighbors.size());
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
-    if (rm_rank != my_rank)
-      for (int64_t n = 0; n < nboxes; n++) {
-        int64_t rm_i = i * nboxes + n;
-        int64_t my_i = my_ind * nboxes + n;
-        const double* data = lis[my_i].A.data();
-        int64_t len = lis[my_i].M * lis[my_i].N;
-        MPI_Isend(data, len, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[rm_i]);
-      }
+    int64_t tot_len = 0;
+    for (int64_t n = 0; n < nboxes; n++) {
+      int64_t rm_i = i * nboxes + n;
+      const Matrix& A_i = lis[rm_i];
+      int64_t len = A_i.M * A_i.N;
+      tot_len = tot_len + len;
+    }
+    LENS[i] = tot_len;
+    DATA[i] = (double*)malloc(sizeof(double) * tot_len);
+  }
+
+  int64_t offset = 0;
+  double* my_data = DATA[my_ind];
+  int64_t my_len = LENS[my_ind];
+  for (int64_t n = 0; n < nboxes; n++) {
+    int64_t my_i = my_ind * nboxes + n;
+    const Matrix& A_i = lis[my_i];
+    int64_t len = A_i.M * A_i.N;
+    cpyFromMatrix('N', A_i, my_data + offset);
+    offset = offset + len;
   }
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
     if (rm_rank != my_rank)
-      for (int64_t n = 0; n < nboxes; n++) {
-        int64_t rm_i = i * nboxes + n;
-        double* data = lis[rm_i].A.data();
-        int64_t len = lis[rm_i].M * lis[rm_i].N;
-        MPI_Recv(data, len, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-      }
+      MPI_Isend(my_data, my_len, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank) {
+      double* data = DATA[i];
+      int64_t len = LENS[i];
+      MPI_Recv(data, len, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
   }
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
     if (rm_rank != my_rank)
+      MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank) {
+      offset = 0;
+      const double* rm_v = DATA[i];
       for (int64_t n = 0; n < nboxes; n++) {
         int64_t rm_i = i * nboxes + n;
-        MPI_Wait(&requests[rm_i], MPI_STATUS_IGNORE);
+        Matrix& A_i = lis[rm_i];
+        int64_t len = A_i.M * A_i.N;
+        maxpby(A_i, rm_v + offset, 1., 0.);
+        offset = offset + len;
       }
+    }
   }
+
+  for (int64_t i = 0; i < neighbors.size(); i++)
+    free(DATA[i]);
 }
 
 
@@ -186,7 +219,7 @@ void axRemoteV(int64_t RM_BOX, Matrices& A, const GlobalIndex& gi, const double*
         Matrix& A_ji = A[ji];
         int64_t len = A_ji.M * A_ji.N;
         const double* rmv_i = rmv + offset;
-        maxpy(A_ji, rmv_i, 1.);
+        maxpby(A_ji, rmv_i, 1., 1.);
         offset = offset + len;
       }
     }
@@ -198,13 +231,9 @@ void nbd::axatDistribute(Matrices& A, const GlobalIndex& gi) {
   const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
   std::vector<MPI_Request> requests(neighbors.size());
 
-  std::vector<int64_t> LENS;
-  std::vector<double*> SRC_DATA;
-  std::vector<double*> RM_DATA;
-
-  LENS.resize(neighbors.size());
-  SRC_DATA.resize(neighbors.size());
-  RM_DATA.resize(neighbors.size());
+  std::vector<int64_t> LENS(neighbors.size());
+  std::vector<double*> SRC_DATA(neighbors.size());
+  std::vector<double*> RM_DATA(neighbors.size());
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];

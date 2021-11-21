@@ -32,9 +32,9 @@ namespace nbd {
 
   void sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR);
 
-  void basis_fw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X);
+  void basisFw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X);
 
-  void basis_bk(Vectors& X, const Base& basis, const Vectors& Xo, const Vectors& Xc);
+  void basisBk(Vectors& X, const Base& basis, const Vectors& Xo, const Vectors& Xc);
 
   void DistributeMatricesList(Matrices& lis, const GlobalIndex& gi);
 

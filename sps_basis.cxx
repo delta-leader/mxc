@@ -107,12 +107,12 @@ void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrice
   DistributeMatricesList(basis.Uo, gi);
 }
 
-void nbd::basis_fw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X) {
-  //for (int64_t i = 0; i < basis.N; i++)
-  //  pvc_fw(X[i], basis.Uo[i], basis.Uc[i], Xo[i], Xc[i]);
+void nbd::basisFw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X) {
+  for (int64_t i = 0; i < X.size(); i++)
+    pvc_fw(X[i], basis.Uo[i], basis.Uc[i], Xo[i], Xc[i]);
 }
 
-void nbd::basis_bk(Vectors& X, const Base& basis, const Vectors& Xo, const Vectors& Xc) {
-  //for (int64_t i = 0; i < basis.N; i++)
-  //  pvc_bk(Xo[i], Xc[i], basis.Uo[i], basis.Uc[i], X[i]);
+void nbd::basisBk(Vectors& X, const Base& basis, const Vectors& Xo, const Vectors& Xc) {
+  for (int64_t i = 0; i < X.size(); i++)
+    pvc_bk(Xo[i], Xc[i], basis.Uo[i], basis.Uc[i], X[i]);
 }
