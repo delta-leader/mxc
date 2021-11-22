@@ -149,7 +149,7 @@ void nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, i
     gi.SELF_I = std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_rank));
     gi.GBEGIN = my_rank * gi.BOXES;
     
-    int64_t mask = rank - my_rank << lvl_diff;
+    int64_t mask = rank - (my_rank << lvl_diff);
     gi.COMM_RNKS.resize(len);
     for (int64_t r = 0; r < len; r++)
       gi.COMM_RNKS[r] = (gi.NGB_RNKS[r] << lvl_diff) | mask;
@@ -199,4 +199,15 @@ void nbd::Lookup_GlobalI(int64_t& ilocal, const GlobalIndex& gi, int64_t iglobal
     ilocal = box_ind * nboxes + i_rank;
   else
     ilocal = -1;
+}
+
+void nbd::printGlobalI(const GlobalIndex& gi) {
+  printf("-- Global Index --\n");
+  printf(" My rank is %ld, %ldth item in my list.\n", gi.NGB_RNKS[gi.SELF_I], gi.SELF_I);
+  printf(" Boxes starting from %ld to %ld\n", gi.GBEGIN, gi.GBEGIN + gi.BOXES);
+  printf(" I am holding m=%ld, n=%ld, nnz=%ld matrix.\n", gi.RELS.M, gi.RELS.N, gi.RELS.NNZ);
+  printf(" I am communicating with:\n");
+  for (int64_t i = 0; i < gi.NGB_RNKS.size(); i++)
+    printf(" Box rank %ld, process rank %ld\n", gi.NGB_RNKS[i], gi.COMM_RNKS[i]);
+  printf("------------------\n\n");
 }

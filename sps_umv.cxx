@@ -19,7 +19,7 @@ void nbd::splitA(Matrices& A_out, const GlobalIndex& gi, const Matrices& A, cons
 
 void nbd::factorAcc(Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
+  int64_t lbegin = gi.GBEGIN;
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
@@ -37,7 +37,7 @@ void nbd::factorAcc(Matrices& A_cc, const GlobalIndex& gi) {
 
 void nbd::factorAoc(Matrices& A_oc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
+  int64_t lbegin = gi.GBEGIN;
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
@@ -50,7 +50,7 @@ void nbd::factorAoc(Matrices& A_oc, const Matrices& A_cc, const GlobalIndex& gi)
 
 void nbd::schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
+  int64_t lbegin = gi.GBEGIN;
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
@@ -66,7 +66,7 @@ void nbd::schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi) {
 
 void nbd::axatLocal(Matrices& A, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
+  int64_t lbegin = gi.GBEGIN;
   int64_t lend = lbegin + gi.BOXES;
 
   for (int64_t i = 0; i < rels.N; i++)
@@ -175,41 +175,67 @@ void nbd::nextNode(Node& Anext, const GlobalIndex& Gnext, const Node& Aprev, con
     }
 }
 
-void nbd::A_cc_fw(Vectors& Xc, const Matrices& A_cc, const CSC& rels) {
-  for (int64_t i = 0; i < rels.M; i++) {
-    int64_t ii;
-    lookupIJ(ii, rels, i, i);
-    const Matrix& A_ii = A_cc[ii];
-    fw_solve(Xc[i], A_ii);
+void nbd::svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.GBEGIN;
+  Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
 
-    for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
-      int64_t y = rels.CSC_ROWS[yi];
-      const Matrix& A_yi = A_cc[yi];
-      if (y > i)
-        mvec('N', A_yi, Xc[i], Xc[y], -1., 1.);
+  if (fwbk == 'F' || fwbk == 'f')
+    for (int64_t i = 0; i < rels.N; i++) {
+      int64_t ii;
+      lookupIJ(ii, rels, i + lbegin, i);
+      const Matrix& A_ii = A_cc[ii];
+      fw_solve(xlocal[i], A_ii);
+
+      for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
+        int64_t y = rels.CSC_ROWS[yi];
+        const Matrix& A_yi = A_cc[yi];
+        if (y > i + lbegin)
+          mvec('N', A_yi, xlocal[i], xlocal[y], -1., 1.);
+      }
     }
-  }
+  else if (fwbk == 'B' || fwbk == 'b')
+    for (int64_t i = rels.N - 1; i >= 0; i--) {
+      for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
+        int64_t y = rels.CSC_ROWS[yi];
+        const Matrix& A_yi = A_cc[yi];
+        if (y > i + lbegin)
+          mvec('T', A_yi, xlocal[y], xlocal[i], -1., 1.);
+      }
+
+      int64_t ii;
+      lookupIJ(ii, rels, i + lbegin, i);
+      const Matrix& A_ii = A_cc[ii];
+      bk_solve(xlocal[i], A_ii);
+    }
 }
 
-void nbd::A_cc_bk(Vectors& Xc, const Matrices& A_cc, const CSC& rels) {
-  
-}
+void nbd::svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const GlobalIndex& gi) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.GBEGIN;
+  const Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
 
-void nbd::A_oc_fw(Vectors& Xo, const Matrices& A_oc, const CSC& rels, const Vectors& Xc) {
   for (int64_t x = 0; x < rels.N; x++)
     for (int64_t yx = rels.CSC_COLS[x]; yx < rels.CSC_COLS[x + 1]; yx++) {
       int64_t y = rels.CSC_ROWS[yx];
+      int64_t box_y;
+      Lookup_GlobalI(box_y, gi, y);
       const Matrix& A_yx = A_oc[yx];
-      mvec('N', A_yx, Xc[x], Xo[y], -1., 1.);
+      mvec('N', A_yx, xlocal[x], Xo[box_y], -1., 1.);
     }
 }
 
+void nbd::svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const GlobalIndex& gi) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.GBEGIN;
+  Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
 
-void nbd::A_co_bk(Vectors& Xc, const Matrices& A_co, const CSC& rels, const Vectors& Xo) {
   for (int64_t x = 0; x < rels.N; x++)
     for (int64_t yx = rels.CSC_COLS[x]; yx < rels.CSC_COLS[x + 1]; yx++) {
       int64_t y = rels.CSC_ROWS[yx];
-      const Matrix& A_yx = A_co[yx];
-      mvec('N', A_yx, Xo[x], Xc[y], -1., 1.);
+      int64_t box_y;
+      Lookup_GlobalI(box_y, gi, y);
+      const Matrix& A_yx = A_oc[yx];
+      mvec('T', A_yx, Xo[box_y], xlocal[x], -1., 1.);
     }
 }

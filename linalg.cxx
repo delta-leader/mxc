@@ -109,7 +109,6 @@ void nbd::trsm_lowerA(Matrix& A, const Matrix& L) {
 
 void nbd::utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
   Matrix work;
-  cMatrix(work, U.N, A.N);
   mmult('T', 'N', U, A, work, 1., 0.);
   mmult('N', 'N', work, VT, C, 1., 0.);
 }

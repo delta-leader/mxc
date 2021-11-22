@@ -36,6 +36,8 @@ int main(int argc, char* argv[]) {
   Global_Partition(domain, Nbody, Ncrit, dim, 0., 1.);
   Local_Partition(local, domain, mpi_rank, mpi_size, theta);
 
+  //if(mpi_rank == 0) for(auto& gi : local.MY_IDS) printGlobalI(gi);
+
   Random_bodies(bodies, domain, local, 100 ^ mpi_rank);
   DistributeBodies(bodies, local.MY_IDS.back());
 
@@ -52,7 +54,7 @@ int main(int argc, char* argv[]) {
   Base& base = basis.back();
   sampleA(base, 1.e-8, local.MY_IDS.back(), *A, R.data(), R.size());
 
-  checkBasis(base);
+  //checkBasis(base);
 
   MPI_Finalize();
   return 0;
