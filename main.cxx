@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
-  int64_t Nbody = 50000;
+  int64_t Nbody = 40000;
   int64_t Ncrit = 100;
   int64_t theta = 1;
 
@@ -39,17 +39,21 @@ int main(int argc, char* argv[]) {
   Random_bodies(bodies, domain, local, 100 ^ mpi_rank);
   DistributeBodies(bodies, local.MY_IDS.back());
 
-  Matrices A;
-  BlockCSC(A, l2d(), local, bodies);
-  CSC& rels = local.MY_IDS.back().RELS;
+  checkBodies(domain, local, bodies);
 
-  printf("%d: %ld %ld %ld\n", mpi_rank, rels.M, rels.N, A.size());
+  /*Nodes nodes;
+  Matrices* A = allocNodes(nodes, local);
+  BlockCSC(*A, l2d(), local, bodies);
 
-  //Base base;
-  //local_row_base(base, 1.e-8, A, R.data(), rels, R.size());
+  Basis basis;
+  int64_t* LeafD = allocBasis(basis, local);
+  std::copy(bodies.LENS.begin(), bodies.LENS.end(), LeafD);
 
-  //for (auto& u : base.Uo)
-  //  printf("%ld %ld\n", u.M, u.N);
+  Base& base = basis.back();
+  sampleA(base, 1.e-8, local.MY_IDS.back(), *A, R.data(), R.size());
+
+  for (auto& u : base.Uo)
+    printf("%ld %ld\n", u.M, u.N);*/
 
   MPI_Finalize();
   return 0;

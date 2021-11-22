@@ -25,7 +25,7 @@ namespace nbd {
 
   void axatLocal(Matrices& A, const GlobalIndex& gi);
 
-  void allocNodes(Nodes& nodes, const LocalDomain& domain);
+  Matrices* allocNodes(Nodes& nodes, const LocalDomain& domain);
 
   void allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo);
 

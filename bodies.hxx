@@ -28,6 +28,7 @@ namespace nbd {
 
   void DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi);
 
+  void checkBodies(const GlobalDomain& goDomain, const LocalDomain& loDomain, const LocalBodies& bodies);
 
 };
 

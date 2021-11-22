@@ -30,7 +30,7 @@ namespace nbd {
 
   void cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_t y1, int64_t x1, int64_t y2, int64_t x2);
 
-  int64_t orthoBase(double repi, Matrix& A, Matrix& Us, Matrix& Uc);
+  void orthoBase(double repi, Matrix& A, int64_t *rnk_out);
 
   void zeroMatrix(Matrix& A);
 
@@ -40,7 +40,7 @@ namespace nbd {
 
   void msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C);
 
-  void minv(char ta, char lr, Matrix& A, Matrix& B);
+  void msyinv(Matrix& A, Matrix& B);
 
   void chol_decomp(Matrix& A);
 

@@ -9,11 +9,8 @@ namespace nbd {
   struct Base {
     std::vector<int64_t> DIMS;
     std::vector<int64_t> DIMO;
-    
     Matrices Uc;
     Matrices Uo;
-    Matrices C1;
-    Matrices C2;
   };
 
   typedef std::vector<Base> Basis;
@@ -22,13 +19,11 @@ namespace nbd {
 
   void sampleC2(Matrices& C2, const GlobalIndex& gi, const Matrices& A, const Matrices& C1);
 
-  void orthoBasis(double repi, const GlobalIndex& gi, Matrices& Uc, Matrices& Uo, Matrices& C, std::vector<int64_t>& dims_o);
+  void orthoBasis(double repi, const GlobalIndex& gi, Matrices& C, std::vector<int64_t>& dims_o);
 
-  void AllocBasis(Basis& basis, const LocalDomain& domain);
+  int64_t* allocBasis(Basis& basis, const LocalDomain& domain);
 
-  void AllocLeafBase(Base& leaf, const int64_t* bodies);
-
-  void AllocDistUcUo(Base& basis);
+  void allocUcUo(Base& basis, const GlobalIndex& gi, const Matrices& C);
 
   void sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR);
 

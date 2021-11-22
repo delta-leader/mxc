@@ -48,9 +48,7 @@ void nbd::cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_
   }
 }
 
-int64_t nbd::orthoBase(double repi, Matrix& A, Matrix& Us, Matrix& Uc) {
-  if (A.N < A.M)
-    return -1;
+void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
   Vector S;
   Vector superb;
   cVector(S, A.M);
@@ -64,12 +62,7 @@ int64_t nbd::orthoBase(double repi, Matrix& A, Matrix& Us, Matrix& Uc) {
   }
   else
     rank = (int64_t)std::floor(repi);
-
-  cMatrix(Us, A.M, rank);
-  cMatrix(Uc, A.M, A.M - rank);
-  cpyMatToMat(A.M, rank, A, Us, 0, 0, 0, 0);
-  cpyMatToMat(A.M, A.M - rank, A, Uc, 0, rank, 0, 0);
-  return rank;
+  *rnk_out = rank;
 }
 
 void nbd::zeroMatrix(Matrix& A) {
@@ -101,21 +94,9 @@ void nbd::msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C) {
   cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, nrhs, k, 1., A.A.data(), A.M, B.A.data(), B.M, 1., C.A.data(), C.M);
 }
 
-void nbd::minv(char ta, char lr, Matrix& A, Matrix& B) {
-  Vector tau;
-  cVector(tau, std::min(A.M, A.N));
-
-  LAPACKE_dgeqrf(LAPACK_COL_MAJOR, A.M, A.N, A.A.data(), A.M, tau.X.data());
-  auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
-  char tact = (ta == 'N' || ta == 'n') ? 'T' : 'N';
-  if (lr == 'L' || lr == 'l') {
-    LAPACKE_dormqr(LAPACK_COL_MAJOR, 'L', tact, B.M, B.N, tau.N, A.A.data(), A.M, tau.X.data(), B.A.data(), B.M);
-    cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, tac, CblasNonUnit, B.M, B.N, 1., A.A.data(), A.M, B.A.data(), B.M);
-  }
-  else if (lr == 'R' || lr == 'r') {
-    cblas_dtrsm(CblasColMajor, CblasRight, CblasUpper, tac, CblasNonUnit, B.M, B.N, 1., A.A.data(), A.M, B.A.data(), B.M);
-    LAPACKE_dormqr(LAPACK_COL_MAJOR, 'R', tact, B.M, B.N, tau.N, A.A.data(), A.M, tau.X.data(), B.A.data(), B.M);
-  }
+void nbd::msyinv(Matrix& A, Matrix& B) {
+  LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A.M, A.A.data(), A.M);
+  LAPACKE_dpotrs(LAPACK_COL_MAJOR, 'L', A.M, B.N, A.A.data(), A.M, B.A.data(), B.M);
 }
 
 void nbd::chol_decomp(Matrix& A) {

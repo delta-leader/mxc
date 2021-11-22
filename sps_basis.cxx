@@ -1,12 +1,13 @@
 
 #include "sps_basis.hxx"
 
+#include <cstdio>
 using namespace nbd;
 
 void nbd::sampleC1(Matrices& C1, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
-  Matrix* C = &C1[lbegin];
+  int64_t lbegin = gi.GBEGIN;
+  Matrix* C = &C1[gi.SELF_I * gi.BOXES];
   for (int64_t j = 0; j < rels.N; j++) {
     Matrix& cj = C[j];
 
@@ -25,15 +26,15 @@ void nbd::sampleC1(Matrices& C1, const GlobalIndex& gi, const Matrices& A, const
     Matrix work;
     cMatrix(work, Ajj.M, Ajj.N);
     cpyMatToMat(Ajj.M, Ajj.N, Ajj, work, 0, 0, 0, 0);
-    minv('N', 'L', work, cj);
+    msyinv(work, cj);
   }
 }
 
 
 void nbd::sampleC2(Matrices& C2, const GlobalIndex& gi, const Matrices& A, const Matrices& C1) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
-  Matrix* C = &C2[lbegin];
+  int64_t lbegin = gi.GBEGIN;
+  Matrix* C = &C2[gi.SELF_I * gi.BOXES];
   for (int64_t j = 0; j < rels.N; j++) {
     Matrix& cj = C[j];
 
@@ -50,38 +51,28 @@ void nbd::sampleC2(Matrices& C2, const GlobalIndex& gi, const Matrices& A, const
   }
 }
 
-void nbd::orthoBasis(double repi, const GlobalIndex& gi, Matrices& Uc, Matrices& Uo, Matrices& C, std::vector<int64_t>& dims_o) {
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
+void nbd::orthoBasis(double repi, const GlobalIndex& gi, Matrices& C, std::vector<int64_t>& dims_o) {
+  int64_t lbegin = gi.GBEGIN;
   int64_t lend = lbegin + gi.BOXES;
   for (int64_t i = lbegin; i < lend; i++)
-    dims_o[i] = orthoBase(repi, C[i], Uo[i], Uc[i]);
+    orthoBase(repi, C[i], &dims_o[i]);
 }
 
-void nbd::AllocBasis(Basis& basis, const LocalDomain& domain) {
+int64_t* nbd::allocBasis(Basis& basis, const LocalDomain& domain) {
   basis.resize(domain.MY_LEVEL + domain.LOCAL_LEVELS + 1);
   for (int64_t i = 0; i < basis.size(); i++) {
     int64_t nodes = domain.MY_IDS[i].BOXES * domain.MY_IDS[i].NGB_RNKS.size();
     basis[i].DIMS.resize(nodes);
     basis[i].DIMO.resize(nodes);
-
     basis[i].Uo.resize(nodes);
     basis[i].Uc.resize(nodes);
-    basis[i].C1.resize(nodes);
-    basis[i].C2.resize(nodes);
   }
+  return basis.back().DIMS.data();
 }
 
-void nbd::AllocLeafBase(Base& leaf, const int64_t* bodies) {
-  std::copy(bodies, bodies + leaf.DIMS.size(), leaf.DIMS.begin());
-  for (int64_t i = 0; i < leaf.DIMS.size(); i++) {
-    cMatrix(leaf.C1[i], leaf.DIMS[i], leaf.DIMS[i]);
-    cMatrix(leaf.C2[i], leaf.DIMS[i], leaf.DIMS[i]);
-    zeroMatrix(leaf.C1[i]);
-    zeroMatrix(leaf.C2[i]);
-  }
-}
-
-void nbd::AllocDistUcUo(Base& basis) {
+void nbd::allocUcUo(Base& basis, const GlobalIndex& gi, const Matrices& C) {
+  int64_t lbegin = gi.GBEGIN;
+  int64_t lend = lbegin + gi.BOXES;
   for (int64_t i = 0; i < basis.DIMS.size(); i++) {
     int64_t dim = basis.DIMS[i];
     int64_t dim_o = basis.DIMO[i];
@@ -89,20 +80,36 @@ void nbd::AllocDistUcUo(Base& basis) {
 
     Matrix& Uo_i = basis.Uo[i];
     Matrix& Uc_i = basis.Uc[i];
-    if (Uo_i.M != dim || Uo_i.N != dim_o)
-      cMatrix(Uo_i, dim, dim_o);
-    if (Uc_i.M != dim || Uc_i.N != dim_c)
-      cMatrix(Uc_i, dim, dim_c);
+    cMatrix(Uo_i, dim, dim_o);
+    cMatrix(Uc_i, dim, dim_c);
+
+    if (i >= lbegin && i < lend) {
+      const Matrix& U = C[i];
+      cpyMatToMat(dim, dim_o, U, Uo_i, 0, 0, 0, 0);
+      cpyMatToMat(dim, dim_c, U, Uc_i, 0, dim_o, 0, 0);
+    }
   }
 }
 
 void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR) {
-  sampleC1(basis.C1, gi, A, R, lenR);
-  DistributeMatricesList(basis.C1, gi);
-  sampleC2(basis.C2, gi, A, basis.C1);
-  orthoBasis(repi, gi, basis.Uc, basis.Uo, basis.C2, basis.DIMO);
+  Matrices C1(basis.DIMS.size());
+  Matrices C2(basis.DIMS.size());
+
+  for (int64_t i = 0; i < basis.DIMS.size(); i++) {
+    int64_t dim = basis.DIMS[i];
+    cMatrix(C1[i], dim, dim);
+    cMatrix(C2[i], dim, dim);
+    zeroMatrix(C1[i]);
+    zeroMatrix(C2[i]);
+  }
+
+  sampleC1(C1, gi, A, R, lenR);
+  DistributeMatricesList(C1, gi);
+  sampleC2(C2, gi, A, C1);
+  orthoBasis(repi, gi, C2, basis.DIMO);
   DistributeDims(basis.DIMO, gi);
-  AllocDistUcUo(basis);
+  allocUcUo(basis, gi, C2);
+  
   DistributeMatricesList(basis.Uc, gi);
   DistributeMatricesList(basis.Uo, gi);
 }

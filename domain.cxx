@@ -144,9 +144,10 @@ void nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, i
     gi.NGB_RNKS.resize(len);
     std::copy(work.begin(), work.begin() + len, gi.NGB_RNKS.begin());
 
-    gi.SELF_I = std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_rank));
     int64_t ilocal = std::max((int64_t)0, i - loDomain.MY_LEVEL);
     gi.BOXES = (int64_t)1 << ilocal;
+    gi.SELF_I = std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_rank));
+    gi.GBEGIN = my_rank * gi.BOXES;
     
     int64_t mask = rank - my_rank << lvl_diff;
     gi.COMM_RNKS.resize(len);
@@ -161,22 +162,21 @@ void nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, i
 }
 
 
-void nbd::Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain, const LocalDomain& loDomain) {
+void nbd::Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain, int64_t box_rank, int64_t box_level) {
   std::vector<int64_t> Xi(goDomain.DIM);
-  std::vector<int64_t> Slice(goDomain.DIM);
-  Z_index(loDomain.RANK << loDomain.LOCAL_LEVELS, goDomain.DIM, Xi.data());
-  slices_level(Slice.data(), loDomain.LOCAL_LEVELS, goDomain.LEVELS, goDomain.DIM);
+  std::vector<int64_t> slice(goDomain.DIM);
+  std::vector<int64_t> merged(goDomain.DIM);
 
-  int64_t d = 0;
-  for (int64_t i = 0; i < loDomain.LOCAL_LEVELS; i++) {
-    Xi[d] >>= 1;
-    d = (d == goDomain.DIM - 1) ? 0 : d + 1;
-  }
+  int64_t llocal = goDomain.LEVELS - box_level;
+  int64_t lbegin = box_rank << llocal;
+  Z_index(lbegin, goDomain.DIM, Xi.data());
+  slices_level(slice.data(), 0, goDomain.LEVELS, goDomain.DIM);
+  slices_level(merged.data(), 0, llocal, goDomain.DIM);
 
-  for (d = 0; d < goDomain.DIM; d++) {
-    double bo_len = (goDomain.Xmax[d] - goDomain.Xmin[d]) / Slice[d];
-    Xmin[d] = goDomain.Xmin[d] + Xi[d] * bo_len;
-    Xmax[d] = Xmin[d] + bo_len;
+  for (int64_t d = 0; d < goDomain.DIM; d++) {
+    double glen = (goDomain.Xmax[d] - goDomain.Xmin[d]) / slice[d];
+    Xmin[d] = goDomain.Xmin[d] + Xi[d] * glen;
+    Xmax[d] = Xmin[d] + glen * merged[d];
   }
 }
 

@@ -20,7 +20,6 @@ void nbd::Bucket_sort(double* bodies, int64_t* lens, int64_t* offsets, int64_t n
   int64_t nboxes = (int64_t)1 << loDomain.LOCAL_LEVELS;
   std::fill(lens, lens + nboxes, 0);
 
-  std::vector<double*> bodies_p(nbodies);
   std::vector<int64_t> bodies_i(nbodies);
   std::vector<int64_t> Xi(dim);
   int64_t lbegin = loDomain.RANK * nboxes;
@@ -32,9 +31,8 @@ void nbd::Bucket_sort(double* bodies, int64_t* lens, int64_t* offsets, int64_t n
       Xi[d] = (int64_t)std::floor((p[d] - goDomain.Xmin[d]) / box_dim[d]);
     Z_index_i(Xi.data(), dim, ind);
     ind = ind - lbegin;
-    bodies_p[i] = p;
     bodies_i[i] = ind;
-    lens[ind]++;
+    lens[ind] = lens[ind] + 1;
   }
 
   int64_t old_offset = offsets[0];
@@ -45,7 +43,7 @@ void nbd::Bucket_sort(double* bodies, int64_t* lens, int64_t* offsets, int64_t n
 
   for (int64_t i = 0; i < nbodies; i++) {
     int64_t bi = bodies_i[i];
-    const double* src = bodies_p[i];
+    const double* src = &bodies[i * dim];
     int64_t offset_bi = offsets[bi];
     double* tar = &bodies_cpy[offset_bi * dim];
     for (int64_t d = 0; d < dim; d++)
@@ -99,13 +97,17 @@ void nbd::Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const
 
   std::vector<double> Xmin_box(goDomain.DIM);
   std::vector<double> Xmax_box(goDomain.DIM);
-  Local_bounds(Xmin_box.data(), Xmax_box.data(), goDomain, loDomain);
+  Local_bounds(Xmin_box.data(), Xmax_box.data(), goDomain, loDomain.RANK, loDomain.MY_LEVEL);
   Alloc_bodies(bodies, goDomain, loDomain);
 
-  int64_t ind = loDomain.MY_IDS.back().SELF_I;
-  double* bodies_begin = &bodies.BODIES[bodies.OFFSETS[ind]];
+  const GlobalIndex& gi_leaf = loDomain.MY_IDS.back();
+  int64_t nboxes = gi_leaf.BOXES;
+  int64_t ind = gi_leaf.SELF_I;
+  int64_t offset = bodies.OFFSETS[ind * nboxes] * loDomain.DIM;
+  int64_t nbody = bodies.NBODIES[ind];
+  double* bodies_begin = &bodies.BODIES[offset];
   int64_t d = 0;
-  for (int64_t i = 0; i < bodies.NBODIES[ind] * goDomain.DIM; i++) {
+  for (int64_t i = 0; i < nbody * goDomain.DIM; i++) {
     double min = Xmin_box[d];
     double max = Xmax_box[d];
     double r = min + (max - min) * ((double)std::rand() / RAND_MAX);
@@ -113,9 +115,10 @@ void nbd::Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const
     d = (d == goDomain.DIM - 1) ? 0 : d + 1;
   }
 
-  Bucket_sort(bodies_begin, &bodies.LENS[ind], &bodies.OFFSETS[ind], bodies.NBODIES[ind], goDomain, loDomain);
+  int64_t* lens = &bodies.LENS[ind * nboxes];
+  int64_t* offsets = &bodies.OFFSETS[ind * nboxes];
+  Bucket_sort(bodies_begin, lens, offsets, nbody, goDomain, loDomain);
 }
-
 
 
 void nbd::BlockCSC(Matrices& A, EvalFunc ef, const LocalDomain& loDomain, const LocalBodies& bodies) {
@@ -144,4 +147,41 @@ void nbd::BlockCSC(Matrices& A, EvalFunc ef, const LocalDomain& loDomain, const 
   }
 }
 
+void nbd::checkBodies(const GlobalDomain& goDomain, const LocalDomain& loDomain, const LocalBodies& bodies) {
+  const GlobalIndex& gi_leaf = loDomain.MY_IDS.back();
+  int64_t dim = bodies.DIM;
+  int64_t nboxes = gi_leaf.BOXES;
+  std::vector<int64_t> Xi(dim);
+  std::vector<int64_t> slices(dim);
+  slices_level(slices.data(), 0, goDomain.LEVELS, dim);
+  
+  std::vector<double> box_dim(dim);
+  for (int64_t d = 0; d < dim; d++)
+    box_dim[d] = (goDomain.Xmax[d] - goDomain.Xmin[d]) / slices[d];
+
+  for (int64_t i = 0; i < gi_leaf.NGB_RNKS.size(); i++) {
+    int64_t rm_rank = gi_leaf.NGB_RNKS[i];
+    int64_t lbegin = rm_rank * nboxes;
+    
+    for (int64_t b = i * nboxes; b < (i + 1) * nboxes; b++) {
+      int64_t offsetb = bodies.OFFSETS[b];
+      int64_t lenb = bodies.LENS[b];
+
+      for (int64_t n = offsetb; n < offsetb + lenb; n++) {
+        const double* p = &bodies.BODIES[n * dim];
+        int64_t ind;
+        for (int64_t d = 0; d < dim; d++)
+          Xi[d] = (int64_t)std::floor((p[d] - goDomain.Xmin[d]) / box_dim[d]);
+        Z_index_i(Xi.data(), dim, ind);
+        int64_t cmp = lbegin + b - i * nboxes;
+        if (ind != cmp) {
+          printf("%ld: FAIL at %ld: %ld -> %ld\n", loDomain.RANK, b, ind, cmp);
+          return;
+        }
+      }
+    }
+  }
+
+  printf("%ld: PASS\n", loDomain.RANK);
+}
 

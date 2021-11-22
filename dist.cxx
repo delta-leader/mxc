@@ -17,8 +17,8 @@ void nbd::DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi) {
   const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
 
   int64_t my_nbody = bodies.NBODIES[my_ind] * dim;
-  int64_t my_offset = bodies.OFFSETS[my_ind * nboxes];
-  const double* my_bodies = &bodies.BODIES[my_offset * dim];
+  int64_t my_offset = bodies.OFFSETS[my_ind * nboxes] * dim;
+  const double* my_bodies = &bodies.BODIES[my_offset];
   const int64_t* my_lens = &bodies.LENS[my_ind * nboxes];
 
   std::vector<MPI_Request> requests1(neighbors.size());
@@ -36,17 +36,14 @@ void nbd::DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi) {
     int64_t rm_rank = neighbors[i];
     if (rm_rank != my_rank) {
       int64_t rm_nbody = bodies.NBODIES[i] * dim;
-      int64_t rm_offset = bodies.OFFSETS[i];
-      double* rm_bodies = &bodies.BODIES[rm_offset * dim];
+      int64_t rm_offset = bodies.OFFSETS[i * nboxes] * dim;
+      double* rm_bodies = &bodies.BODIES[rm_offset];
       int64_t* rm_lens = &bodies.LENS[i * nboxes];
       
       MPI_Recv(rm_bodies, rm_nbody, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
       MPI_Recv(rm_lens, nboxes, MPI_INT64_T, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
   }
-  
-  for (int64_t i = 1; i < bodies.OFFSETS.size(); i++)
-    bodies.OFFSETS[i] = bodies.OFFSETS[i - 1] + bodies.LENS[i - 1];
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
@@ -55,6 +52,10 @@ void nbd::DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi) {
       MPI_Wait(&requests2[i], MPI_STATUS_IGNORE);
     }
   }
+
+  bodies.OFFSETS[0] = 0;
+  for (int64_t i = 1; i < bodies.OFFSETS.size(); i++)
+    bodies.OFFSETS[i] = bodies.OFFSETS[i - 1] + bodies.LENS[i - 1];
 }
 
 void nbd::DistributeMatricesList(Matrices& lis, const GlobalIndex& gi) {

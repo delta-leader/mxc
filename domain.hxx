@@ -25,6 +25,7 @@ namespace nbd {
   struct GlobalIndex {
     int64_t BOXES;
     int64_t SELF_I;
+    int64_t GBEGIN;
     std::vector<int64_t> NGB_RNKS;
     std::vector<int64_t> COMM_RNKS;
     CSC RELS;
@@ -52,7 +53,7 @@ namespace nbd {
 
   void Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, int64_t rank, int64_t size, int64_t theta);
 
-  void Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain, const LocalDomain& loDomain);
+  void Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain, int64_t box_rank, int64_t box_level);
 
   void lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j);
 

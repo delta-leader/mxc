@@ -82,7 +82,7 @@ void nbd::axatLocal(Matrices& A, const GlobalIndex& gi) {
     }
 }
 
-void nbd::allocNodes(Nodes& nodes, const LocalDomain& domain) {
+Matrices* nbd::allocNodes(Nodes& nodes, const LocalDomain& domain) {
   nodes.resize(domain.MY_LEVEL + domain.LOCAL_LEVELS + 1);
   for (int64_t i = 0; i < nodes.size(); i++) {
     int64_t nnz = domain.MY_IDS[i].RELS.NNZ;
@@ -92,6 +92,7 @@ void nbd::allocNodes(Nodes& nodes, const LocalDomain& domain) {
     nodes[i].A_oo.resize(nnz);
     nodes[i].S.resize(nnz);
   }
+  return &(nodes.back().A);
 }
 
 void nbd::allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo) {
