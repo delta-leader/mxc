@@ -156,6 +156,11 @@ void nbd::pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Mat
   mvec('N', Us, Xs, X, 1., 1.);
 }
 
+void nbd::nrm2(const Matrix& A, double* nrm) {
+  int64_t size = A.M * A.N;
+  *nrm = cblas_dnrm2(size, A.A.data(), 1);
+}
+
 /*void nbd::cpsVectors(char updwn, const Vectors& Xs, Vectors& Xt) {
   if (updwn == 'U' || updwn == 'u') {
     for (int64_t i = 0; i < Xt.size(); i++) {

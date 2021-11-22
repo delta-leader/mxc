@@ -35,4 +35,6 @@ namespace nbd {
 
   void DistributeDims(std::vector<int64_t>& dims, const GlobalIndex& gi);
 
+  void checkBasis(const Base& basis);
+
 };

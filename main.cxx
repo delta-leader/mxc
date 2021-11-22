@@ -39,9 +39,9 @@ int main(int argc, char* argv[]) {
   Random_bodies(bodies, domain, local, 100 ^ mpi_rank);
   DistributeBodies(bodies, local.MY_IDS.back());
 
-  checkBodies(domain, local, bodies);
+  //checkBodies(domain, local, bodies);
 
-  /*Nodes nodes;
+  Nodes nodes;
   Matrices* A = allocNodes(nodes, local);
   BlockCSC(*A, l2d(), local, bodies);
 
@@ -52,8 +52,7 @@ int main(int argc, char* argv[]) {
   Base& base = basis.back();
   sampleA(base, 1.e-8, local.MY_IDS.back(), *A, R.data(), R.size());
 
-  for (auto& u : base.Uo)
-    printf("%ld %ld\n", u.M, u.N);*/
+  checkBasis(base);
 
   MPI_Finalize();
   return 0;

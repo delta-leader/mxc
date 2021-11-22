@@ -52,7 +52,7 @@ void nbd::sampleC2(Matrices& C2, const GlobalIndex& gi, const Matrices& A, const
 }
 
 void nbd::orthoBasis(double repi, const GlobalIndex& gi, Matrices& C, std::vector<int64_t>& dims_o) {
-  int64_t lbegin = gi.GBEGIN;
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
   int64_t lend = lbegin + gi.BOXES;
   for (int64_t i = lbegin; i < lend; i++)
     orthoBase(repi, C[i], &dims_o[i]);
@@ -71,7 +71,7 @@ int64_t* nbd::allocBasis(Basis& basis, const LocalDomain& domain) {
 }
 
 void nbd::allocUcUo(Base& basis, const GlobalIndex& gi, const Matrices& C) {
-  int64_t lbegin = gi.GBEGIN;
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
   int64_t lend = lbegin + gi.BOXES;
   for (int64_t i = 0; i < basis.DIMS.size(); i++) {
     int64_t dim = basis.DIMS[i];
@@ -122,4 +122,39 @@ void nbd::basisFw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X)
 void nbd::basisBk(Vectors& X, const Base& basis, const Vectors& Xo, const Vectors& Xc) {
   for (int64_t i = 0; i < X.size(); i++)
     pvc_bk(Xo[i], Xc[i], basis.Uo[i], basis.Uc[i], X[i]);
+}
+
+void nbd::checkBasis(const Base& basis) {
+  int64_t tot_dim = 0;
+  int64_t tot_dimo = 0;
+  for (int64_t i = 0; i < basis.DIMS.size(); i++) {
+    int64_t dim = basis.DIMS[i];
+    int64_t dim_o = basis.DIMO[i];
+    int64_t dim_c = dim - dim_o;
+
+    tot_dim = tot_dim + dim;
+    tot_dimo = tot_dimo + dim_o;
+
+    Matrix oo, cc;
+    cMatrix(oo, dim_o, dim_o);
+    cMatrix(cc, dim_c, dim_c);
+    mmult('T', 'N', basis.Uo[i], basis.Uo[i], oo, 1., 0.);
+    mmult('T', 'N', basis.Uc[i], basis.Uc[i], cc, 1., 0.);
+
+    for (int64_t d = 0; d < dim_o; d++)
+      oo.A[d * (dim_o + 1)] = oo.A[d * (dim_o + 1)] - 1.;
+    for (int64_t d = 0; d < dim_c; d++)
+      cc.A[d * (dim_c + 1)] = cc.A[d * (dim_c + 1)] - 1.;
+    
+    double e1, e2;
+    nrm2(oo, &e1);
+    nrm2(cc, &e2);
+    if (e1 > 1.e-10 || e2 > 1.e-10) {
+      printf("FAIL at %ld: %e, %e\n", i, e1, e2);
+      return;
+    }
+  }
+
+  double cmp_rate = 100 * (double)tot_dimo / tot_dim;
+  printf("PASS %.3f%%\n", cmp_rate);
 }
