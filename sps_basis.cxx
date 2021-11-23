@@ -59,9 +59,9 @@ void nbd::orthoBasis(double repi, const GlobalIndex& gi, Matrices& C, std::vecto
 }
 
 int64_t* nbd::allocBasis(Basis& basis, const LocalDomain& domain) {
-  basis.resize(domain.MY_LEVEL + domain.LOCAL_LEVELS + 1);
+  basis.resize(domain.size());
   for (int64_t i = 0; i < basis.size(); i++) {
-    int64_t nodes = domain.MY_IDS[i].BOXES * domain.MY_IDS[i].NGB_RNKS.size();
+    int64_t nodes = domain[i].BOXES * domain[i].NGB_RNKS.size();
     basis[i].DIMS.resize(nodes);
     basis[i].DIMO.resize(nodes);
     basis[i].Uo.resize(nodes);
@@ -124,7 +124,7 @@ void nbd::basisBk(Vectors& X, const Base& basis, const Vectors& Xo, const Vector
     pvc_bk(Xo[i], Xc[i], basis.Uo[i], basis.Uc[i], X[i]);
 }
 
-void nbd::checkBasis(const Base& basis) {
+void nbd::checkBasis(int64_t my_rank, const Base& basis) {
   int64_t tot_dim = 0;
   int64_t tot_dimo = 0;
   for (int64_t i = 0; i < basis.DIMS.size(); i++) {
@@ -150,11 +150,11 @@ void nbd::checkBasis(const Base& basis) {
     nrm2(oo, &e1);
     nrm2(cc, &e2);
     if (e1 > 1.e-10 || e2 > 1.e-10) {
-      printf("FAIL at %ld: %e, %e\n", i, e1, e2);
+      printf("%ld: FAIL at %ld: %e, %e\n", my_rank, i, e1, e2);
       return;
     }
   }
 
   double cmp_rate = 100 * (double)tot_dimo / tot_dim;
-  printf("PASS %.3f%%\n", cmp_rate);
+  printf("%ld: PASS %.3f%%\n", my_rank, cmp_rate);
 }

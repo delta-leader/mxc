@@ -26,7 +26,11 @@ namespace nbd {
 
   void cpyFromMatrix(char trans, const Matrix& A, double* v);
 
+  void cpyFromVector(const Vector& A, double* v);
+
   void maxpby(Matrix& A, const double* v, double alpha, double beta);
+
+  void vaxpby(Vector& A, const double* v, double alpha, double beta);
 
   void cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_t y1, int64_t x1, int64_t y2, int64_t x2);
 

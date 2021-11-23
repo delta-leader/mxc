@@ -83,9 +83,9 @@ void nbd::axatLocal(Matrices& A, const GlobalIndex& gi) {
 }
 
 Matrices* nbd::allocNodes(Nodes& nodes, const LocalDomain& domain) {
-  nodes.resize(domain.MY_LEVEL + domain.LOCAL_LEVELS + 1);
+  nodes.resize(domain.size());
   for (int64_t i = 0; i < nodes.size(); i++) {
-    int64_t nnz = domain.MY_IDS[i].RELS.NNZ;
+    int64_t nnz = domain[i].RELS.NNZ;
     nodes[i].A.resize(nnz);
     nodes[i].A_cc.resize(nnz);
     nodes[i].A_oc.resize(nnz);

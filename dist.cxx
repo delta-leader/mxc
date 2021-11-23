@@ -58,6 +58,80 @@ void nbd::DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi) {
     bodies.OFFSETS[i] = bodies.OFFSETS[i - 1] + bodies.LENS[i - 1];
 }
 
+void nbd::DistributeVectorsList(Vectors& lis, const GlobalIndex& gi) {
+  int64_t my_ind = gi.SELF_I;
+  int64_t my_rank = gi.COMM_RNKS[my_ind];
+  int64_t nboxes = gi.BOXES;
+  const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
+  std::vector<MPI_Request> requests(neighbors.size());
+
+  std::vector<int64_t> LENS(neighbors.size());
+  std::vector<double*> DATA(neighbors.size());
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    int64_t tot_len = 0;
+    for (int64_t n = 0; n < nboxes; n++) {
+      int64_t rm_i = i * nboxes + n;
+      const Vector& B_i = lis[rm_i];
+      int64_t len = B_i.N;
+      tot_len = tot_len + len;
+    }
+    LENS[i] = tot_len;
+    DATA[i] = (double*)malloc(sizeof(double) * tot_len);
+  }
+
+  int64_t offset = 0;
+  double* my_data = DATA[my_ind];
+  int64_t my_len = LENS[my_ind];
+  for (int64_t n = 0; n < nboxes; n++) {
+    int64_t my_i = my_ind * nboxes + n;
+    const Vector& B_i = lis[my_i];
+    int64_t len = B_i.N;
+    cpyFromVector(B_i, my_data + offset);
+    offset = offset + len;
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank)
+      MPI_Isend(my_data, my_len, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank) {
+      double* data = DATA[i];
+      int64_t len = LENS[i];
+      MPI_Recv(data, len, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank)
+      MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank) {
+      offset = 0;
+      const double* rm_v = DATA[i];
+      for (int64_t n = 0; n < nboxes; n++) {
+        int64_t rm_i = i * nboxes + n;
+        Vector& B_i = lis[rm_i];
+        int64_t len = B_i.N;
+        vaxpby(B_i, rm_v + offset, 1., 0.);
+        offset = offset + len;
+      }
+    }
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++)
+    free(DATA[i]);
+}
+
 void nbd::DistributeMatricesList(Matrices& lis, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];

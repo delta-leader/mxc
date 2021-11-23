@@ -31,6 +31,10 @@ void nbd::cpyFromMatrix(char trans, const Matrix& A, double* V) {
     cblas_dcopy(A.M, &A.A[j * A.M], 1, &V[j * iv], incv);
 }
 
+void nbd::cpyFromVector(const Vector& A, double* v) {
+  std::copy(A.X.data(), A.X.data() + A.N, v);
+}
+
 void nbd::maxpby(Matrix& A, const double* v, double alpha, double beta) {
   int64_t size = A.M * A.N;
   if (beta == 0.)
@@ -38,6 +42,15 @@ void nbd::maxpby(Matrix& A, const double* v, double alpha, double beta) {
   else if (beta != 1.)
     cblas_dscal(size, beta, A.A.data(), 1);
   cblas_daxpy(size, alpha, v, 1, A.A.data(), 1);
+}
+
+void nbd::vaxpby(Vector& A, const double* v, double alpha, double beta) {
+  int64_t size = A.N;
+  if (beta == 0.)
+    std::fill(A.X.data(), A.X.data() + size, 0.);
+  else if (beta != 1.)
+    cblas_dscal(size, beta, A.X.data(), 1);
+  cblas_daxpy(size, alpha, v, 1, A.X.data(), 1);
 }
 
 void nbd::cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_t y1, int64_t x1, int64_t y2, int64_t x2) {

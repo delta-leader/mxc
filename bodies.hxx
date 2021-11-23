@@ -16,19 +16,25 @@ namespace nbd {
     std::vector<int64_t> OFFSETS;
   };
 
-  void Bucket_sort(double* bodies, int64_t* lens, int64_t* offsets, int64_t nbodies, const GlobalDomain& goDomain, const LocalDomain& loDomain);
+  void Bucket_sort(double* bodies, int64_t* lens, int64_t* offsets, int64_t nbodies, int64_t nboxes, const GlobalDomain& goDomain);
 
   void N_bodies_box(int64_t Nbodies, int64_t i, int64_t box_lvl, int64_t& bodies_box);
 
-  void Alloc_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const LocalDomain& loDomain);
+  void Alloc_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const GlobalIndex& gi);
 
-  void Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const LocalDomain& loDomain, unsigned int seed);
+  void Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const GlobalIndex& gi, unsigned int seed);
 
-  void BlockCSC(Matrices& A, EvalFunc ef, const LocalDomain& loDomain, const LocalBodies& bodies);
+  void BlockCSC(Matrices& A, EvalFunc ef, const GlobalIndex& gi, const LocalBodies& bodies);
+
+  Vector* randomVectors(Vectors& B, const GlobalIndex& gi, const LocalBodies& bodies, double min, double max, unsigned int seed);
+
+  void blockAxEb(Vectors& B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies);
 
   void DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi);
 
-  void checkBodies(const GlobalDomain& goDomain, const LocalDomain& loDomain, const LocalBodies& bodies);
+  void DistributeVectorsList(Vectors& B, const GlobalIndex& gi);
+
+  void checkBodies(int64_t my_rank, const GlobalDomain& goDomain, const GlobalIndex& gi, const LocalBodies& bodies);
 
 };
 

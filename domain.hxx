@@ -10,6 +10,8 @@ namespace nbd {
     int64_t NBODY;
     int64_t LEVELS;
     int64_t DIM;
+    int64_t MY_RANK;
+    int64_t MY_LEVEL;
     std::vector<double> Xmin;
     std::vector<double> Xmax;
   };
@@ -31,13 +33,7 @@ namespace nbd {
     CSC RELS;
   };
 
-  struct LocalDomain {
-    int64_t RANK;
-    int64_t MY_LEVEL;
-    int64_t LOCAL_LEVELS;
-    int64_t DIM;
-    std::vector<GlobalIndex> MY_IDS;
-  };
+  typedef std::vector<GlobalIndex> LocalDomain;
 
   void Z_index(int64_t i, int64_t dim, int64_t X[]);
 
@@ -47,13 +43,13 @@ namespace nbd {
 
   void slices_level(int64_t slices[], int64_t lbegin, int64_t lend, int64_t dim);
 
-  void Global_Partition(GlobalDomain& goDomain, int64_t Nbodies, int64_t Ncrit, int64_t dim, double min, double max);
+  void Global_Partition(GlobalDomain& goDomain, int64_t rank, int64_t size, int64_t Nbodies, int64_t Ncrit, int64_t dim, double min, double max);
 
   void Interactions(CSC& rels, int64_t y, int64_t xbegin, int64_t xend, int64_t dim, int64_t theta);
 
-  void Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, int64_t rank, int64_t size, int64_t theta);
+  GlobalIndex* Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, int64_t theta);
 
-  void Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain, int64_t box_rank, int64_t box_level);
+  void Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain);
 
   void lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j);
 

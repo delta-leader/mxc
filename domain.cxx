@@ -91,9 +91,11 @@ void nbd::slices_level(int64_t slices[], int64_t lbegin, int64_t lend, int64_t d
   }
 }
 
-void nbd::Global_Partition(GlobalDomain& goDomain, int64_t Nbodies, int64_t Ncrit, int64_t dim, double min, double max) {
+void nbd::Global_Partition(GlobalDomain& goDomain, int64_t rank, int64_t size, int64_t Nbodies, int64_t Ncrit, int64_t dim, double min, double max) {
   goDomain.DIM = dim;
   goDomain.NBODY = Nbodies;
+  goDomain.MY_RANK = rank;
+  goDomain.MY_LEVEL = (int64_t)std::floor(std::log2(size));
 
   goDomain.LEVELS = (int64_t)std::floor(std::log2(Nbodies / Ncrit));
   goDomain.Xmin.resize(dim, min);
@@ -119,32 +121,30 @@ void nbd::Interactions(CSC& rels, int64_t y, int64_t xbegin, int64_t xend, int64
 }
 
 
-void nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, int64_t rank, int64_t size, int64_t theta) {
-  loDomain.RANK = rank;
-  loDomain.MY_LEVEL = (int64_t)std::floor(std::log2(size));
-  loDomain.DIM = goDomain.DIM;
+GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, int64_t theta) {
+  int64_t rank = goDomain.MY_RANK;
+  int64_t my_level = goDomain.MY_LEVEL;
+  int64_t local_levels = goDomain.LEVELS - my_level;
+  int64_t boxes_local = (int64_t)1 << local_levels;
 
-  loDomain.LOCAL_LEVELS = goDomain.LEVELS - loDomain.MY_LEVEL;
-  int64_t boxes_local = (int64_t)1 << loDomain.LOCAL_LEVELS;
-
-  loDomain.MY_IDS.resize(goDomain.LEVELS + 1);
+  loDomain.resize(goDomain.LEVELS + 1);
   for (int64_t i = 0; i <= goDomain.LEVELS; i++) {
-    GlobalIndex& gi = loDomain.MY_IDS[i];
+    GlobalIndex& gi = loDomain[i];
 
     int64_t lvl_diff = 0;
-    size = (int64_t)1 << loDomain.MY_LEVEL;
-    if (i < loDomain.MY_LEVEL) {
-      lvl_diff = loDomain.MY_LEVEL - i;
+    int64_t size = (int64_t)1 << my_level;
+    if (i < my_level) {
+      lvl_diff = my_level - i;
       size = (int64_t)1 << i;
     }
 
     int64_t my_rank = rank >> lvl_diff;
     std::vector<int64_t> work(size);
-    int64_t len = Z_neighbors(work.data(), my_rank, loDomain.DIM, size, theta);
+    int64_t len = Z_neighbors(work.data(), my_rank, goDomain.DIM, size, theta);
     gi.NGB_RNKS.resize(len);
     std::copy(work.begin(), work.begin() + len, gi.NGB_RNKS.begin());
 
-    int64_t ilocal = std::max((int64_t)0, i - loDomain.MY_LEVEL);
+    int64_t ilocal = std::max((int64_t)0, i - my_level);
     gi.BOXES = (int64_t)1 << ilocal;
     gi.SELF_I = std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_rank));
     gi.GBEGIN = my_rank * gi.BOXES;
@@ -159,14 +159,17 @@ void nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, i
     int64_t xend = xbegin + gi.BOXES;
     Interactions(gi.RELS, y, xbegin, xend, goDomain.DIM, theta);
   }
+  return &loDomain[goDomain.LEVELS];
 }
 
 
-void nbd::Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain, int64_t box_rank, int64_t box_level) {
+void nbd::Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain) {
   std::vector<int64_t> Xi(goDomain.DIM);
   std::vector<int64_t> slice(goDomain.DIM);
   std::vector<int64_t> merged(goDomain.DIM);
 
+  int64_t box_rank = goDomain.MY_RANK;
+  int64_t box_level = goDomain.MY_LEVEL;
   int64_t llocal = goDomain.LEVELS - box_level;
   int64_t lbegin = box_rank << llocal;
   Z_index(lbegin, goDomain.DIM, Xi.data());

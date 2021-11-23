@@ -8,7 +8,7 @@
 using namespace nbd;
 
 
-void nbd::Bucket_sort(double* bodies, int64_t* lens, int64_t* offsets, int64_t nbodies, const GlobalDomain& goDomain, const LocalDomain& loDomain) {
+void nbd::Bucket_sort(double* bodies, int64_t* lens, int64_t* offsets, int64_t nbodies, int64_t nboxes, const GlobalDomain& goDomain) {
   int64_t dim = goDomain.DIM;
   std::vector<int64_t> slices(dim);
   slices_level(slices.data(), 0, goDomain.LEVELS, dim);
@@ -17,12 +17,11 @@ void nbd::Bucket_sort(double* bodies, int64_t* lens, int64_t* offsets, int64_t n
   for (int64_t d = 0; d < dim; d++)
     box_dim[d] = (goDomain.Xmax[d] - goDomain.Xmin[d]) / slices[d];
 
-  int64_t nboxes = (int64_t)1 << loDomain.LOCAL_LEVELS;
   std::fill(lens, lens + nboxes, 0);
 
   std::vector<int64_t> bodies_i(nbodies);
   std::vector<int64_t> Xi(dim);
-  int64_t lbegin = loDomain.RANK * nboxes;
+  int64_t lbegin = goDomain.MY_RANK * nboxes;
 
   for (int64_t i = 0; i < nbodies; i++) {
     double* p = &bodies[i * dim];
@@ -70,19 +69,17 @@ void nbd::N_bodies_box(int64_t Nbodies, int64_t i, int64_t box_lvl, int64_t& bod
 }
 
 
-void nbd::Alloc_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const LocalDomain& loDomain) {
-  const GlobalIndex& gi_leaf = loDomain.MY_IDS.back();
-  int64_t nboxes = gi_leaf.BOXES;
-  bodies.DIM = loDomain.DIM;
-
-  int64_t nodes = gi_leaf.NGB_RNKS.size();
+void nbd::Alloc_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const GlobalIndex& gi) {
+  int64_t nboxes = gi.BOXES;
+  int64_t nodes = gi.NGB_RNKS.size();
+  bodies.DIM = goDomain.DIM;
   bodies.NBODIES.resize(nodes);
   bodies.LENS.resize(nodes * nboxes);
   bodies.OFFSETS.resize(nodes * nboxes);
 
   int64_t tot_local = 0;
   for (int64_t i = 0; i < nodes; i++) {
-    N_bodies_box(goDomain.NBODY, gi_leaf.NGB_RNKS[i], loDomain.MY_LEVEL, bodies.NBODIES[i]);
+    N_bodies_box(goDomain.NBODY, gi.NGB_RNKS[i], goDomain.MY_LEVEL, bodies.NBODIES[i]);
     bodies.OFFSETS[i * nboxes] = tot_local;
     tot_local = tot_local + bodies.NBODIES[i];
   }
@@ -91,19 +88,18 @@ void nbd::Alloc_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const 
 }
 
 
-void nbd::Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const LocalDomain& loDomain, unsigned int seed) {
+void nbd::Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const GlobalIndex& gi, unsigned int seed) {
   if (seed)
     std::srand(seed);
 
   std::vector<double> Xmin_box(goDomain.DIM);
   std::vector<double> Xmax_box(goDomain.DIM);
-  Local_bounds(Xmin_box.data(), Xmax_box.data(), goDomain, loDomain.RANK, loDomain.MY_LEVEL);
-  Alloc_bodies(bodies, goDomain, loDomain);
+  Local_bounds(Xmin_box.data(), Xmax_box.data(), goDomain);
+  Alloc_bodies(bodies, goDomain, gi);
 
-  const GlobalIndex& gi_leaf = loDomain.MY_IDS.back();
-  int64_t nboxes = gi_leaf.BOXES;
-  int64_t ind = gi_leaf.SELF_I;
-  int64_t offset = bodies.OFFSETS[ind * nboxes] * loDomain.DIM;
+  int64_t nboxes = gi.BOXES;
+  int64_t ind = gi.SELF_I;
+  int64_t offset = bodies.OFFSETS[ind * nboxes] * goDomain.DIM;
   int64_t nbody = bodies.NBODIES[ind];
   double* bodies_begin = &bodies.BODIES[offset];
   int64_t d = 0;
@@ -117,40 +113,92 @@ void nbd::Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const
 
   int64_t* lens = &bodies.LENS[ind * nboxes];
   int64_t* offsets = &bodies.OFFSETS[ind * nboxes];
-  Bucket_sort(bodies_begin, lens, offsets, nbody, goDomain, loDomain);
+  Bucket_sort(bodies_begin, lens, offsets, nbody, nboxes, goDomain);
+  DistributeBodies(bodies, gi);
 }
 
 
-void nbd::BlockCSC(Matrices& A, EvalFunc ef, const LocalDomain& loDomain, const LocalBodies& bodies) {
-  const GlobalIndex& gi_leaf = loDomain.MY_IDS.back();
-  const CSC& rels = gi_leaf.RELS;
+void nbd::BlockCSC(Matrices& A, EvalFunc ef, const GlobalIndex& gi, const LocalBodies& bodies) {
+  const CSC& rels = gi.RELS;
   int64_t dim = bodies.DIM;
-  int64_t nboxes = gi_leaf.BOXES;
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
   A.resize(rels.NNZ);
 
   for (int64_t j = 0; j < rels.N; j++) {
-    int64_t box_j = gi_leaf.SELF_I * nboxes + j;
+    int64_t box_j = lbegin + j;
     int64_t nbodies_j = bodies.LENS[box_j];
     int64_t offset_j = bodies.OFFSETS[box_j] * dim;
+    const double* bodies_j = &bodies.BODIES[offset_j];
 
     for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels.CSC_ROWS[ij];
       int64_t box_i;
-      Lookup_GlobalI(box_i, gi_leaf, i);
+      Lookup_GlobalI(box_i, gi, i);
       int64_t nbodies_i = bodies.LENS[box_i];
       int64_t offset_i = bodies.OFFSETS[box_i] * dim;
+      const double* bodies_i = &bodies.BODIES[offset_i];
 
       Matrix& A_ij = A[ij];
       cMatrix(A_ij, nbodies_i, nbodies_j);
-      matrix_kernel(ef, nbodies_i, nbodies_j, &bodies.BODIES[offset_i], &bodies.BODIES[offset_j], dim, A_ij.A.data(), A_ij.M);
+      matrix_kernel(ef, nbodies_i, nbodies_j, bodies_i, bodies_j, dim, A_ij.A.data(), A_ij.M);
     }
   }
 }
 
-void nbd::checkBodies(const GlobalDomain& goDomain, const LocalDomain& loDomain, const LocalBodies& bodies) {
-  const GlobalIndex& gi_leaf = loDomain.MY_IDS.back();
+Vector* nbd::randomVectors(Vectors& B, const GlobalIndex& gi, const LocalBodies& bodies, double min, double max, unsigned int seed) {
+  if (seed)
+    std::srand(seed);
+  
+  B.resize(bodies.LENS.size());
+  for (int64_t i = 0; i < B.size(); i++)
+    cVector(B[i], bodies.LENS[i]);
+  
+  std::vector<double> R(bodies.NBODIES[gi.SELF_I]);
+  for (int64_t i = 0; i < R.size(); i++)
+    R[i] = min + (max - min) * ((double)std::rand() / RAND_MAX);
+
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
+  int64_t lend = lbegin + gi.BOXES;
+  int64_t offset = 0;
+  for (int64_t i = lbegin; i < lend; i++) {
+    Vector& vi = B[i];
+    vaxpby(vi, &R[offset], 1., 0.);
+    offset = offset + bodies.LENS[i];
+  }
+
+  DistributeVectorsList(B, gi);
+  return &B[lbegin];
+}
+
+void nbd::blockAxEb(Vectors& B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies) {
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
   int64_t dim = bodies.DIM;
-  int64_t nboxes = gi_leaf.BOXES;
+  B.resize(gi.BOXES);
+  for (int64_t i = 0; i < B.size(); i++)
+    cVector(B[i], bodies.LENS[i + lbegin]);
+  
+  const CSC& rels = gi.RELS;
+  for (int64_t j = 0; j < rels.N; j++) {
+    int64_t box_j = lbegin + j;
+    int64_t nbodies_j = bodies.LENS[box_j];
+    int64_t offset_j = bodies.OFFSETS[box_j] * dim;
+    const double* bodies_j = &bodies.BODIES[offset_j];
+
+    for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
+      int64_t i = rels.CSC_ROWS[ij];
+      int64_t box_i;
+      Lookup_GlobalI(box_i, gi, i);
+      int64_t nbodies_i = bodies.LENS[box_i];
+      int64_t offset_i = bodies.OFFSETS[box_i] * dim;
+      const double* bodies_i = &bodies.BODIES[offset_i];
+      mvec_kernel(ef, nbodies_j, nbodies_i, bodies_j, bodies_i, dim, X[box_i].X.data(), B[j].X.data());
+    }
+  }
+}
+
+void nbd::checkBodies(int64_t my_rank, const GlobalDomain& goDomain, const GlobalIndex& gi, const LocalBodies& bodies) {
+  int64_t dim = bodies.DIM;
+  int64_t nboxes = gi.BOXES;
   std::vector<int64_t> Xi(dim);
   std::vector<int64_t> slices(dim);
   slices_level(slices.data(), 0, goDomain.LEVELS, dim);
@@ -159,8 +207,8 @@ void nbd::checkBodies(const GlobalDomain& goDomain, const LocalDomain& loDomain,
   for (int64_t d = 0; d < dim; d++)
     box_dim[d] = (goDomain.Xmax[d] - goDomain.Xmin[d]) / slices[d];
 
-  for (int64_t i = 0; i < gi_leaf.NGB_RNKS.size(); i++) {
-    int64_t rm_rank = gi_leaf.NGB_RNKS[i];
+  for (int64_t i = 0; i < gi.NGB_RNKS.size(); i++) {
+    int64_t rm_rank = gi.NGB_RNKS[i];
     int64_t lbegin = rm_rank * nboxes;
     
     for (int64_t b = i * nboxes; b < (i + 1) * nboxes; b++) {
@@ -175,13 +223,13 @@ void nbd::checkBodies(const GlobalDomain& goDomain, const LocalDomain& loDomain,
         Z_index_i(Xi.data(), dim, ind);
         int64_t cmp = lbegin + b - i * nboxes;
         if (ind != cmp) {
-          printf("%ld: FAIL at %ld: %ld -> %ld\n", loDomain.RANK, b, ind, cmp);
+          printf("%ld: FAIL at %ld: %ld -> %ld\n", my_rank, b, ind, cmp);
           return;
         }
       }
     }
   }
 
-  printf("%ld: PASS\n", loDomain.RANK);
+  printf("%ld: PASS\n", my_rank);
 }
 

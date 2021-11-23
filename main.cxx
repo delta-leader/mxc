@@ -33,28 +33,30 @@ int main(int argc, char* argv[]) {
   LocalDomain local;
   LocalBodies bodies;
 
-  Global_Partition(domain, Nbody, Ncrit, dim, 0., 1.);
-  Local_Partition(local, domain, mpi_rank, mpi_size, theta);
+  Global_Partition(domain, mpi_rank, mpi_size, Nbody, Ncrit, dim, 0., 1.);
+  GlobalIndex* leaf = Local_Partition(local, domain, theta);
 
   //if(mpi_rank == 0) for(auto& gi : local.MY_IDS) printGlobalI(gi);
 
-  Random_bodies(bodies, domain, local, 100 ^ mpi_rank);
-  DistributeBodies(bodies, local.MY_IDS.back());
+  Random_bodies(bodies, domain, *leaf, 100 ^ mpi_rank);
 
-  //checkBodies(domain, local, bodies);
+  //checkBodies(mpi_rank, domain, *leaf, bodies);
 
   Nodes nodes;
   Matrices* A = allocNodes(nodes, local);
-  BlockCSC(*A, l2d(), local, bodies);
+  BlockCSC(*A, l2d(), *leaf, bodies);
 
   Basis basis;
   int64_t* LeafD = allocBasis(basis, local);
   std::copy(bodies.LENS.begin(), bodies.LENS.end(), LeafD);
 
   Base& base = basis.back();
-  sampleA(base, 1.e-8, local.MY_IDS.back(), *A, R.data(), R.size());
+  sampleA(base, 1.e-8, *leaf, *A, R.data(), R.size());
+  //checkBasis(mpi_rank, base);
 
-  //checkBasis(base);
+  Vectors X, B;
+  Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., 100 ^ mpi_rank);
+  blockAxEb(B, l2d(), X, *leaf, bodies);
 
   MPI_Finalize();
   return 0;
