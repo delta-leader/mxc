@@ -1,5 +1,5 @@
 
-#include "sps_umv.hxx"
+#include "umv.hxx"
 #include "dist.hxx"
 
 #include <cstdio>
@@ -142,7 +142,9 @@ void nbd::allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, 
   }
 }
 
-void nbd::factorNode(Node& n, const GlobalIndex& gi, const Base& basis) {
+void nbd::factorNode(Node& n, Base& basis, const GlobalIndex& gi, double repi, const double* R, int64_t lenR) {
+  sampleA(basis, repi, gi, n.A, R, lenR);
+  
   allocSubMatrices(n, gi, basis.DIMS.data(), basis.DIMO.data());
   splitA(n.A_cc, gi, n.A, basis.Uc, basis.Uc);
   splitA(n.A_oc, gi, n.A, basis.Uo, basis.Uc);
@@ -159,7 +161,7 @@ void nbd::factorNode(Node& n, const GlobalIndex& gi, const Base& basis) {
     madd(n.A_oo[i], n.S[i]);
 }
 
-void nbd::nextNode(Node& Anext, const GlobalIndex& Gnext, const Node& Aprev, const GlobalIndex& Gprev) {
+void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const Node& Aprev, const Base& bsprev, const GlobalIndex& Gprev) {
   Matrices& Mup = Anext.A;
   const Matrices& Mlow = Aprev.A_oo;
   const CSC& rels_up = Gnext.RELS;
@@ -198,10 +200,20 @@ void nbd::nextNode(Node& Anext, const GlobalIndex& Gnext, const Node& Aprev, con
     }
 }
 
-void nbd::factorA(Nodes& A, Basis& B, const LocalDomain& domain) {
+void nbd::factorA(Nodes& A, Basis& B, const LocalDomain& domain, double repi, const double* R, int64_t lenR) {
   for (int64_t i = domain.size() - 1; i > 0; i--) {
+    const GlobalIndex& gi = domain[i];
+    Node& Ai = A[i];
+    Base& Bi = B[i];
+    factorNode(Ai, Bi, gi, repi, R, lenR);
 
+    const GlobalIndex& gn = domain[i - 1];
+    Node& An = A[i - 1];
+    Base& Bn = B[i - 1];
+    nextNode(An, Bn, gn, Ai, Bi, gi);
   }
+
+  chol_decomp(A[0].A[0]);
 }
 
 void nbd::svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {

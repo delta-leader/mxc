@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "sps_basis.hxx"
+#include "basis.hxx"
 
 namespace nbd {
 
@@ -38,11 +38,11 @@ namespace nbd {
 
   void allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo);
 
-  void factorNode(Node& n, const GlobalIndex& gi, const Base& basis);
+  void factorNode(Node& n, Base& basis, const GlobalIndex& gi, double repi, const double* R, int64_t lenR);
 
-  void nextNode(Node& Anext, const GlobalIndex& Gnext, const Node& Aprev, const GlobalIndex& Gprev);
+  void nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const Node& Aprev, const Base& bsprev, const GlobalIndex& Gprev);
 
-  void factorA(Nodes& A, Basis& B, const LocalDomain& domain);
+  void factorA(Nodes& A, Basis& B, const LocalDomain& domain, double repi, const double* R, int64_t lenR);
 
   void svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi);
 

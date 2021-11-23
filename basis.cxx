@@ -1,5 +1,5 @@
 
-#include "sps_basis.hxx"
+#include "basis.hxx"
 #include "dist.hxx"
 
 #include <cstdio>

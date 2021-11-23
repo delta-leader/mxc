@@ -124,8 +124,6 @@ void nbd::Interactions(CSC& rels, int64_t y, int64_t xbegin, int64_t xend, int64
 GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, int64_t theta) {
   int64_t rank = goDomain.MY_RANK;
   int64_t my_level = goDomain.MY_LEVEL;
-  int64_t local_levels = goDomain.LEVELS - my_level;
-  int64_t boxes_local = (int64_t)1 << local_levels;
 
   loDomain.resize(goDomain.LEVELS + 1);
   for (int64_t i = 0; i <= goDomain.LEVELS; i++) {
@@ -133,26 +131,27 @@ GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goD
 
     int64_t lvl_diff = 0;
     int64_t size = (int64_t)1 << my_level;
+    int64_t ilocal = i - my_level;
     if (i < my_level) {
       lvl_diff = my_level - i;
       size = (int64_t)1 << i;
+      ilocal = 0;
     }
 
     int64_t my_rank = rank >> lvl_diff;
     int64_t my_twin = my_rank ^ (int64_t)1;
+    gi.BOXES = (int64_t)1 << ilocal;
+    gi.GBEGIN = my_rank * gi.BOXES;
+
     std::vector<int64_t> work(size);
     int64_t len = Z_neighbors(work.data(), my_rank, goDomain.DIM, size, theta);
-    gi.NGB_RNKS.resize(len);
-    std::copy(work.begin(), work.begin() + len, gi.NGB_RNKS.begin());
-
-    int64_t ilocal = std::max((int64_t)0, i - my_level);
-    gi.BOXES = (int64_t)1 << ilocal;
     gi.SELF_I = std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_rank));
     gi.TWIN_I = i == 0 ? -1 : std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_twin));
-    gi.GBEGIN = my_rank * gi.BOXES;
-    
-    int64_t mask = rank - (my_rank << lvl_diff);
+
+    gi.NGB_RNKS.resize(len);
     gi.COMM_RNKS.resize(len);
+    std::copy(work.begin(), work.begin() + len, gi.NGB_RNKS.begin());
+    int64_t mask = rank - (my_rank << lvl_diff);
     for (int64_t r = 0; r < len; r++)
       gi.COMM_RNKS[r] = (gi.NGB_RNKS[r] << lvl_diff) | mask;
 

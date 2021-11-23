@@ -1,8 +1,8 @@
 
 
 #include "bodies.hxx"
-#include "sps_basis.hxx"
-#include "sps_umv.hxx"
+#include "basis.hxx"
+#include "umv.hxx"
 
 #include "timer.h"
 #include "mpi.h"
