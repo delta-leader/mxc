@@ -61,6 +61,10 @@ void nbd::cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_
   }
 }
 
+void nbd::cpyVecToVec(int64_t n, const Vector& v1, Vector& v2, int64_t x1, int64_t x2) {
+  std::copy(&v1.X[x1], &v1.X[x1 + n], &v2.X[x2]);
+}
+
 void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
   Vector S;
   Vector superb;
@@ -122,6 +126,7 @@ void nbd::trsm_lowerA(Matrix& A, const Matrix& L) {
 
 void nbd::utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
   Matrix work;
+  cMatrix(work, C.M, A.N);
   mmult('T', 'N', U, A, work, 1., 0.);
   mmult('N', 'N', work, VT, C, 1., 0.);
 }
@@ -172,24 +177,4 @@ void nbd::nrm2(const Matrix& A, double* nrm) {
   int64_t size = A.M * A.N;
   *nrm = cblas_dnrm2(size, A.A.data(), 1);
 }
-
-/*void nbd::cpsVectors(char updwn, const Vectors& Xs, Vectors& Xt) {
-  if (updwn == 'U' || updwn == 'u') {
-    for (int64_t i = 0; i < Xt.size(); i++) {
-      const Vector& c1 = Xs[i << 1];
-      const Vector& c2 = Xs[(i << 1) + 1];
-      std::copy(&c1.X[0], &c1.X[c1.N], &Xt[i].X[0]);
-      std::copy(&c2.X[0], &c2.X[c2.N], &Xt[i].X[c1.N]);
-    }
-  }
-  else if (updwn == 'D' || updwn == 'd') {
-    for (int64_t i = 0; i < Xs.size(); i++) {
-      Vector& c1 = Xt[i << 1];
-      Vector& c2 = Xt[(i << 1) + 1];
-      std::copy(&Xs[i].X[0], &Xs[i].X[c1.N], &c1.X[0]);
-      std::copy(&Xs[i].X[c1.N], &Xs[i].X[c1.N + c2.N], &c2.X[0]);
-    }
-  }
-}
-*/
 

@@ -1,5 +1,6 @@
 
 #include "bodies.hxx"
+#include "dist.hxx"
 
 #include <random>
 #include <algorithm>
@@ -115,6 +116,13 @@ void nbd::Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const
   int64_t* offsets = &bodies.OFFSETS[ind * nboxes];
   Bucket_sort(bodies_begin, lens, offsets, nbody, nboxes, goDomain);
   DistributeBodies(bodies, gi);
+}
+
+
+void nbd::localBodiesDim(int64_t* dims, const GlobalIndex& gi, const LocalBodies& bodies) {
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
+  int64_t lend = lbegin + gi.BOXES;
+  std::copy(&bodies.LENS[lbegin], &bodies.LENS[lend], dims);
 }
 
 

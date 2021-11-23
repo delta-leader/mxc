@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
   Random_bodies(bodies, domain, *leaf, 100 ^ mpi_rank);
 
-  //checkBodies(mpi_rank, domain, *leaf, bodies);
+  checkBodies(mpi_rank, domain, *leaf, bodies);
 
   Nodes nodes;
   Matrices* A = allocNodes(nodes, local);
@@ -50,17 +50,11 @@ int main(int argc, char* argv[]) {
 
   Basis basis;
   int64_t* LeafD = allocBasis(basis, local);
-  std::copy(bodies.LENS.begin(), bodies.LENS.end(), LeafD);
-
-  Base& base = basis.back();
-  sampleA(base, 1.e-8, *leaf, *A, R.data(), R.size());
-  //checkBasis(mpi_rank, base);
+  localBodiesDim(LeafD, *leaf, bodies);
 
   Vectors X, B;
   Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., 100 ^ mpi_rank);
   blockAxEb(B, l2d(), X, *leaf, bodies);
-
-  axatDistribute(*A, *leaf);
 
   MPI_Finalize();
   if (mpi_rank == 0) stop("program");

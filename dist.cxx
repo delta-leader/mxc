@@ -1,7 +1,5 @@
 
-#include "bodies.hxx"
-#include "sps_basis.hxx"
-#include "sps_umv.hxx"
+#include "dist.hxx"
 
 #include "mpi.h"
 #include <cstdlib>

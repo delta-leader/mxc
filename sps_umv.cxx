@@ -1,5 +1,8 @@
 
 #include "sps_umv.hxx"
+#include "dist.hxx"
+
+#include <cstdio>
 
 using namespace nbd;
 
@@ -95,6 +98,26 @@ Matrices* nbd::allocNodes(Nodes& nodes, const LocalDomain& domain) {
   return &(nodes.back().A);
 }
 
+void nbd::allocA(Node& n, const GlobalIndex& gi, const int64_t* dims) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.SELF_I * gi.BOXES;
+
+  for (int64_t j = 0; j < rels.N; j++) {
+    int64_t box_j = lbegin + j;
+    int64_t nbodies_j = dims[box_j];
+
+    for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
+      int64_t i = rels.CSC_ROWS[ij];
+      int64_t box_i;
+      Lookup_GlobalI(box_i, gi, i);
+      int64_t nbodies_i = dims[box_i];
+
+      Matrix& A_ij = n.A[ij];
+      cMatrix(A_ij, nbodies_i, nbodies_j);
+    }
+  }
+}
+
 void nbd::allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo) {
   const CSC& rels = gi.RELS;
   int64_t nboxes = gi.BOXES;
@@ -175,6 +198,12 @@ void nbd::nextNode(Node& Anext, const GlobalIndex& Gnext, const Node& Aprev, con
     }
 }
 
+void nbd::factorA(Nodes& A, Basis& B, const LocalDomain& domain) {
+  for (int64_t i = domain.size() - 1; i > 0; i--) {
+
+  }
+}
+
 void nbd::svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
   int64_t lbegin = gi.GBEGIN;
@@ -239,3 +268,5 @@ void nbd::svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const Gl
       mvec('T', A_yx, Xo[box_y], xlocal[x], -1., 1.);
     }
 }
+
+

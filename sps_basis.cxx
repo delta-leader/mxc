@@ -1,5 +1,6 @@
 
 #include "sps_basis.hxx"
+#include "dist.hxx"
 
 #include <cstdio>
 using namespace nbd;
@@ -67,7 +68,10 @@ int64_t* nbd::allocBasis(Basis& basis, const LocalDomain& domain) {
     basis[i].Uo.resize(nodes);
     basis[i].Uc.resize(nodes);
   }
-  return basis.back().DIMS.data();
+
+  int64_t lbegin = domain.back().SELF_I * domain.back().BOXES;
+  int64_t* dims = &basis.back().DIMS[lbegin];
+  return dims;
 }
 
 void nbd::allocUcUo(Base& basis, const GlobalIndex& gi, const Matrices& C) {
@@ -92,6 +96,7 @@ void nbd::allocUcUo(Base& basis, const GlobalIndex& gi, const Matrices& C) {
 }
 
 void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR) {
+  DistributeDims(basis.DIMS, gi);
   Matrices C1(basis.DIMS.size());
   Matrices C2(basis.DIMS.size());
 
@@ -112,6 +117,15 @@ void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrice
   
   DistributeMatricesList(basis.Uc, gi);
   DistributeMatricesList(basis.Uo, gi);
+}
+
+void nbd::nextDims(int64_t* dims, const int64_t* dimo, int64_t ldimo) {
+  int64_t ldim = ldimo >> 1;
+  for (int64_t i = 0; i < ldim; i++) {
+    int64_t c0 = i << 1;
+    int64_t c1 = (i << 1) + 1;
+    dims[i] = dimo[c0] + dimo[c1];
+  }
 }
 
 void nbd::basisFw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X) {

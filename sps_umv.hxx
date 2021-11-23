@@ -34,18 +34,20 @@ namespace nbd {
 
   Matrices* allocNodes(Nodes& nodes, const LocalDomain& domain);
 
+  void allocA(Node& n, const GlobalIndex& gi, const int64_t* dims);
+
   void allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo);
 
   void factorNode(Node& n, const GlobalIndex& gi, const Base& basis);
 
   void nextNode(Node& Anext, const GlobalIndex& Gnext, const Node& Aprev, const GlobalIndex& Gprev);
 
+  void factorA(Nodes& A, Basis& B, const LocalDomain& domain);
+
   void svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi);
 
   void svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const GlobalIndex& gi);
 
   void svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const GlobalIndex& gi);
-
-  void axatDistribute(Matrices& A, const GlobalIndex& gi);
 
 };

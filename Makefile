@@ -24,7 +24,7 @@ sps_basis: sps_basis.cxx sps_basis.hxx
 sps_umv: sps_umv.cxx sps_umv.hxx
 	$(CC) -c sps_umv.cxx
 
-dist: dist.cxx
+dist: dist.cxx dist.hxx
 	$(MPI_CC) -c dist.cxx
 
 main: main.cxx

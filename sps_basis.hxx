@@ -27,13 +27,11 @@ namespace nbd {
 
   void sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR);
 
+  void nextDims(int64_t* dims, const int64_t* dimo, int64_t ldimo);
+
   void basisFw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X);
 
   void basisBk(Vectors& X, const Base& basis, const Vectors& Xo, const Vectors& Xc);
-
-  void DistributeMatricesList(Matrices& lis, const GlobalIndex& gi);
-
-  void DistributeDims(std::vector<int64_t>& dims, const GlobalIndex& gi);
 
   void checkBasis(int64_t my_rank, const Base& basis);
 

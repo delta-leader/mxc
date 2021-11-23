@@ -22,6 +22,8 @@ namespace nbd {
 
   void Alloc_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const GlobalIndex& gi);
 
+  void localBodiesDim(int64_t* dims, const GlobalIndex& gi, const LocalBodies& bodies);
+
   void Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const GlobalIndex& gi, unsigned int seed);
 
   void BlockCSC(Matrices& A, EvalFunc ef, const GlobalIndex& gi, const LocalBodies& bodies);
@@ -29,10 +31,6 @@ namespace nbd {
   Vector* randomVectors(Vectors& B, const GlobalIndex& gi, const LocalBodies& bodies, double min, double max, unsigned int seed);
 
   void blockAxEb(Vectors& B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies);
-
-  void DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi);
-
-  void DistributeVectorsList(Vectors& B, const GlobalIndex& gi);
 
   void checkBodies(int64_t my_rank, const GlobalDomain& goDomain, const GlobalIndex& gi, const LocalBodies& bodies);
 
