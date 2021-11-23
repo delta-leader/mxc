@@ -139,6 +139,7 @@ GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goD
     }
 
     int64_t my_rank = rank >> lvl_diff;
+    int64_t my_twin = my_rank ^ (int64_t)1;
     std::vector<int64_t> work(size);
     int64_t len = Z_neighbors(work.data(), my_rank, goDomain.DIM, size, theta);
     gi.NGB_RNKS.resize(len);
@@ -147,6 +148,7 @@ GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goD
     int64_t ilocal = std::max((int64_t)0, i - my_level);
     gi.BOXES = (int64_t)1 << ilocal;
     gi.SELF_I = std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_rank));
+    gi.TWIN_I = i == 0 ? -1 : std::distance(work.begin(), std::find(work.begin(), work.begin() + len, my_twin));
     gi.GBEGIN = my_rank * gi.BOXES;
     
     int64_t mask = rank - (my_rank << lvl_diff);
@@ -207,6 +209,7 @@ void nbd::Lookup_GlobalI(int64_t& ilocal, const GlobalIndex& gi, int64_t iglobal
 void nbd::printGlobalI(const GlobalIndex& gi) {
   printf("-- Global Index --\n");
   printf(" My rank is %ld, %ldth item in my list.\n", gi.NGB_RNKS[gi.SELF_I], gi.SELF_I);
+  printf(" My twin rank is %ld, %ldth item in my list.\n", gi.TWIN_I == -1 ? (int64_t)-1 : gi.NGB_RNKS[gi.TWIN_I], gi.TWIN_I);
   printf(" Boxes starting from %ld to %ld\n", gi.GBEGIN, gi.GBEGIN + gi.BOXES);
   printf(" I am holding m=%ld, n=%ld, nnz=%ld matrix.\n", gi.RELS.M, gi.RELS.N, gi.RELS.NNZ);
   printf(" I am communicating with:\n");

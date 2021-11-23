@@ -4,6 +4,7 @@
 #include "sps_basis.hxx"
 #include "sps_umv.hxx"
 
+#include "timer.h"
 #include "mpi.h"
 #include <random>
 #include <cstdio>
@@ -14,11 +15,12 @@ using namespace nbd;
 int main(int argc, char* argv[]) {
 
   MPI_Init(&argc, &argv);
-
   int dim = 2;
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
+  if (mpi_rank == 0) start("program");
 
   int64_t Nbody = 40000;
   int64_t Ncrit = 100;
@@ -36,7 +38,7 @@ int main(int argc, char* argv[]) {
   Global_Partition(domain, mpi_rank, mpi_size, Nbody, Ncrit, dim, 0., 1.);
   GlobalIndex* leaf = Local_Partition(local, domain, theta);
 
-  //if(mpi_rank == 0) for(auto& gi : local.MY_IDS) printGlobalI(gi);
+  //if(mpi_rank == 0) for(auto& gi : local) printGlobalI(gi);
 
   Random_bodies(bodies, domain, *leaf, 100 ^ mpi_rank);
 
@@ -58,6 +60,9 @@ int main(int argc, char* argv[]) {
   Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., 100 ^ mpi_rank);
   blockAxEb(B, l2d(), X, *leaf, bodies);
 
+  axatDistribute(*A, *leaf);
+
   MPI_Finalize();
+  if (mpi_rank == 0) stop("program");
   return 0;
 }

@@ -27,6 +27,7 @@ namespace nbd {
   struct GlobalIndex {
     int64_t BOXES;
     int64_t SELF_I;
+    int64_t TWIN_I;
     int64_t GBEGIN;
     std::vector<int64_t> NGB_RNKS;
     std::vector<int64_t> COMM_RNKS;
