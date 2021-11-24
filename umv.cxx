@@ -145,6 +145,7 @@ void nbd::allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, 
 
 void nbd::factorNode(Node& n, Base& basis, const GlobalIndex& gi, double repi, const double* R, int64_t lenR) {
   sampleA(basis, repi, gi, n.A, R, lenR);
+  //checkBasis(gi.COMM_RNKS[gi.SELF_I], basis);
   
   allocSubMatrices(n, gi, basis.DIMS.data(), basis.DIMO.data());
   splitA(n.A_cc, gi, n.A, basis.Uc, basis.Uc);

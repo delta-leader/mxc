@@ -98,8 +98,10 @@ void nbd::Global_Partition(GlobalDomain& goDomain, int64_t rank, int64_t size, i
   goDomain.MY_LEVEL = (int64_t)std::floor(std::log2(size));
 
   goDomain.LEVELS = (int64_t)std::floor(std::log2(Nbodies / Ncrit));
-  goDomain.Xmin.resize(dim, min);
-  goDomain.Xmax.resize(dim, max);
+  goDomain.Xmin.resize(dim);
+  goDomain.Xmax.resize(dim);
+  std::fill(goDomain.Xmin.begin(), goDomain.Xmin.end(), min);
+  std::fill(goDomain.Xmax.begin(), goDomain.Xmax.end(), max);
 }
 
 

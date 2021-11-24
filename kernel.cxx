@@ -8,7 +8,7 @@ using namespace nbd;
 EvalFunc nbd::l2d() {
   EvalFunc ef;
   ef.r2f = [](double& r2, double singularity, double alpha) -> void {
-    r2 = r2 == 0 ? singularity : std::log(std::sqrt(r2));
+    r2 = r2 == 0. ? singularity : std::log(std::sqrt(r2));
   };
   ef.singularity = 1.e6;
   ef.alpha = 1.;
@@ -18,7 +18,7 @@ EvalFunc nbd::l2d() {
 EvalFunc nbd::l3d() {
   EvalFunc ef;
   ef.r2f = [](double& r2, double singularity, double alpha) -> void {
-    r2 = r2 == 0 ? singularity : 1. / std::sqrt(r2);
+    r2 = r2 == 0. ? singularity : 1. / std::sqrt(r2);
   };
   ef.singularity = 1.e6;
   ef.alpha = 1.;

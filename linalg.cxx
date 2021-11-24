@@ -4,8 +4,10 @@
 
 #include "cblas.h"
 #include "lapacke.h"
-#include <cstdlib>
+
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 
 using namespace nbd;
 
@@ -66,16 +68,19 @@ void nbd::cpyVecToVec(int64_t n, const Vector& v1, Vector& v2, int64_t x1, int64
 }
 
 void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
-  Vector S;
-  Vector superb;
+  Vector S, superb;
   cVector(S, A.M);
   cVector(superb, A.M - 1);
 
-  LAPACKE_dgesvd(LAPACK_COL_MAJOR, 'O', 'N', A.M, A.N, A.A.data(), A.M, S.X.data(), nullptr, A.M, nullptr, A.N, superb.X.data());
+  int info = LAPACKE_dgesvd(LAPACK_COL_MAJOR, 'O', 'N', A.M, A.N, A.A.data(), A.M, S.X.data(), nullptr, A.M, nullptr, A.N, superb.X.data());
+  if (info)
+    fprintf(stderr, "SVD FAIL: %d on %ld %ld %e\n", info, A.M, A.N, cblas_dnrm2(A.M * A.N, A.A.data(), 1));
+
   int64_t rank;
   if (repi < 1.) {
     double sepi = S.X[0] * repi;
-    rank = std::distance(S.X.data(), std::find_if(S.X.data() + 1, S.X.data() + A.M, [sepi](double& s) { return s < sepi; }));
+    int64_t lim = (int64_t)std::floor(A.M * 0.95);
+    rank = std::distance(S.X.data(), std::find_if(S.X.data() + 1, S.X.data() + lim, [sepi](double& s) { return s < sepi; }));
   }
   else
     rank = (int64_t)std::floor(repi);
@@ -97,11 +102,10 @@ void nbd::mmult(char ta, char tb, const Matrix& A, const Matrix& B, Matrix& C, d
 void nbd::msample(char ta, int64_t lenR, const Matrix& A, const double* R, Matrix& C) {
   int64_t k = (ta == 'N' || ta == 'n') ? A.N : A.M;
   auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
-  int64_t colR = std::min(C.N, lenR / k);
-  for (int64_t i = 0; i < C.N; i += colR) {
-    int64_t nrhs = std::min(colR, C.N - i);
-    cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, nrhs, k, 1., A.A.data(), A.M, R, k, 1., &C.A[i * C.M], C.M);
-  }
+  if (lenR >= C.N * k)
+    cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, C.N, k, 1., A.A.data(), A.M, R, k, 1., C.A.data(), C.M);
+  else
+    fprintf(stderr, "Insufficent random vector: %ld needed %ld provided\n", k * C.N, lenR);
 }
 
 void nbd::msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C) {
@@ -111,9 +115,10 @@ void nbd::msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C) {
   cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, nrhs, k, 1., A.A.data(), A.M, B.A.data(), B.M, 1., C.A.data(), C.M);
 }
 
-void nbd::msyinv(Matrix& A, Matrix& B) {
-  LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A.M, A.A.data(), A.M);
-  LAPACKE_dpotrs(LAPACK_COL_MAJOR, 'L', A.M, B.N, A.A.data(), A.M, B.A.data(), B.M);
+void nbd::minvl(Matrix& A, Matrix& B) {
+  std::vector<int> ipiv(std::min(A.M, A.N));
+  LAPACKE_dgetrf(LAPACK_COL_MAJOR, A.M, A.N, A.A.data(), A.M, ipiv.data());
+  LAPACKE_dgetrs(LAPACK_COL_MAJOR, 'N', A.M, B.N, A.A.data(), A.M, ipiv.data(), B.A.data(), B.M);
 }
 
 void nbd::chol_decomp(Matrix& A) {

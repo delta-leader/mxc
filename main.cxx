@@ -8,6 +8,7 @@
 #include "mpi.h"
 #include <random>
 #include <cstdio>
+#include <cmath>
 
 using namespace nbd;
 
@@ -35,27 +36,30 @@ int main(int argc, char* argv[]) {
   LocalDomain local;
   LocalBodies bodies;
 
-  Global_Partition(domain, mpi_rank, mpi_size, Nbody, Ncrit, dim, 0., 1.);
+  Global_Partition(domain, mpi_rank, mpi_size, Nbody, Ncrit, dim, 0., std::pow(Nbody, 1. / dim));
   GlobalIndex* leaf = Local_Partition(local, domain, theta);
 
   //if(mpi_rank == 0) for(auto& gi : local) printGlobalI(gi);
 
-  Random_bodies(bodies, domain, *leaf, 100 ^ mpi_rank);
+  Random_bodies(bodies, domain, *leaf, std::pow(999, mpi_rank));
 
   checkBodies(mpi_rank, domain, *leaf, bodies);
 
+  EvalFunc ef = l2d();
+
   Nodes nodes;
   Matrices* A = allocNodes(nodes, local);
-  BlockCSC(*A, l2d(), *leaf, bodies);
+  BlockCSC(*A, ef, *leaf, bodies);
 
   Basis basis;
   allocBasis(basis, local, bodies.LENS.data());
 
-  Vectors X, B;
-  Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., 100 ^ mpi_rank);
-  blockAxEb(B, l2d(), X, *leaf, bodies);
+  factorA(nodes, basis, local, 1.e-8, R.data(), R.size());
 
-  factorA(nodes, basis, local, 50, R.data(), R.size());
+  Vectors X, B;
+  Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., std::pow(999, mpi_rank));
+  blockAxEb(B, ef, X, *leaf, bodies);
+
 
   MPI_Finalize();
   if (mpi_rank == 0) stop("program");

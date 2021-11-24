@@ -46,7 +46,7 @@ namespace nbd {
 
   void msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C);
 
-  void msyinv(Matrix& A, Matrix& B);
+  void minvl(Matrix& A, Matrix& B);
 
   void chol_decomp(Matrix& A);
 

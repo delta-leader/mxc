@@ -27,7 +27,7 @@ void nbd::sampleC1(Matrices& C1, const GlobalIndex& gi, const Matrices& A, const
     Matrix work;
     cMatrix(work, Ajj.M, Ajj.N);
     cpyMatToMat(Ajj.M, Ajj.N, Ajj, work, 0, 0, 0, 0);
-    msyinv(work, cj);
+    //minvl(work, cj);
   }
 }
 
