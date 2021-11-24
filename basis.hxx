@@ -21,13 +21,13 @@ namespace nbd {
 
   void orthoBasis(double repi, const GlobalIndex& gi, Matrices& C, std::vector<int64_t>& dims_o);
 
-  int64_t* allocBasis(Basis& basis, const LocalDomain& domain);
+  void allocBasis(Basis& basis, const LocalDomain& domain, const int64_t* bddims);
 
   void allocUcUo(Base& basis, const GlobalIndex& gi, const Matrices& C);
 
   void sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR);
 
-  void nextDims(int64_t* dims, const int64_t* dimo, int64_t ldimo);
+  void nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev);
 
   void basisFw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X);
 

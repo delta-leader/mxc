@@ -49,8 +49,7 @@ int main(int argc, char* argv[]) {
   BlockCSC(*A, l2d(), *leaf, bodies);
 
   Basis basis;
-  int64_t* LeafD = allocBasis(basis, local);
-  localBodiesDim(LeafD, *leaf, bodies);
+  allocBasis(basis, local, bodies.LENS.data());
 
   Vectors X, B;
   Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., 100 ^ mpi_rank);

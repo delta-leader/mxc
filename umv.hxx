@@ -34,7 +34,7 @@ namespace nbd {
 
   Matrices* allocNodes(Nodes& nodes, const LocalDomain& domain);
 
-  void allocA(Node& n, const GlobalIndex& gi, const int64_t* dims);
+  void allocA(Matrices& A, const GlobalIndex& gi, const int64_t* dims);
 
   void allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo);
 

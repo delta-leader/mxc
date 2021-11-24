@@ -17,4 +17,6 @@ namespace nbd {
 
   void axatDistribute(Matrices& A, const GlobalIndex& gi);
 
+  void butterflySum(Matrices& A, const GlobalIndex& gi);
+
 };

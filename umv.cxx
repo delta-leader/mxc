@@ -98,7 +98,7 @@ Matrices* nbd::allocNodes(Nodes& nodes, const LocalDomain& domain) {
   return &(nodes.back().A);
 }
 
-void nbd::allocA(Node& n, const GlobalIndex& gi, const int64_t* dims) {
+void nbd::allocA(Matrices& A, const GlobalIndex& gi, const int64_t* dims) {
   const CSC& rels = gi.RELS;
   int64_t lbegin = gi.SELF_I * gi.BOXES;
 
@@ -112,8 +112,9 @@ void nbd::allocA(Node& n, const GlobalIndex& gi, const int64_t* dims) {
       Lookup_GlobalI(box_i, gi, i);
       int64_t nbodies_i = dims[box_i];
 
-      Matrix& A_ij = n.A[ij];
+      Matrix& A_ij = A[ij];
       cMatrix(A_ij, nbodies_i, nbodies_j);
+      zeroMatrix(A_ij);
     }
   }
 }
@@ -167,16 +168,25 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
   const CSC& rels_up = Gnext.RELS;
   const CSC& rels_low = Gprev.RELS;
 
-  for (int64_t j = 0; j < rels_up.N; j++)
+  nextBasisDims(bsnext, Gnext, bsprev);
+  allocA(Mup, Gnext, bsnext.DIMS.data());
+  int64_t nbegin = Gnext.GBEGIN;
+  int64_t pbegin = Gprev.GBEGIN;
+
+  for (int64_t j = 0; j < rels_up.N; j++) {
+    int64_t gj = j + nbegin;
+    int64_t cj0 = (gj << 1) - pbegin;
+    int64_t cj1 = (gj << 1) + 1 - pbegin;
+
     for (int64_t ij = rels_up.CSC_COLS[j]; ij < rels_up.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels_up.CSC_ROWS[ij];
-      zeroMatrix(Mup[ij]);
-      
+      int64_t ci0 = i << 1;
+      int64_t ci1 = (i << 1) + 1;
       int64_t i00, i01, i10, i11;
-      lookupIJ(i00, rels_low, i << 1, j << 1);
-      lookupIJ(i01, rels_low, i << 1, (j << 1) + 1);
-      lookupIJ(i10, rels_low, (i << 1) + 1, j << 1);
-      lookupIJ(i11, rels_low, (i << 1) + 1, (j << 1) + 1);
+      lookupIJ(i00, rels_low, ci0, cj0);
+      lookupIJ(i01, rels_low, ci0, cj1);
+      lookupIJ(i10, rels_low, ci1, cj0);
+      lookupIJ(i11, rels_low, ci1, cj1);
 
       if (i00 > 0) {
         const Matrix& m00 = Mlow[i00];
@@ -185,19 +195,27 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
 
       if (i01 > 0) {
         const Matrix& m01 = Mlow[i01];
-        cpyMatToMat(m01.M, m01.N, m01, Mup[ij], 0, 0, 0, Mup[ij].N - m01.N);
+        int64_t nbegin = Mup[ij].N - m01.N;
+        cpyMatToMat(m01.M, m01.N, m01, Mup[ij], 0, 0, 0, nbegin);
       }
 
       if (i10 > 0) {
         const Matrix& m10 = Mlow[i10];
-        cpyMatToMat(m10.M, m10.N, m10, Mup[ij], 0, 0, Mup[ij].M - m10.M, 0);
+        int64_t mbegin = Mup[ij].M - m10.M;
+        cpyMatToMat(m10.M, m10.N, m10, Mup[ij], 0, 0, mbegin, 0);
       }
 
       if (i11 > 0) {
         const Matrix& m11 = Mlow[i11];
-        cpyMatToMat(m11.M, m11.N, m11, Mup[ij], 0, 0, Mup[ij].M - m11.M, Mup[ij].N - m11.N);
+        int64_t mbegin = Mup[ij].M - m11.M;
+        int64_t nbegin = Mup[ij].N - m11.N;
+        cpyMatToMat(m11.M, m11.N, m11, Mup[ij], 0, 0, mbegin, nbegin);
       }
     }
+  }
+  
+  if (rels_low.N == rels_up.N)
+    butterflySum(Mup, Gprev);
 }
 
 void nbd::factorA(Nodes& A, Basis& B, const LocalDomain& domain, double repi, const double* R, int64_t lenR) {

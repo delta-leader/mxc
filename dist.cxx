@@ -354,3 +354,47 @@ void nbd::axatDistribute(Matrices& A, const GlobalIndex& gi) {
     }
   }
 }
+
+
+void nbd::butterflySum(Matrices& A, const GlobalIndex& gi) {
+  int64_t my_ind = gi.SELF_I;
+  int64_t my_twi = gi.TWIN_I;
+  int64_t my_rank = gi.COMM_RNKS[my_ind];
+  int64_t rm_rank = gi.COMM_RNKS[my_twi];
+
+  MPI_Request request;
+  int64_t LEN = 0;
+  double* SRC_DATA, *RM_DATA;
+
+  for (int64_t i = 0; i < A.size(); i++) {
+    const Matrix& A_i = A[i];
+    int64_t len = A_i.M * A_i.N;
+    LEN = LEN + len;
+  }
+
+  SRC_DATA = (double*)malloc(sizeof(double) * LEN);
+  RM_DATA = (double*)malloc(sizeof(double) * LEN);
+
+  int64_t offset = 0;
+  for (int64_t i = 0; i < A.size(); i++) {
+    const Matrix& A_i = A[i];
+    int64_t len = A_i.M * A_i.N;
+    cpyFromMatrix('N', A_i, SRC_DATA + offset);
+    offset = offset + len;
+  }
+
+  MPI_Isend(SRC_DATA, LEN, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &request);
+  MPI_Recv(RM_DATA, LEN, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  MPI_Wait(&request, MPI_STATUS_IGNORE);
+
+  offset = 0;
+  for (int64_t i = 0; i < A.size(); i++) {
+    Matrix& A_i = A[i];
+    int64_t len = A_i.M * A_i.N;
+    maxpby(A_i, RM_DATA + offset, 1., 1.);
+    offset = offset + len;
+  }
+
+  free(SRC_DATA);
+  free(RM_DATA);
+}
