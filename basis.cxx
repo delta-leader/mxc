@@ -118,16 +118,23 @@ void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrice
   DistributeMatricesList(basis.Uo, gi);
 }
 
-void nbd::nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev) {
-  int64_t nbegin = gnext.SELF_I * gnext.BOXES;
-  int64_t nend = nbegin + gnext.BOXES;
+void nbd::nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev, const GlobalIndex& gprev) {
+  int64_t nboxes = gnext.BOXES;
+  int64_t nbegin = gnext.SELF_I * nboxes;
+  int64_t ngbegin = gnext.GBEGIN;
+
   std::vector<int64_t>& dims = bsnext.DIMS;
   const std::vector<int64_t>& dimo = bsprev.DIMO;
 
-  for (int64_t i = nbegin; i < nend; i++) {
-    int64_t c0 = i << 1;
-    int64_t c1 = (i << 1) + 1;
-    dims[i] = dimo[c0] + dimo[c1];
+  for (int64_t i = 0; i < nboxes; i++) {
+    int64_t nloc = i + nbegin;
+    int64_t nrnk = i + ngbegin;
+    int64_t c0rnk = nrnk << 1;
+    int64_t c1rnk = (nrnk << 1) + 1;
+    int64_t c0, c1;
+    Lookup_GlobalI(c0, gprev, c0rnk);
+    Lookup_GlobalI(c1, gprev, c1rnk);
+    dims[nloc] = dimo[c0] + dimo[c1];
   }
   DistributeDims(dims, gnext);
 }

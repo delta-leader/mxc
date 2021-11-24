@@ -55,6 +55,8 @@ int main(int argc, char* argv[]) {
   Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., 100 ^ mpi_rank);
   blockAxEb(B, l2d(), X, *leaf, bodies);
 
+  factorA(nodes, basis, local, 50, R.data(), R.size());
+
   MPI_Finalize();
   if (mpi_rank == 0) stop("program");
   return 0;

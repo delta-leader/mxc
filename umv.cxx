@@ -168,7 +168,7 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
   const CSC& rels_up = Gnext.RELS;
   const CSC& rels_low = Gprev.RELS;
 
-  nextBasisDims(bsnext, Gnext, bsprev);
+  nextBasisDims(bsnext, Gnext, bsprev, Gprev);
   allocA(Mup, Gnext, bsnext.DIMS.data());
   int64_t nbegin = Gnext.GBEGIN;
   int64_t pbegin = Gprev.GBEGIN;

@@ -189,8 +189,7 @@ void nbd::lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j) {
   { ij = -1; return; }
   int64_t k = std::distance(rels.CSC_ROWS.data(), 
     std::find(rels.CSC_ROWS.data() + rels.CSC_COLS[j], rels.CSC_ROWS.data() + rels.CSC_COLS[j + 1], i));
-  if (k < rels.CSC_COLS[j + 1])
-    ij = k;
+  ij = (k < rels.CSC_COLS[j + 1]) ? k : -1;
 }
 
 void nbd::Lookup_GlobalI(int64_t& ilocal, const GlobalIndex& gi, int64_t iglobal) {
@@ -199,10 +198,7 @@ void nbd::Lookup_GlobalI(int64_t& ilocal, const GlobalIndex& gi, int64_t iglobal
   int64_t i_rank = iglobal - box_rank * nboxes;
 
   int64_t box_ind = std::distance(gi.NGB_RNKS.begin(), std::find(gi.NGB_RNKS.begin(), gi.NGB_RNKS.end(), box_rank));
-  if (box_ind < gi.NGB_RNKS.size())
-    ilocal = box_ind * nboxes + i_rank;
-  else
-    ilocal = -1;
+  ilocal = (box_ind < gi.NGB_RNKS.size()) ? (box_ind * nboxes + i_rank) : -1;
 }
 
 void nbd::printGlobalI(const GlobalIndex& gi) {

@@ -27,7 +27,7 @@ namespace nbd {
 
   void sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR);
 
-  void nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev);
+  void nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev, const GlobalIndex& gprev);
 
   void basisFw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X);
 
