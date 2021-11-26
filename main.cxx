@@ -1,8 +1,7 @@
 
 
 #include "bodies.hxx"
-#include "basis.hxx"
-#include "umv.hxx"
+#include "solver.hxx"
 
 #include "timer.h"
 #include "mpi.h"
@@ -23,7 +22,7 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) start("program");
 
-  int64_t Nbody = 40000;
+  int64_t Nbody = 200;
   int64_t Ncrit = 100;
   int64_t theta = 1;
 
@@ -56,10 +55,17 @@ int main(int argc, char* argv[]) {
 
   factorA(nodes, basis, local, 1.e-8, R.data(), R.size());
 
-  Vectors X, B;
+  Vectors X;
   Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., std::pow(999, mpi_rank));
+
+  RHSS rhs;
+  Vector* B = allocRightHandSides(rhs, basis, local);
   blockAxEb(B, ef, X, *leaf, bodies);
 
+  solveA(rhs, nodes, basis, local);
+  double err;
+  solveRelErr(&err, rhs.back(), X, *leaf);
+  printf("ERR: %e\n", err);
 
   MPI_Finalize();
   if (mpi_rank == 0) stop("program");

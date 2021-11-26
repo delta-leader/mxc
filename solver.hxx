@@ -21,4 +21,13 @@ namespace nbd {
 
   void svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const GlobalIndex& gi);
 
+  Vector* allocRightHandSides(RHSS& rhs, const Basis& base, const LocalDomain& domain);
+
+  void permuteAndMerge(char fwbk, RHS& prev, RHS& next);
+
+  void solveA(RHSS& X, const Nodes& A, const Basis& B, const LocalDomain& domain);
+
+  void solveRelErr(double* err_out, const RHS& X, const Vectors& ref, const GlobalIndex& gi);
+
+
 };

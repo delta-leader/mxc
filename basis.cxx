@@ -162,8 +162,8 @@ void nbd::checkBasis(int64_t my_rank, const Base& basis) {
       cc.A[d * (dim_c + 1)] = cc.A[d * (dim_c + 1)] - 1.;
     
     double e1, e2;
-    nrm2(oo, &e1);
-    nrm2(cc, &e2);
+    mnrm2(oo, &e1);
+    mnrm2(cc, &e2);
     if (e1 > 1.e-10 || e2 > 1.e-10) {
       printf("%ld: FAIL at %ld: %e, %e\n", my_rank, i, e1, e2);
       return;

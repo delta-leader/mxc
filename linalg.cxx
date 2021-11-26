@@ -79,6 +79,7 @@ void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
   int64_t rank;
   if (repi < 1.) {
     double sepi = S.X[0] * repi;
+    sepi = std::max(sepi, repi);
     int64_t lim = (int64_t)(A.M - 1);
     rank = std::distance(S.X.data(), std::find_if(S.X.data() + 1, S.X.data() + lim, [sepi](double& s) { return s < sepi; }));
   }
@@ -180,8 +181,19 @@ void nbd::pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Mat
   mvec('N', Us, Xs, X, 1., 1.);
 }
 
-void nbd::nrm2(const Matrix& A, double* nrm) {
+void nbd::mnrm2(const Matrix& A, double* nrm) {
   int64_t size = A.M * A.N;
   *nrm = cblas_dnrm2(size, A.A.data(), 1);
 }
 
+void nbd::vnrm2(const Vector& A, double* nrm) {
+  *nrm = cblas_dnrm2(A.N, A.X.data(), 1);
+}
+
+void nbd::verr2(const Vector& A, const Vector& B, double* err) {
+  Vector work;
+  cVector(work, A.N);
+  vaxpby(work, A.X.data(), 1., 0.);
+  vaxpby(work, B.X.data(), -1., 1.);
+  vnrm2(work, err);
+}

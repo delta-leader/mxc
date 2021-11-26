@@ -2,8 +2,7 @@
 #pragma once
 
 #include "bodies.hxx"
-#include "basis.hxx"
-#include "umv.hxx"
+#include "solver.hxx"
 
 namespace nbd {
 

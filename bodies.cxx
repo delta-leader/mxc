@@ -178,11 +178,10 @@ Vector* nbd::randomVectors(Vectors& B, const GlobalIndex& gi, const LocalBodies&
   return &B[lbegin];
 }
 
-void nbd::blockAxEb(Vectors& B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies) {
+void nbd::blockAxEb(Vector* B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies) {
   int64_t lbegin = gi.SELF_I * gi.BOXES;
   int64_t dim = bodies.DIM;
-  B.resize(gi.BOXES);
-  for (int64_t i = 0; i < B.size(); i++)
+  for (int64_t i = 0; i < gi.BOXES; i++)
     cVector(B[i], bodies.LENS[i + lbegin]);
   
   const CSC& rels = gi.RELS;

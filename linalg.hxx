@@ -70,6 +70,10 @@ namespace nbd {
 
   void pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Matrix& Uc, Vector& X);
 
-  void nrm2(const Matrix& A, double* nrm);
+  void mnrm2(const Matrix& A, double* nrm);
+
+  void vnrm2(const Vector& A, double* nrm);
+
+  void verr2(const Vector& A, const Vector& B, double* err);
 
 };
