@@ -27,7 +27,7 @@ void nbd::sampleC1(Matrices& C1, const GlobalIndex& gi, const Matrices& A, const
     Matrix work;
     cMatrix(work, Ajj.M, Ajj.N);
     cpyMatToMat(Ajj.M, Ajj.N, Ajj, work, 0, 0, 0, 0);
-    //minvl(work, cj);
+    minvl(work, cj);
   }
 }
 
@@ -137,16 +137,6 @@ void nbd::nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bspr
     dims[nloc] = dimo[c0] + dimo[c1];
   }
   DistributeDims(dims, gnext);
-}
-
-void nbd::basisFw(Vectors& Xo, Vectors& Xc, const Base& basis, const Vectors& X) {
-  for (int64_t i = 0; i < X.size(); i++)
-    pvc_fw(X[i], basis.Uo[i], basis.Uc[i], Xo[i], Xc[i]);
-}
-
-void nbd::basisBk(Vectors& X, const Base& basis, const Vectors& Xo, const Vectors& Xc) {
-  for (int64_t i = 0; i < X.size(); i++)
-    pvc_bk(Xo[i], Xc[i], basis.Uo[i], basis.Uc[i], X[i]);
 }
 
 void nbd::checkBasis(int64_t my_rank, const Base& basis) {

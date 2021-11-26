@@ -13,14 +13,7 @@ namespace nbd {
     Matrices S;
   };
 
-  struct RHS {
-    Vectors X;
-    Vectors X_c;
-    Vectors X_o;
-  };
-
   typedef std::vector<Node> Nodes;
-  typedef std::vector<RHS> RHSS;
 
   void splitA(Matrices& A_out, const GlobalIndex& gi, const Matrices& A, const Matrices& U, const Matrices& V);
 
@@ -43,11 +36,5 @@ namespace nbd {
   void nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const Node& Aprev, const Base& bsprev, const GlobalIndex& Gprev);
 
   void factorA(Nodes& A, Basis& B, const LocalDomain& domain, double repi, const double* R, int64_t lenR);
-
-  void svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi);
-
-  void svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const GlobalIndex& gi);
-
-  void svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const GlobalIndex& gi);
 
 };

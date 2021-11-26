@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
   std::srand(100);
   std::vector<double> R(1 << 18);
   for (int64_t i = 0; i < R.size(); i++)
-    R[i] = -1 + 2 * ((double)std::rand() / RAND_MAX);
+    R[i] = -1. + 2. * ((double)std::rand() / RAND_MAX);
 
   GlobalDomain domain;
   LocalDomain local;

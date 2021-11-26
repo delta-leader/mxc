@@ -79,7 +79,7 @@ void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
   int64_t rank;
   if (repi < 1.) {
     double sepi = S.X[0] * repi;
-    int64_t lim = (int64_t)std::floor(A.M * 0.95);
+    int64_t lim = (int64_t)(A.M - 1);
     rank = std::distance(S.X.data(), std::find_if(S.X.data() + 1, S.X.data() + lim, [sepi](double& s) { return s < sepi; }));
   }
   else
@@ -116,9 +116,11 @@ void nbd::msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C) {
 }
 
 void nbd::minvl(Matrix& A, Matrix& B) {
-  std::vector<int> ipiv(std::min(A.M, A.N));
-  LAPACKE_dgetrf(LAPACK_COL_MAJOR, A.M, A.N, A.A.data(), A.M, ipiv.data());
-  LAPACKE_dgetrs(LAPACK_COL_MAJOR, 'N', A.M, B.N, A.A.data(), A.M, ipiv.data(), B.A.data(), B.M);
+  Vector tau;
+  cVector(tau, std::min(A.M, A.N));
+  LAPACKE_dgeqrf(LAPACK_COL_MAJOR, A.M, A.N, A.A.data(), A.M, tau.X.data());
+  cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, A.M, A.N, 1., A.A.data(), A.M, B.A.data(), B.M);
+  LAPACKE_dormqr(LAPACK_COL_MAJOR, 'L', 'T', B.M, B.N, tau.N, A.A.data(), A.M, tau.X.data(), B.A.data(), B.M);
 }
 
 void nbd::chol_decomp(Matrix& A) {

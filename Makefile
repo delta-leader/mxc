@@ -3,8 +3,8 @@ CC	= g++ -O3 -I.
 MPI_CC	= mpicxx -O3 -I.
 LC	= -lm -llapacke -lblas
 
-all: main domain bodies linalg kernel basis umv dist
-	$(MPI_CC) main.o domain.o bodies.o linalg.o kernel.o basis.o umv.o dist.o $(LC)
+all: main domain bodies linalg kernel basis umv dist solver
+	$(MPI_CC) main.o domain.o bodies.o linalg.o kernel.o basis.o umv.o solver.o dist.o $(LC)
 
 domain: domain.cxx domain.hxx
 	$(CC) -c domain.cxx
@@ -23,6 +23,9 @@ basis: basis.cxx basis.hxx
 
 umv: umv.cxx umv.hxx
 	$(CC) -c umv.cxx
+
+solver: solver.cxx solver.hxx
+	$(CC) -c solver.cxx
 
 dist: dist.cxx dist.hxx
 	$(MPI_CC) -c dist.cxx
