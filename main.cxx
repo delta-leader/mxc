@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) start("program");
 
-  int64_t Nbody = 200;
+  int64_t Nbody = 40000;
   int64_t Ncrit = 100;
   int64_t theta = 1;
 

@@ -188,24 +188,24 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
       lookupIJ(i10, rels_low, ci1, cj0);
       lookupIJ(i11, rels_low, ci1, cj1);
 
-      if (i00 > 0) {
+      if (i00 >= 0) {
         const Matrix& m00 = Mlow[i00];
         cpyMatToMat(m00.M, m00.N, m00, Mup[ij], 0, 0, 0, 0);
       }
 
-      if (i01 > 0) {
+      if (i01 >= 0) {
         const Matrix& m01 = Mlow[i01];
         int64_t nbegin = Mup[ij].N - m01.N;
         cpyMatToMat(m01.M, m01.N, m01, Mup[ij], 0, 0, 0, nbegin);
       }
 
-      if (i10 > 0) {
+      if (i10 >= 0) {
         const Matrix& m10 = Mlow[i10];
         int64_t mbegin = Mup[ij].M - m10.M;
         cpyMatToMat(m10.M, m10.N, m10, Mup[ij], 0, 0, mbegin, 0);
       }
 
-      if (i11 > 0) {
+      if (i11 >= 0) {
         const Matrix& m11 = Mlow[i11];
         int64_t mbegin = Mup[ij].M - m11.M;
         int64_t nbegin = Mup[ij].N - m11.N;
@@ -217,6 +217,7 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
   if (rels_low.N == rels_up.N)
     butterflySum(Mup, Gprev);
 }
+
 
 void nbd::factorA(Nodes& A, Basis& B, const LocalDomain& domain, double repi, const double* R, int64_t lenR) {
   for (int64_t i = domain.size() - 1; i > 0; i--) {
@@ -230,6 +231,5 @@ void nbd::factorA(Nodes& A, Basis& B, const LocalDomain& domain, double repi, co
     Base& Bn = B[i - 1];
     nextNode(An, Bn, gn, Ai, Bi, gi);
   }
-
   chol_decomp(A[0].A[0]);
 }

@@ -181,8 +181,10 @@ Vector* nbd::randomVectors(Vectors& B, const GlobalIndex& gi, const LocalBodies&
 void nbd::blockAxEb(Vector* B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies) {
   int64_t lbegin = gi.SELF_I * gi.BOXES;
   int64_t dim = bodies.DIM;
-  for (int64_t i = 0; i < gi.BOXES; i++)
+  for (int64_t i = 0; i < gi.BOXES; i++) {
     cVector(B[i], bodies.LENS[i + lbegin]);
+    zeroVector(B[i]);
+  }
   
   const CSC& rels = gi.RELS;
   for (int64_t j = 0; j < rels.N; j++) {

@@ -40,6 +40,8 @@ namespace nbd {
 
   void zeroMatrix(Matrix& A);
 
+  void zeroVector(Vector& A);
+
   void mmult(char ta, char tb, const Matrix& A, const Matrix& B, Matrix& C, double alpha, double beta);
 
   void msample(char ta, int64_t lenR, const Matrix& A, const double* R, Matrix& C);

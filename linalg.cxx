@@ -92,6 +92,10 @@ void nbd::zeroMatrix(Matrix& A) {
   std::fill(A.A.data(), A.A.data() + A.M * A.N, 0.);
 }
 
+void nbd::zeroVector(Vector& A) {
+  std::fill(A.X.data(), A.X.data() + A.N, 0.);
+}
+
 void nbd::mmult(char ta, char tb, const Matrix& A, const Matrix& B, Matrix& C, double alpha, double beta) {
   int64_t k = (ta == 'N' || ta == 'n') ? A.N : A.M;
   auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
@@ -170,8 +174,6 @@ void nbd::mvec(char ta, const Matrix& A, const Vector& X, Vector& B, double alph
 }
 
 void nbd::pvc_fw(const Vector& X, const Matrix& Us, const Matrix& Uc, Vector& Xs, Vector& Xc) {
-  cVector(Xc, Uc.N);
-  cVector(Xs, Us.N);
   mvec('T', Uc, X, Xc, 1., 0.);
   mvec('T', Us, X, Xs, 1., 0.);
 }

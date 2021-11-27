@@ -39,7 +39,7 @@ void nbd::eval(EvalFunc ef, const double* bi, const double* bj, int64_t dim, dou
 
 void nbd::mvec_kernel(EvalFunc ef, int64_t m, int64_t n, const double* bi, const double* bj, int64_t dim, const double* X, double* B) {
   for (int64_t y = 0; y < m; y++) {
-    double sum = 0.;
+    double sum = B[y];
     for (int64_t x = 0; x < n; x++) {
       double r2;
       eval(ef, bi + y * dim, bj + x * dim, dim, &r2);
