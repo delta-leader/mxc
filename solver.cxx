@@ -26,8 +26,7 @@ void nbd::svAccFw(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
   int64_t lbegin = gi.GBEGIN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
-  DistributeVectorsList(Xc, gi);
-  recvSubstituted('F', Xc, gi);
+  recvFwSubstituted(Xc, gi);
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
@@ -46,14 +45,14 @@ void nbd::svAccFw(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
     }
   }
 
-  sendSubstituted('F', Xc, gi);
+  sendFwSubstituted(Xc, gi);
 }
 
 void nbd::svAccBk(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
   int64_t lbegin = gi.GBEGIN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
-  recvSubstituted('B', Xc, gi);
+  recvBkSubstituted(Xc, gi);
 
   for (int64_t i = rels.N - 1; i >= 0; i--) {
     for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
@@ -72,7 +71,7 @@ void nbd::svAccBk(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
     bk_solve(xlocal[i], A_ii);
   }
   
-  sendSubstituted('B', Xc, gi);
+  sendBkSubstituted(Xc, gi);
 }
 
 void nbd::svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const GlobalIndex& gi) {

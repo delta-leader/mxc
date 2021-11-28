@@ -399,11 +399,55 @@ void nbd::butterflySumA(Matrices& A, const GlobalIndex& gi) {
   free(RM_DATA);
 }
 
-void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
+void nbd::sendFwSubstituted(const Vectors& X, const GlobalIndex& gi) {
+  int64_t my_ind = gi.SELF_I;
+  int64_t my_rank = gi.COMM_RNKS[my_ind];
+  int64_t nboxes = gi.BOXES;
+  const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
+
+  std::vector<MPI_Request> requests(neighbors.size());
+  std::vector<double*> DATA(neighbors.size());
+  std::vector<int64_t> LENS(neighbors.size());
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank > my_rank) {
+      int64_t len_i = 0;
+      int64_t ibegin = i * nboxes;
+      int64_t iend = ibegin + nboxes;
+      for (int64_t n = ibegin; n < iend; n++)
+        len_i = len_i + X[n].N;
+      
+      LENS[i] = len_i;
+      DATA[i] = (double*)malloc(sizeof(double) * len_i);
+
+      len_i = 0;
+      for (int64_t n = ibegin; n < iend; n++) {
+        cpyFromVector(X[n], DATA[i] + len_i);
+        len_i = len_i + X[n].N;
+      }
+      MPI_Isend(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
+    }
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank > my_rank)
+      MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank > my_rank)
+      free(DATA[i]);
+  }
+}
+
+void nbd::sendBkSubstituted(const Vectors& X, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];
   int64_t LEN = 0;
-  std::vector<int64_t> neighbors;
+  const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
 
   int64_t lbegin = my_ind * gi.BOXES;
   int64_t lend = lbegin + gi.BOXES;
@@ -416,26 +460,44 @@ void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
     cpyFromVector(X[i], DATA + LEN);
     LEN = LEN + X[i].N;
   }
-
-  neighbors.reserve(gi.COMM_RNKS.size());
-  if (fwbk == 'F' || fwbk == 'f')
-    for (int64_t i = 0; i < gi.COMM_RNKS.size(); i++)
-      if (gi.COMM_RNKS[i] > my_rank)
-        neighbors.emplace_back(gi.COMM_RNKS[i]);
-  if (fwbk == 'B' || fwbk == 'b')
-    for (int64_t i = 0; i < gi.COMM_RNKS.size(); i++)
-      if (gi.COMM_RNKS[i] < my_rank)
-        neighbors.emplace_back(gi.COMM_RNKS[i]);
   
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
-    MPI_Send(DATA, LEN, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD);
+    if (rm_rank < my_rank)
+      MPI_Send(DATA, LEN, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD);
   }
 
   free(DATA);
 }
 
-void nbd::recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi) {
+void nbd::recvFwSubstituted(Vectors& X, const GlobalIndex& gi) {
+  int64_t my_ind = gi.SELF_I;
+  int64_t my_rank = gi.COMM_RNKS[my_ind];
+  int64_t LEN = 0;
+  const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
+
+  int64_t lbegin = my_ind * gi.BOXES;
+  int64_t lend = lbegin + gi.BOXES;
+  for (int64_t i = lbegin; i < lend; i++)
+    LEN = LEN + X[i].N;
+  double* DATA = (double*)malloc(sizeof(double) * LEN);
+  
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank < my_rank) {
+      MPI_Recv(DATA, LEN, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      int64_t offset = 0;
+      for (int64_t i = lbegin; i < lend; i++) {
+        vaxpby(X[i], DATA + offset, 1., 1.);
+        offset = offset + X[i].N;
+      }
+    }
+  }
+
+  free(DATA);
+}
+
+void nbd::recvBkSubstituted(Vectors& X, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];
   int64_t nboxes = gi.BOXES;
@@ -445,15 +507,9 @@ void nbd::recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi) {
   std::vector<double*> DATA(neighbors.size());
   std::vector<int64_t> LENS(neighbors.size());
 
-  bool front = (fwbk == 'F' || fwbk == 'f');
-  bool back = (fwbk == 'B' || fwbk == 'b');
-  auto flag = [front, back, my_rank] (int64_t rm_rank) -> bool {
-    return (front && (rm_rank < my_rank)) || (back && (rm_rank > my_rank));
-  };
-
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
-    if (flag(rm_rank)) {
+    if (rm_rank > my_rank) {
       int64_t len_i = 0;
       int64_t ibegin = i * nboxes;
       int64_t iend = ibegin + nboxes;
@@ -468,13 +524,13 @@ void nbd::recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi) {
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
-    if (flag(rm_rank))
+    if (rm_rank > my_rank)
       MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
   }
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
-    if (flag(rm_rank)) {
+    if (rm_rank > my_rank) {
       int64_t len_i = 0;
       int64_t ibegin = i * nboxes;
       int64_t iend = ibegin + nboxes;
