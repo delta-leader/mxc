@@ -518,8 +518,13 @@ void nbd::recvBkSubstituted(Vectors& X, const GlobalIndex& gi) {
       
       LENS[i] = len_i;
       DATA[i] = (double*)malloc(sizeof(double) * len_i);
-      MPI_Irecv(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
     }
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank > my_rank)
+      MPI_Irecv(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
   }
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
@@ -535,7 +540,7 @@ void nbd::recvBkSubstituted(Vectors& X, const GlobalIndex& gi) {
       int64_t ibegin = i * nboxes;
       int64_t iend = ibegin + nboxes;
       for (int64_t n = ibegin; n < iend; n++) {
-        vaxpby(X[n], DATA[i], 1., 0.);
+        vaxpby(X[n], DATA[i] + len_i, 1., 0.);
         len_i = len_i + X[n].N;
       }
       free(DATA[i]);
