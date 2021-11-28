@@ -399,7 +399,6 @@ void nbd::butterflySumA(Matrices& A, const GlobalIndex& gi) {
   free(RM_DATA);
 }
 
-
 void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];
@@ -436,91 +435,54 @@ void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
   free(DATA);
 }
 
-void constructCOMM_SUBST(double** DATA, int64_t* LEN, int64_t RM_BOX, const Vectors& X, const GlobalIndex& gi) {
-  int64_t nboxes = gi.BOXES;
-  int64_t lbegin = RM_BOX * nboxes;
-  int64_t lend = lbegin + nboxes;
-
-  int64_t len = 0;
-  for (int64_t i = lbegin; i < lend; i++)
-    len = len + X[i].N;
-
-  double* data = (double*)malloc(sizeof(double) * len);
-  len = 0;
-  for (int64_t i = lbegin; i < lend; i++) {
-    cpyFromVector(X[i], data + len);
-    len = len + X[i].N;
-  }
-  
-  *LEN = len;
-  *DATA = data;
-}
-
-void substRemoteV(int64_t RM_BOX, Vectors& X, const GlobalIndex& gi, const double* rmv) {
-  int64_t nboxes = gi.BOXES;
-  int64_t lbegin = RM_BOX * nboxes;
-  int64_t lend = lbegin + nboxes;
-
-  int64_t len = 0;
-  for (int64_t i = lbegin; i < lend; i++) {
-    vaxpby(X[i], rmv + len, 1., 0.);
-    len = len + X[i].N;
-  }
-}
-
 void nbd::recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];
+  int64_t nboxes = gi.BOXES;
   const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
 
   std::vector<MPI_Request> requests(neighbors.size());
   std::vector<double*> DATA(neighbors.size());
   std::vector<int64_t> LENS(neighbors.size());
 
-  if (fwbk == 'F' || fwbk == 'f') {
-    for (int64_t i = 0; i < neighbors.size(); i++) {
-      int64_t rm_rank = neighbors[i];
-      if (rm_rank > my_rank) {
-        constructCOMM_SUBST(&DATA[i], &LENS[i], gi.NGB_RNKS[i], X, gi);
-        MPI_Irecv(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
-      }
-    }
+  bool front = (fwbk == 'F' || fwbk == 'f');
+  bool back = (fwbk == 'B' || fwbk == 'b');
+  auto flag = [front, back, my_rank] (int64_t rm_rank) -> bool {
+    return (front && (rm_rank < my_rank)) || (back && (rm_rank > my_rank));
+  };
 
-    for (int64_t i = 0; i < neighbors.size(); i++) {
-      int64_t rm_rank = neighbors[i];
-      if (rm_rank > my_rank)
-        MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
-    }
-
-    for (int64_t i = 0; i < neighbors.size(); i++) {
-      int64_t rm_rank = neighbors[i];
-      if (rm_rank > my_rank) {
-        substRemoteV(gi.NGB_RNKS[i], X, gi, DATA[i]);
-        free(DATA[i]);
-      }
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (flag(rm_rank)) {
+      int64_t len_i = 0;
+      int64_t ibegin = i * nboxes;
+      int64_t iend = ibegin + nboxes;
+      for (int64_t n = ibegin; n < iend; n++)
+        len_i = len_i + X[n].N;
+      
+      LENS[i] = len_i;
+      DATA[i] = (double*)malloc(sizeof(double) * len_i);
+      MPI_Irecv(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
     }
   }
-  else if (fwbk == 'B' || fwbk == 'b') {
-    for (int64_t i = 0; i < neighbors.size(); i++) {
-      int64_t rm_rank = neighbors[i];
-      if (rm_rank < my_rank) {
-        constructCOMM_SUBST(&DATA[i], &LENS[i], gi.NGB_RNKS[i], X, gi);
-        MPI_Irecv(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
-      }
-    }
 
-    for (int64_t i = 0; i < neighbors.size(); i++) {
-      int64_t rm_rank = neighbors[i];
-      if (rm_rank < my_rank)
-        MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
-    }
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (flag(rm_rank))
+      MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
+  }
 
-    for (int64_t i = 0; i < neighbors.size(); i++) {
-      int64_t rm_rank = neighbors[i];
-      if (rm_rank < my_rank) {
-        substRemoteV(gi.NGB_RNKS[i], X, gi, DATA[i]);
-        free(DATA[i]);
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (flag(rm_rank)) {
+      int64_t len_i = 0;
+      int64_t ibegin = i * nboxes;
+      int64_t iend = ibegin + nboxes;
+      for (int64_t n = ibegin; n < iend; n++) {
+        vaxpby(X[n], DATA[i], 1., 0.);
+        len_i = len_i + X[n].N;
       }
+      free(DATA[i]);
     }
   }
 }
@@ -528,6 +490,7 @@ void nbd::recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi) {
 void nbd::distributeSubstituted(Vectors& X, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];
+  int64_t nboxes = gi.BOXES;
   const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
   std::vector<MPI_Request> requests(neighbors.size());
 
@@ -536,16 +499,29 @@ void nbd::distributeSubstituted(Vectors& X, const GlobalIndex& gi) {
   std::vector<double*> RM_DATA(neighbors.size());
 
   int64_t LEN = 0;
-  int64_t lbegin = my_ind * gi.BOXES;
-  int64_t lend = lbegin + gi.BOXES;
+  int64_t lbegin = my_ind * nboxes;
+  int64_t lend = lbegin + nboxes;
   for (int64_t i = lbegin; i < lend; i++)
     LEN = LEN + X[i].N;
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
     if (rm_rank != my_rank) {
-      constructCOMM_SUBST(&SRC_DATA[i], &LENS[i], gi.NGB_RNKS[i], X, gi);
+      int64_t len_i = 0;
+      int64_t ibegin = i * nboxes;
+      int64_t iend = ibegin + nboxes;
+      for (int64_t n = ibegin; n < iend; n++)
+        len_i = len_i + X[n].N;
+      
+      LENS[i] = len_i;
+      SRC_DATA[i] = (double*)malloc(sizeof(double) * len_i);
       RM_DATA[i] = (double*)malloc(sizeof(double) * LEN);
+
+      len_i = 0;
+      for (int64_t n = ibegin; n < iend; n++) {
+        cpyFromVector(X[n], SRC_DATA[i] + len_i);
+        len_i = len_i + X[n].N;
+      }
     }
   }
 
@@ -574,8 +550,14 @@ void nbd::distributeSubstituted(Vectors& X, const GlobalIndex& gi) {
 
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
-    if (rm_rank != my_rank)
-      substRemoteV(gi.NGB_RNKS[i], X, gi, RM_DATA[i]);
+    if (rm_rank != my_rank) {
+      int64_t offset = 0;
+      const double* data = RM_DATA[i];
+      for (int64_t n = lbegin; n < lend; n++) {
+        vaxpby(X[n], data + offset, 1., 1.);
+        offset = offset + X[n].N;
+      }
+    }
   }
 
   for (int64_t i = 0; i < neighbors.size(); i++) {

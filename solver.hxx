@@ -15,7 +15,9 @@ namespace nbd {
 
   void basisXoc(char fwbk, RHS& vx, const Base& basis, const GlobalIndex& gi);
 
-  void svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi);
+  void svAccFw(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi);
+
+  void svAccBk(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi);
 
   void svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const GlobalIndex& gi);
 

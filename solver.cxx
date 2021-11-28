@@ -22,48 +22,57 @@ void nbd::basisXoc(char fwbk, RHS& vx, const Base& basis, const GlobalIndex& gi)
 }
 
 
-void nbd::svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
+void nbd::svAccFw(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
   int64_t lbegin = gi.GBEGIN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
-  //recvSubstituted(fwbk, Xc, gi);
+  DistributeVectorsList(Xc, gi);
+  recvSubstituted('F', Xc, gi);
 
-  if (fwbk == 'F' || fwbk == 'f')
-    for (int64_t i = 0; i < rels.N; i++) {
-      int64_t ii;
-      lookupIJ(ii, rels, i + lbegin, i);
-      const Matrix& A_ii = A_cc[ii];
-      fw_solve(xlocal[i], A_ii);
+  for (int64_t i = 0; i < rels.N; i++) {
+    int64_t ii;
+    lookupIJ(ii, rels, i + lbegin, i);
+    const Matrix& A_ii = A_cc[ii];
+    fw_solve(xlocal[i], A_ii);
 
-      for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
-        int64_t y = rels.CSC_ROWS[yi];
-        const Matrix& A_yi = A_cc[yi];
-        if (y > i + lbegin) {
-          int64_t box_y;
-          Lookup_GlobalI(box_y, gi, y);
-          mvec('N', A_yi, xlocal[i], Xc[box_y], -1., 1.);
-        }
+    for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
+      int64_t y = rels.CSC_ROWS[yi];
+      const Matrix& A_yi = A_cc[yi];
+      if (y > i + lbegin) {
+        int64_t box_y;
+        Lookup_GlobalI(box_y, gi, y);
+        mvec('N', A_yi, xlocal[i], Xc[box_y], -1., 1.);
       }
     }
-  else if (fwbk == 'B' || fwbk == 'b')
-    for (int64_t i = rels.N - 1; i >= 0; i--) {
-      for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
-        int64_t y = rels.CSC_ROWS[yi];
-        const Matrix& A_yi = A_cc[yi];
-        if (y > i + lbegin) {
-          int64_t box_y;
-          Lookup_GlobalI(box_y, gi, y);
-          mvec('T', A_yi, Xc[box_y], xlocal[i], -1., 1.);
-        }
-      }
+  }
 
-      int64_t ii;
-      lookupIJ(ii, rels, i + lbegin, i);
-      const Matrix& A_ii = A_cc[ii];
-      bk_solve(xlocal[i], A_ii);
+  sendSubstituted('F', Xc, gi);
+}
+
+void nbd::svAccBk(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
+  const CSC& rels = gi.RELS;
+  int64_t lbegin = gi.GBEGIN;
+  Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
+  recvSubstituted('B', Xc, gi);
+
+  for (int64_t i = rels.N - 1; i >= 0; i--) {
+    for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
+      int64_t y = rels.CSC_ROWS[yi];
+      const Matrix& A_yi = A_cc[yi];
+      if (y > i + lbegin) {
+        int64_t box_y;
+        Lookup_GlobalI(box_y, gi, y);
+        mvec('T', A_yi, Xc[box_y], xlocal[i], -1., 1.);
+      }
     }
+
+    int64_t ii;
+    lookupIJ(ii, rels, i + lbegin, i);
+    const Matrix& A_ii = A_cc[ii];
+    bk_solve(xlocal[i], A_ii);
+  }
   
-  //sendSubstituted(fwbk, Xc, gi);
+  sendSubstituted('B', Xc, gi);
 }
 
 void nbd::svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const GlobalIndex& gi) {
@@ -78,7 +87,7 @@ void nbd::svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const Gl
       const Matrix& A_yx = A_oc[yx];
       mvec('N', A_yx, xlocal[x], Xo[box_y], -1., 1.);
     }
-  //distributeSubstituted(Xo, gi);
+  distributeSubstituted(Xo, gi);
 }
 
 void nbd::svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const GlobalIndex& gi) {
@@ -179,7 +188,7 @@ void nbd::solveA(RHSS& X, const Nodes& A, const Basis& B, const LocalDomain& dom
   int64_t lvl = domain.size();
   for (int64_t i = lvl - 1; i > 0; i--) {
     basisXoc('F', X[i], B[i], domain[i]);
-    svAcc('F', X[i].Xc, A[i].A_cc, domain[i]);
+    svAccFw(X[i].Xc, A[i].A_cc, domain[i]);
     svAocFw(X[i].Xo, X[i].Xc, A[i].A_oc, domain[i]);
     permuteAndMerge('F', X[i], domain[i], X[i - 1], domain[i - 1]);
   }
@@ -188,7 +197,7 @@ void nbd::solveA(RHSS& X, const Nodes& A, const Basis& B, const LocalDomain& dom
   for (int64_t i = 1; i < lvl; i++) {
     permuteAndMerge('B', X[i], domain[i], X[i - 1], domain[i - 1]);
     svAocBk(X[i].Xc, X[i].Xo, A[i].A_oc, domain[i]);
-    svAcc('B', X[i].Xc, A[i].A_cc, domain[i]);
+    svAccBk(X[i].Xc, A[i].A_cc, domain[i]);
     basisXoc('B', X[i], B[i], domain[i]);
   }
 }
