@@ -18,9 +18,9 @@ namespace nbd {
 
   void butterflySumA(Matrices& A, const GlobalIndex& gi);
 
-  void recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi);
-
   void sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi);
+
+  void recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi);
 
   void distributeSubstituted(Vectors& X, const GlobalIndex& gi);
 

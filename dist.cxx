@@ -400,7 +400,7 @@ void nbd::butterflySumA(Matrices& A, const GlobalIndex& gi) {
 }
 
 
-void nbd::recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi) {
+void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];
   int64_t LEN = 0;
@@ -410,34 +410,30 @@ void nbd::recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi) {
   int64_t lend = lbegin + gi.BOXES;
   for (int64_t i = lbegin; i < lend; i++)
     LEN = LEN + X[i].N;
+  double* DATA = (double*)malloc(sizeof(double) * LEN);
+
+  LEN = 0;
+  for (int64_t i = lbegin; i < lend; i++) {
+    cpyFromVector(X[i], DATA + LEN);
+    LEN = LEN + X[i].N;
+  }
 
   neighbors.reserve(gi.COMM_RNKS.size());
   if (fwbk == 'F' || fwbk == 'f')
     for (int64_t i = 0; i < gi.COMM_RNKS.size(); i++)
-      if (gi.COMM_RNKS[i] < my_rank)
+      if (gi.COMM_RNKS[i] > my_rank)
         neighbors.emplace_back(gi.COMM_RNKS[i]);
   if (fwbk == 'B' || fwbk == 'b')
     for (int64_t i = 0; i < gi.COMM_RNKS.size(); i++)
-      if (gi.COMM_RNKS[i] > my_rank)
+      if (gi.COMM_RNKS[i] < my_rank)
         neighbors.emplace_back(gi.COMM_RNKS[i]);
   
-  std::vector<double*> DATA(neighbors.size());
-
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
-    DATA[i] = (double*)malloc(sizeof(double) * LEN);
-    MPI_Recv(DATA[i], LEN, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Send(DATA, LEN, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD);
   }
 
-  int64_t offset = 0;
-  for (int64_t i = lbegin; i < lend; i++) {
-    for (int64_t n = 0; n < neighbors.size(); n++)
-      vaxpby(X[i], DATA[n] + offset, 1., 1.);
-    offset = offset + X[i].N;
-  }
-
-  for (int64_t i = 0; i < neighbors.size(); i++)
-    free(DATA[i]);
+  free(DATA);
 }
 
 void constructCOMM_SUBST(double** DATA, int64_t* LEN, int64_t RM_BOX, const Vectors& X, const GlobalIndex& gi) {
@@ -450,17 +446,29 @@ void constructCOMM_SUBST(double** DATA, int64_t* LEN, int64_t RM_BOX, const Vect
     len = len + X[i].N;
 
   double* data = (double*)malloc(sizeof(double) * len);
-  int64_t offset = 0;
+  len = 0;
   for (int64_t i = lbegin; i < lend; i++) {
-    cpyFromVector(X[i], data + offset);
-    offset = offset + X[i].N;
+    cpyFromVector(X[i], data + len);
+    len = len + X[i].N;
   }
-
+  
   *LEN = len;
   *DATA = data;
 }
 
-void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
+void substRemoteV(int64_t RM_BOX, Vectors& X, const GlobalIndex& gi, const double* rmv) {
+  int64_t nboxes = gi.BOXES;
+  int64_t lbegin = RM_BOX * nboxes;
+  int64_t lend = lbegin + nboxes;
+
+  int64_t len = 0;
+  for (int64_t i = lbegin; i < lend; i++) {
+    vaxpby(X[i], rmv + len, 1., 0.);
+    len = len + X[i].N;
+  }
+}
+
+void nbd::recvSubstituted(char fwbk, Vectors& X, const GlobalIndex& gi) {
   int64_t my_ind = gi.SELF_I;
   int64_t my_rank = gi.COMM_RNKS[my_ind];
   const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
@@ -474,7 +482,7 @@ void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
       int64_t rm_rank = neighbors[i];
       if (rm_rank > my_rank) {
         constructCOMM_SUBST(&DATA[i], &LENS[i], gi.NGB_RNKS[i], X, gi);
-        MPI_Isend(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
+        MPI_Irecv(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
       }
     }
 
@@ -486,8 +494,10 @@ void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
 
     for (int64_t i = 0; i < neighbors.size(); i++) {
       int64_t rm_rank = neighbors[i];
-      if (rm_rank > my_rank)
+      if (rm_rank > my_rank) {
+        substRemoteV(gi.NGB_RNKS[i], X, gi, DATA[i]);
         free(DATA[i]);
+      }
     }
   }
   else if (fwbk == 'B' || fwbk == 'b') {
@@ -495,7 +505,7 @@ void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
       int64_t rm_rank = neighbors[i];
       if (rm_rank < my_rank) {
         constructCOMM_SUBST(&DATA[i], &LENS[i], gi.NGB_RNKS[i], X, gi);
-        MPI_Isend(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
+        MPI_Irecv(DATA[i], LENS[i], MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
       }
     }
 
@@ -507,17 +517,74 @@ void nbd::sendSubstituted(char fwbk, const Vectors& X, const GlobalIndex& gi) {
 
     for (int64_t i = 0; i < neighbors.size(); i++) {
       int64_t rm_rank = neighbors[i];
-      if (rm_rank < my_rank)
+      if (rm_rank < my_rank) {
+        substRemoteV(gi.NGB_RNKS[i], X, gi, DATA[i]);
         free(DATA[i]);
+      }
     }
   }
 }
 
 void nbd::distributeSubstituted(Vectors& X, const GlobalIndex& gi) {
-  sendSubstituted('F', X, gi);
-  recvSubstituted('F', X, gi);
-  sendSubstituted('B', X, gi);
-  recvSubstituted('B', X, gi);
+  int64_t my_ind = gi.SELF_I;
+  int64_t my_rank = gi.COMM_RNKS[my_ind];
+  const std::vector<int64_t>& neighbors = gi.COMM_RNKS;
+  std::vector<MPI_Request> requests(neighbors.size());
+
+  std::vector<int64_t> LENS(neighbors.size());
+  std::vector<double*> SRC_DATA(neighbors.size());
+  std::vector<double*> RM_DATA(neighbors.size());
+
+  int64_t LEN = 0;
+  int64_t lbegin = my_ind * gi.BOXES;
+  int64_t lend = lbegin + gi.BOXES;
+  for (int64_t i = lbegin; i < lend; i++)
+    LEN = LEN + X[i].N;
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank) {
+      constructCOMM_SUBST(&SRC_DATA[i], &LENS[i], gi.NGB_RNKS[i], X, gi);
+      RM_DATA[i] = (double*)malloc(sizeof(double) * LEN);
+    }
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank) {
+      const double* my_data = SRC_DATA[i];
+      int64_t my_len = LENS[i];
+      MPI_Isend(my_data, my_len, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, &requests[i]);
+    }
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank) {
+      double* data = RM_DATA[i];
+      MPI_Recv(data, LEN, MPI_DOUBLE, rm_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank)
+      MPI_Wait(&requests[i], MPI_STATUS_IGNORE);
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank)
+      substRemoteV(gi.NGB_RNKS[i], X, gi, RM_DATA[i]);
+  }
+
+  for (int64_t i = 0; i < neighbors.size(); i++) {
+    int64_t rm_rank = neighbors[i];
+    if (rm_rank != my_rank) {
+      free(SRC_DATA[i]);
+      free(RM_DATA[i]);
+    }
+  }
 }
 
 void nbd::butterflySumX(Vectors& X, const GlobalIndex& gi) {

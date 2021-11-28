@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 
   Random_bodies(bodies, domain, *leaf, std::pow(999, mpi_rank));
 
-  checkBodies(mpi_rank, domain, *leaf, bodies);
+  //checkBodies(mpi_rank, domain, *leaf, bodies);
 
   EvalFunc ef = l2d();
 
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
   solveA(rhs, nodes, basis, local);
   double err;
   solveRelErr(&err, rhs.back(), X, *leaf);
-  printf("ERR: %e\n", err);
+  printf("%d ERR: %e\n", mpi_rank, err);
 
   MPI_Finalize();
   if (mpi_rank == 0) stop("program");

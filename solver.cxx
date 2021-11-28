@@ -26,7 +26,7 @@ void nbd::svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex&
   const CSC& rels = gi.RELS;
   int64_t lbegin = gi.GBEGIN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
-  recvSubstituted(fwbk, Xc, gi);
+  //recvSubstituted(fwbk, Xc, gi);
 
   if (fwbk == 'F' || fwbk == 'f')
     for (int64_t i = 0; i < rels.N; i++) {
@@ -63,12 +63,11 @@ void nbd::svAcc(char fwbk, Vectors& Xc, const Matrices& A_cc, const GlobalIndex&
       bk_solve(xlocal[i], A_ii);
     }
   
-  sendSubstituted(fwbk, Xc, gi);
+  //sendSubstituted(fwbk, Xc, gi);
 }
 
 void nbd::svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
   const Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
 
   for (int64_t x = 0; x < rels.N; x++)
@@ -79,12 +78,11 @@ void nbd::svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const Gl
       const Matrix& A_yx = A_oc[yx];
       mvec('N', A_yx, xlocal[x], Xo[box_y], -1., 1.);
     }
-  distributeSubstituted(Xo, gi);
+  //distributeSubstituted(Xo, gi);
 }
 
 void nbd::svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
 
   for (int64_t x = 0; x < rels.N; x++)
@@ -131,20 +129,23 @@ void nbd::permuteAndMerge(char fwbk, RHS& prev, const GlobalIndex& gprev, RHS& n
   int64_t pbegin = gprev.GBEGIN;
   int64_t nboxes = gnext.BOXES;
   int64_t pboxes = gprev.BOXES;
+  int64_t nloc = gnext.SELF_I * nboxes;
+  int64_t ploc = gprev.SELF_I * pboxes;
 
   if (fwbk == 'F' || fwbk == 'f') {
-    for (int64_t i = nbegin; i < nbegin + nboxes; i++) {
-      int64_t c0 = (i << 1) - pbegin;
-      int64_t c1 = (i << 1) + 1 - pbegin;
-      Vector& x0 = next.X[i];
+    for (int64_t i = 0; i < nboxes; i++) {
+      int64_t p = (i + nbegin) << 1;
+      int64_t c0 = p - pbegin;
+      int64_t c1 = p + 1 - pbegin;
+      Vector& x0 = next.X[i + nloc];
 
-      if (c0 >= 0 && c0 < pbegin + pboxes) {
-        const Vector& x1 = prev.Xo[c0];
+      if (c0 >= 0 && c0 < pboxes) {
+        const Vector& x1 = prev.Xo[c0 + ploc];
         cpyVecToVec(x1.N, x1, x0, 0, 0);
       }
 
-      if (c1 >= 0 && c1 < pbegin + pboxes) {
-        const Vector& x2 = prev.Xo[c1];
+      if (c1 >= 0 && c1 < pboxes) {
+        const Vector& x2 = prev.Xo[c1 + ploc];
         cpyVecToVec(x2.N, x2, x0, 0, x0.N - x2.N);
       }
     }
@@ -153,18 +154,19 @@ void nbd::permuteAndMerge(char fwbk, RHS& prev, const GlobalIndex& gprev, RHS& n
       butterflySumX(next.X, gprev);
   }
   else if (fwbk == 'B' || fwbk == 'b') {
-    for (int64_t i = nbegin; i < nbegin + nboxes; i++) {
-      int64_t c0 = (i << 1) - pbegin;
-      int64_t c1 = (i << 1) + 1 - pbegin;
-      const Vector& x0 = next.X[i];
+    for (int64_t i = 0; i < nboxes; i++) {
+      int64_t p = (i + nbegin) << 1;
+      int64_t c0 = p - pbegin;
+      int64_t c1 = p + 1 - pbegin;
+      const Vector& x0 = next.X[i + nloc];
 
-      if (c0 >= 0 && c0 < pbegin + pboxes) {
-        Vector& x1 = prev.Xo[c0];
+      if (c0 >= 0 && c0 < pboxes) {
+        Vector& x1 = prev.Xo[c0 + ploc];
         cpyVecToVec(x1.N, x0, x1, 0, 0);
       }
 
-      if (c1 >= 0 && c1 < pbegin + pboxes) {
-        Vector& x2 = prev.Xo[c1];
+      if (c1 >= 0 && c1 < pboxes) {
+        Vector& x2 = prev.Xo[c1 + ploc];
         cpyVecToVec(x2.N, x0, x2, x0.N - x2.N, 0);
       }
     }
