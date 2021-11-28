@@ -7,8 +7,8 @@ namespace nbd {
 
   struct RHS {
     Vectors X;
-    Vectors X_c;
-    Vectors X_o;
+    Vectors Xc;
+    Vectors Xo;
   };
 
   typedef std::vector<RHS> RHSS;
@@ -23,7 +23,7 @@ namespace nbd {
 
   Vector* allocRightHandSides(RHSS& rhs, const Basis& base, const LocalDomain& domain);
 
-  void permuteAndMerge(char fwbk, RHS& prev, RHS& next);
+  void permuteAndMerge(char fwbk, RHS& prev, const GlobalIndex& gprev, RHS& next, const GlobalIndex& gnext);
 
   void solveA(RHSS& X, const Nodes& A, const Basis& B, const LocalDomain& domain);
 

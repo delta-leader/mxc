@@ -215,7 +215,7 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
   }
   
   if (rels_low.N == rels_up.N)
-    butterflySum(Mup, Gprev);
+    butterflySumA(Mup, Gprev);
 }
 
 
