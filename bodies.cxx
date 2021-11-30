@@ -4,7 +4,6 @@
 
 #include <random>
 #include <algorithm>
-#include <cstdio>
 
 using namespace nbd;
 
@@ -204,41 +203,3 @@ void nbd::blockAxEb(Vector* B, EvalFunc ef, const Vectors& X, const GlobalIndex&
     }
   }
 }
-
-void nbd::checkBodies(int64_t my_rank, const GlobalDomain& goDomain, const GlobalIndex& gi, const LocalBodies& bodies) {
-  int64_t dim = bodies.DIM;
-  int64_t nboxes = gi.BOXES;
-  std::vector<int64_t> Xi(dim);
-  std::vector<int64_t> slices(dim);
-  slices_level(slices.data(), 0, goDomain.LEVELS, dim);
-  
-  std::vector<double> box_dim(dim);
-  for (int64_t d = 0; d < dim; d++)
-    box_dim[d] = (goDomain.Xmax[d] - goDomain.Xmin[d]) / slices[d];
-
-  for (int64_t i = 0; i < gi.NGB_RNKS.size(); i++) {
-    int64_t rm_rank = gi.NGB_RNKS[i];
-    int64_t lbegin = rm_rank * nboxes;
-    
-    for (int64_t b = i * nboxes; b < (i + 1) * nboxes; b++) {
-      int64_t offsetb = bodies.OFFSETS[b];
-      int64_t lenb = bodies.LENS[b];
-
-      for (int64_t n = offsetb; n < offsetb + lenb; n++) {
-        const double* p = &bodies.BODIES[n * dim];
-        int64_t ind;
-        for (int64_t d = 0; d < dim; d++)
-          Xi[d] = (int64_t)std::floor((p[d] - goDomain.Xmin[d]) / box_dim[d]);
-        Z_index_i(Xi.data(), dim, ind);
-        int64_t cmp = lbegin + b - i * nboxes;
-        if (ind != cmp) {
-          printf("%ld: FAIL at %ld: %ld -> %ld\n", my_rank, b, ind, cmp);
-          return;
-        }
-      }
-    }
-  }
-
-  printf("%ld: PASS\n", my_rank);
-}
-

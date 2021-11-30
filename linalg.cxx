@@ -6,7 +6,7 @@
 #include "lapacke.h"
 
 #include <algorithm>
-#include <cstdio>
+#include <iostream>
 #include <cstdlib>
 
 using namespace nbd;
@@ -74,7 +74,7 @@ void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
 
   int info = LAPACKE_dgesvd(LAPACK_COL_MAJOR, 'O', 'N', A.M, A.N, A.A.data(), A.M, S.X.data(), nullptr, A.M, nullptr, A.N, superb.X.data());
   if (info)
-    fprintf(stderr, "SVD FAIL: %d on %ld %ld %e\n", info, A.M, A.N, cblas_dnrm2(A.M * A.N, A.A.data(), 1));
+    std::cerr << "SVD FAIL: " << info << "." << std::endl;
 
   int64_t rank;
   if (repi < 1.) {
@@ -103,29 +103,48 @@ void nbd::mmult(char ta, char tb, const Matrix& A, const Matrix& B, Matrix& C, d
   cblas_dgemm(CblasColMajor, tac, tbc, C.M, C.N, k, alpha, A.A.data(), A.M, B.A.data(), B.M, beta, C.A.data(), C.M);
 }
 
-
 void nbd::msample(char ta, int64_t lenR, const Matrix& A, const double* R, Matrix& C) {
-  int64_t k = (ta == 'N' || ta == 'n') ? A.N : A.M;
-  auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
-  if (lenR >= C.N * k)
-    cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, C.N, k, 1., A.A.data(), A.M, R, k, 1., C.A.data(), C.M);
-  else
-    fprintf(stderr, "Insufficent random vector: %ld needed %ld provided\n", k * C.N, lenR);
+  if (lenR < C.N * 100) { 
+    std::cerr << "Insufficent random vector: " << C.N << " x 100 needed " << lenR << " provided." << std::endl;
+    return;
+  }
+  bool noTransA = (ta == 'N' || ta == 'n');
+  int64_t k = A.M;
+  int64_t inca = 1;
+  auto tac = CblasTrans;
+  if (noTransA) {
+    k = A.N;
+    tac = CblasNoTrans;
+    inca = A.M;
+  }
+
+  int64_t rk = lenR / C.N;
+  int64_t lk = k % rk;
+  if (lk > 0)
+    cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, C.N, lk, 1., A.A.data(), A.M, R, lk, 1., C.A.data(), C.M);
+  if (k > rk)
+    for (int64_t i = lk; i < k; i += rk)
+      cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, C.N, rk, 1., &A.A[i * inca], A.M, R, rk, 1., C.A.data(), C.M);
 }
 
 void nbd::msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C) {
-  int64_t k = (ta == 'N' || ta == 'n') ? A.N : A.M;
+  bool noTransA = (ta == 'N' || ta == 'n');
+  int64_t k = A.M;
+  auto tac = CblasTrans;
+  if (noTransA) {
+    k = A.N;
+    tac = CblasNoTrans;
+  }
   int64_t nrhs = std::min(B.N, C.N);
-  auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
   cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, nrhs, k, 1., A.A.data(), A.M, B.A.data(), B.M, 1., C.A.data(), C.M);
 }
 
-void nbd::minvl(Matrix& A, Matrix& B) {
-  Vector tau;
-  cVector(tau, std::min(A.M, A.N));
-  LAPACKE_dgeqrf(LAPACK_COL_MAJOR, A.M, A.N, A.A.data(), A.M, tau.X.data());
-  cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, A.M, A.N, 1., A.A.data(), A.M, B.A.data(), B.M);
-  LAPACKE_dormqr(LAPACK_COL_MAJOR, 'L', 'T', B.M, B.N, tau.N, A.A.data(), A.M, tau.X.data(), B.A.data(), B.M);
+void nbd::minvl(const Matrix& A, Matrix& B) {
+  Matrix work;
+  cMatrix(work, A.M, A.N);
+  cpyMatToMat(A.M, A.N, A, work, 0, 0, 0, 0);
+  chol_decomp(work);
+  LAPACKE_dpotrs(LAPACK_COL_MAJOR, 'L', B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
 }
 
 void nbd::chol_decomp(Matrix& A) {
@@ -181,11 +200,6 @@ void nbd::pvc_fw(const Vector& X, const Matrix& Us, const Matrix& Uc, Vector& Xs
 void nbd::pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Matrix& Uc, Vector& X) {
   mvec('N', Uc, Xc, X, 1., 0.);
   mvec('N', Us, Xs, X, 1., 1.);
-}
-
-void nbd::mnrm2(const Matrix& A, double* nrm) {
-  int64_t size = A.M * A.N;
-  *nrm = cblas_dnrm2(size, A.A.data(), 1);
 }
 
 void nbd::vnrm2(const Vector& A, double* nrm) {

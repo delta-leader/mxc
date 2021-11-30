@@ -2,7 +2,6 @@
 #include "basis.hxx"
 #include "dist.hxx"
 
-#include <cstdio>
 using namespace nbd;
 
 void nbd::sampleC1(Matrices& C1, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR) {
@@ -23,11 +22,7 @@ void nbd::sampleC1(Matrices& C1, const GlobalIndex& gi, const Matrices& A, const
     int64_t jj;
     lookupIJ(jj, rels, lbegin + j, j);
     const Matrix& Ajj = A[jj];
-
-    Matrix work;
-    cMatrix(work, Ajj.M, Ajj.N);
-    cpyMatToMat(Ajj.M, Ajj.N, Ajj, work, 0, 0, 0, 0);
-    minvl(work, cj);
+    minvl(Ajj, cj);
   }
 }
 
@@ -139,37 +134,3 @@ void nbd::nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bspr
   DistributeDims(dims, gnext);
 }
 
-void nbd::checkBasis(int64_t my_rank, const Base& basis) {
-  int64_t tot_dim = 0;
-  int64_t tot_dimo = 0;
-  for (int64_t i = 0; i < basis.DIMS.size(); i++) {
-    int64_t dim = basis.DIMS[i];
-    int64_t dim_o = basis.DIMO[i];
-    int64_t dim_c = dim - dim_o;
-
-    tot_dim = tot_dim + dim;
-    tot_dimo = tot_dimo + dim_o;
-
-    Matrix oo, cc;
-    cMatrix(oo, dim_o, dim_o);
-    cMatrix(cc, dim_c, dim_c);
-    mmult('T', 'N', basis.Uo[i], basis.Uo[i], oo, 1., 0.);
-    mmult('T', 'N', basis.Uc[i], basis.Uc[i], cc, 1., 0.);
-
-    for (int64_t d = 0; d < dim_o; d++)
-      oo.A[d * (dim_o + 1)] = oo.A[d * (dim_o + 1)] - 1.;
-    for (int64_t d = 0; d < dim_c; d++)
-      cc.A[d * (dim_c + 1)] = cc.A[d * (dim_c + 1)] - 1.;
-    
-    double e1, e2;
-    mnrm2(oo, &e1);
-    mnrm2(cc, &e2);
-    if (e1 > 1.e-10 || e2 > 1.e-10) {
-      printf("%ld: FAIL at %ld: %e, %e\n", my_rank, i, e1, e2);
-      return;
-    }
-  }
-
-  double cmp_rate = 100 * (double)tot_dimo / tot_dim;
-  printf("%ld: PASS %.3f%%\n", my_rank, cmp_rate);
-}

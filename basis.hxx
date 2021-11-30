@@ -29,6 +29,4 @@ namespace nbd {
 
   void nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev, const GlobalIndex& gprev);
 
-  void checkBasis(int64_t my_rank, const Base& basis);
-
 };

@@ -32,7 +32,6 @@ namespace nbd {
 
   void blockAxEb(Vector* B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies);
 
-  void checkBodies(int64_t my_rank, const GlobalDomain& goDomain, const GlobalIndex& gi, const LocalBodies& bodies);
 
 };
 

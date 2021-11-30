@@ -56,6 +56,4 @@ namespace nbd {
 
   void Lookup_GlobalI(int64_t& ilocal, const GlobalIndex& gi, int64_t iglobal);
 
-  void printGlobalI(const GlobalIndex& gi);
-
 };

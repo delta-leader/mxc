@@ -48,7 +48,7 @@ namespace nbd {
 
   void msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C);
 
-  void minvl(Matrix& A, Matrix& B);
+  void minvl(const Matrix& A, Matrix& B);
 
   void chol_decomp(Matrix& A);
 
@@ -71,8 +71,6 @@ namespace nbd {
   void pvc_fw(const Vector& X, const Matrix& Us, const Matrix& Uc, Vector& Xs, Vector& Xc);
 
   void pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Matrix& Uc, Vector& X);
-
-  void mnrm2(const Matrix& A, double* nrm);
 
   void vnrm2(const Vector& A, double* nrm);
 

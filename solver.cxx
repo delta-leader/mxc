@@ -2,8 +2,6 @@
 #include "solver.hxx"
 #include "dist.hxx"
 
-#include <cstdio>
-
 using namespace nbd;
 
 void nbd::basisXoc(char fwbk, RHS& vx, const Base& basis, const GlobalIndex& gi) {

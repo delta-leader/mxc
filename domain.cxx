@@ -3,7 +3,6 @@
 
 #include <cmath>
 #include <algorithm>
-#include <cstdio>
 
 using namespace nbd;
 
@@ -203,14 +202,3 @@ void nbd::Lookup_GlobalI(int64_t& ilocal, const GlobalIndex& gi, int64_t iglobal
   ilocal = (box_ind < gi.NGB_RNKS.size()) ? (box_ind * nboxes + i_rank) : -1;
 }
 
-void nbd::printGlobalI(const GlobalIndex& gi) {
-  printf("-- Global Index --\n");
-  printf(" My rank is %ld, %ldth item in my list.\n", gi.NGB_RNKS[gi.SELF_I], gi.SELF_I);
-  printf(" My twin rank is %ld, %ldth item in my list.\n", gi.TWIN_I == -1 ? (int64_t)-1 : gi.NGB_RNKS[gi.TWIN_I], gi.TWIN_I);
-  printf(" Boxes starting from %ld to %ld\n", gi.GBEGIN, gi.GBEGIN + gi.BOXES);
-  printf(" I am holding m=%ld, n=%ld, nnz=%ld matrix.\n", gi.RELS.M, gi.RELS.N, gi.RELS.NNZ);
-  printf(" I am communicating with:\n");
-  for (int64_t i = 0; i < gi.NGB_RNKS.size(); i++)
-    printf(" Box rank %ld, process rank %ld\n", gi.NGB_RNKS[i], gi.COMM_RNKS[i]);
-  printf("------------------\n\n");
-}

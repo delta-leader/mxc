@@ -2,8 +2,6 @@
 #include "umv.hxx"
 #include "dist.hxx"
 
-#include <cstdio>
-
 using namespace nbd;
 
 void nbd::splitA(Matrices& A_out, const GlobalIndex& gi, const Matrices& A, const Matrices& U, const Matrices& V) {
