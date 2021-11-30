@@ -48,7 +48,12 @@ int main(int argc, char* argv[]) {
   Basis basis;
   allocBasis(basis, local, bodies.LENS.data());
 
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (mpi_rank == 0) start("factor");
   factorA(nodes, basis, local, 1.e-6, R.data(), R.size());
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (mpi_rank == 0) stop("factor");
 
   Vectors X;
   Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., std::pow(654, mpi_rank));
@@ -57,7 +62,12 @@ int main(int argc, char* argv[]) {
   Vector* B = allocRightHandSides(rhs, basis, local);
   blockAxEb(B, ef, X, *leaf, bodies);
 
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (mpi_rank == 0) start("solve");
   solveA(rhs, nodes, basis, local);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (mpi_rank == 0) stop("solve");
   double err;
   solveRelErr(&err, rhs.back(), X, *leaf);
   printf("%d ERR: %e\n", mpi_rank, err);
