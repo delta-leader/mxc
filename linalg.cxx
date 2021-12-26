@@ -11,6 +11,166 @@
 
 using namespace nbd;
 
+void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, double* u, int64_t ldu, double* vt, int64_t ldvt, int64_t* rank) {
+  double nrm = 0.;
+  double epi2 = epi * epi;
+
+  for (int64_t i = 0; i < k; i++) {
+    double amax = 0.;
+    int64_t ymax = 0;
+    for (int64_t x = 0; x < n; x++) {
+      int64_t ybegin = x * lda;
+      int64_t yend = m + x * lda;
+      for (int64_t y = ybegin; y < yend; y++) {
+        double fa = fabs(a[y]);
+        if (fa > amax) {
+          amax = fa;
+          ymax = y;
+        }
+      }
+    }
+
+    if (amax == 0.) {
+      *rank = i;
+      return;
+    }
+
+    int64_t xp = ymax / lda;
+    int64_t yp = ymax - xp * lda;
+    double ap = 1. / a[ymax];
+    double* ui = u + i * ldu;
+    double* vi = vt + i * ldvt;
+
+    for (int64_t x = 0; x < n; x++) {
+      double ax = a[yp + x * lda];
+      vi[x] = ax;
+      a[yp + x * lda] = 0.;
+    }
+
+    for (int64_t y = 0; y < m; y++) {
+      double ay = a[y + xp * lda];
+      ui[y] = ay * ap;
+      a[y + xp * lda] = 0.;
+    }
+    ui[yp] = 1.;
+
+    for (int64_t x = 0; x < n; x++) {
+      if (x == xp)
+        continue;
+      double ri = vi[x];
+      for (int64_t y = 0; y < m; y++) {
+        if (y == yp)
+          continue;
+        double lf = ui[y];
+        double e = a[y + x * lda];
+        e = e - lf * ri;
+        a[y + x * lda] = e;
+      }
+    }
+
+    if (epi2 > 0.) {
+      double nrm_v = 0.;
+      double nrm_vi = 0.;
+      for (int64_t x = 0; x < n; x++) {
+        double vx = vi[x];
+        nrm_vi = nrm_vi + vx * vx;
+        for (int64_t j = 0; j < i; j++) {
+          double vj = vt[x + j * ldvt];
+          nrm_v = nrm_v + vx * vj;
+        }
+      }
+
+      double nrm_u = 0.;
+      double nrm_ui = 0.;
+      for (int64_t y = 0; y < m; y++) {
+        double uy = ui[y];
+        nrm_ui = nrm_ui + uy * uy;
+        for (int64_t j = 0; j < i; j++) {
+          double uj = u[y + j * ldu];
+          nrm_u = nrm_u + uy * uj;
+        }
+      }
+
+      double n2 = nrm_ui * nrm_vi;
+      nrm = nrm + 2. * nrm_u * nrm_v + n2;
+      if (n2 <= epi2 * nrm) {
+        *rank = i + 1;
+        return;
+      }
+    }
+
+  }
+}
+
+void dorth(char ecoq, int64_t m, int64_t n, double* r, int64_t ldr, double* q, int64_t ldq) {
+  int64_t k = m < n ? m : n;
+  double* TAU = (double*)malloc(sizeof(double) * k);
+
+  for (int64_t x = 0; x < k; x++) {
+    double nrmx = 0.;
+    for (int64_t y = x; y < m; y++) {
+      double e = r[y + x * ldr];
+      nrmx = nrmx + e * e;
+    }
+    nrmx = sqrt(nrmx);
+
+    double rx = r[x + x * ldr];
+    double s = rx > 0 ? -1. : 1.;
+    double u1 = rx - s * nrmx;
+    double tau = -s * u1 / nrmx;
+    TAU[x] = tau;
+
+    double iu1 = 1. / u1;
+    for (int64_t y = x + 1; y < m; y++)
+      r[y + x * ldr] = r[y + x * ldr] * iu1;
+    r[x + x * ldr] = s * nrmx;
+
+    for (int64_t xx = x + 1; xx < n; xx++) {
+      double wdr = 0.;
+      for (int64_t y = x; y < m; y++) {
+        double e1 = y == x ? 1. : r[y + x * ldr];
+        double e2 = r[y + xx * ldr];
+        wdr = wdr + e1 * e2;
+      }
+
+      wdr = wdr * tau;
+      for (int64_t y = x; y < m; y++) {
+        double e1 = y == x ? 1. : r[y + x * ldr];
+        double e2 = r[y + xx * ldr];
+        r[y + xx * ldr] = e2 - e1 * wdr;
+      }
+    }
+  }
+
+  int64_t nq = (ecoq == 'F' || ecoq == 'f') ? m : k;
+
+  for (int64_t x = 0; x < nq; x++) {
+    for (int64_t y = 0; y < m; y++)
+      q[y + x * ldq] = 0.;
+    q[x + x * ldq] = 1.;
+  }
+
+  for (int64_t kk = k - 1; kk >= 0; kk--) {
+    for (int64_t x = 0; x < nq; x++) {
+      double wdq = 0.;
+      for (int64_t y = kk; y < m; y++) {
+        double e1 = y == kk ? 1. : r[y + kk * ldr];
+        double e2 = q[y + x * ldq];
+        wdq = wdq + e1 * e2;
+      }
+
+      wdq = wdq * TAU[kk];
+      for (int64_t y = kk; y < m; y++) {
+        double e1 = y == kk ? 1. : r[y + kk * ldr];
+        double e2 = q[y + x * ldq];
+        q[y + x * ldq] = e2 - e1 * wdq;
+      }
+    }
+  }
+
+  free(TAU);
+}
+
 void nbd::cMatrix(Matrix& mat, int64_t m, int64_t n) {
   mat.A.resize(m * n);
   mat.M = m;
@@ -68,7 +228,7 @@ void nbd::cpyVecToVec(int64_t n, const Vector& v1, Vector& v2, int64_t x1, int64
 }
 
 void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
-  Vector S, superb;
+  /*Vector S, superb;
   cVector(S, A.M);
   cVector(superb, A.M - 1);
 
@@ -85,7 +245,20 @@ void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
   }
   else
     rank = (int64_t)std::floor(repi);
-  *rnk_out = rank;
+  *rnk_out = rank;*/
+
+  bool prec = repi < 1.;
+  Matrix U, V;
+  int64_t rank = prec ? std::min(A.M, A.N) : (int64_t)std::floor(repi);
+  cMatrix(U, A.M, rank);
+  cMatrix(V, A.N, rank);
+
+  dlra(prec ? repi : 0., A.M, A.N, rank, A.A.data(), A.M, U.A.data(), A.M, V.A.data(), A.N, rnk_out);
+  rank = *rnk_out;
+
+  if (A.N < A.M)
+    cMatrix(A, A.M, A.M);
+  dorth('F', A.M, rank, U.A.data(), A.M, A.A.data(), A.M);
 }
 
 void nbd::zeroMatrix(Matrix& A) {
