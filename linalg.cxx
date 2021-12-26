@@ -94,12 +94,13 @@ void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, d
       double n2 = nrm_ui * nrm_vi;
       nrm = nrm + 2. * nrm_u * nrm_v + n2;
       if (n2 <= epi2 * nrm) {
-        *rank = i + 1;
+        *rank = i;
         return;
       }
     }
 
   }
+  *rank = k;
 }
 
 void dorth(char ecoq, int64_t m, int64_t n, double* r, int64_t ldr, double* q, int64_t ldq) {
@@ -171,6 +172,46 @@ void dorth(char ecoq, int64_t m, int64_t n, double* r, int64_t ldr, double* q, i
   free(TAU);
 }
 
+void dpotrf(int64_t n, double* a, int64_t lda) {
+  for (int64_t i = 0; i < n; i++) {
+    double p = a[i + i * lda];
+    if (p <= 0.)
+    { fprintf(stderr, "A is not positive-definite.\n"); return; }
+    p = sqrt(p);
+    a[i + i * lda] = p;
+    double invp = 1. / p;
+
+    for (int64_t j = i + 1; j < n; j++)
+      a[j + i * lda] = a[j + i * lda] * invp;
+    
+    for (int64_t k = i + 1; k < n; k++) {
+      double c = a[k + i * lda];
+      for (int64_t j = k + 1; j < n; j++) {
+        double r = a[j + i * lda];
+        a[j + k * lda] = a[j + k * lda] - r * c;
+      }
+    }
+  }
+}
+
+void dtrsmlt_right(int64_t m, int64_t n, const double* a, int64_t lda, double* b, int64_t ldb) {
+  for (int64_t i = 0; i < n; i++) {
+    double p = a[i + i * lda];
+    double invp = 1. / p;
+
+    for (int64_t j = 0; j < m; j++)
+      b[j + i * ldb] = b[j + i * ldb] * invp;
+    
+    for (int64_t k = i + 1; k < n; k++) {
+      double c = a[k + i * lda];
+      for (int64_t j = 0; j < m; j++) {
+        double r = b[j + i * ldb];
+        b[j + k * ldb] = b[j + k * ldb] - r * c;
+      }
+    }
+  }
+}
+
 void nbd::cMatrix(Matrix& mat, int64_t m, int64_t n) {
   mat.A.resize(m * n);
   mat.M = m;
@@ -228,25 +269,6 @@ void nbd::cpyVecToVec(int64_t n, const Vector& v1, Vector& v2, int64_t x1, int64
 }
 
 void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
-  /*Vector S, superb;
-  cVector(S, A.M);
-  cVector(superb, A.M - 1);
-
-  int info = LAPACKE_dgesvd(LAPACK_COL_MAJOR, 'O', 'N', A.M, A.N, A.A.data(), A.M, S.X.data(), nullptr, A.M, nullptr, A.N, superb.X.data());
-  if (info)
-    std::cerr << "SVD FAIL: " << info << "." << std::endl;
-
-  int64_t rank;
-  if (repi < 1.) {
-    double sepi = S.X[0] * repi;
-    sepi = std::max(sepi, repi);
-    int64_t lim = (int64_t)(A.M - 1);
-    rank = std::distance(S.X.data(), std::find_if(S.X.data() + 1, S.X.data() + lim, [sepi](double& s) { return s < sepi; }));
-  }
-  else
-    rank = (int64_t)std::floor(repi);
-  *rnk_out = rank;*/
-
   bool prec = repi < 1.;
   Matrix U, V;
   int64_t rank = prec ? std::min(A.M, A.N) : (int64_t)std::floor(repi);
@@ -321,11 +343,13 @@ void nbd::minvl(const Matrix& A, Matrix& B) {
 }
 
 void nbd::chol_decomp(Matrix& A) {
-  LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A.M, A.A.data(), A.M);
+  //LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A.M, A.A.data(), A.M);
+  dpotrf(A.M, A.A.data(), A.M);
 }
 
 void nbd::trsm_lowerA(Matrix& A, const Matrix& L) {
-  cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, A.M, A.N, 1., L.A.data(), L.M, A.A.data(), A.M);
+  //cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, A.M, A.N, 1., L.A.data(), L.M, A.A.data(), A.M);
+  dtrsmlt_right(A.M, A.N, L.A.data(), L.M, A.A.data(), A.M);
 }
 
 void nbd::utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
