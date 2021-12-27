@@ -186,6 +186,7 @@ void dpotrf(int64_t n, double* a, int64_t lda) {
     
     for (int64_t k = i + 1; k < n; k++) {
       double c = a[k + i * lda];
+      a[k + k * lda] = a[k + k * lda] - c * c;
       for (int64_t j = k + 1; j < n; j++) {
         double r = a[j + i * lda];
         a[j + k * lda] = a[j + k * lda] - r * c;
@@ -207,6 +208,42 @@ void dtrsmlt_right(int64_t m, int64_t n, const double* a, int64_t lda, double* b
       for (int64_t j = 0; j < m; j++) {
         double r = b[j + i * ldb];
         b[j + k * ldb] = b[j + k * ldb] - r * c;
+      }
+    }
+  }
+}
+
+void dtrsml_left(int64_t m, int64_t n, const double* a, int64_t lda, double* b, int64_t ldb) {
+  for (int64_t i = 0; i < m; i++) {
+    double p = a[i + i * lda];
+    double invp = 1. / p;
+
+    for (int64_t j = 0; j < n; j++)
+      b[i + j * ldb] = b[i + j * ldb] * invp;
+    
+    for (int64_t k = i + 1; k < m; k++) {
+      double r = a[k + i * lda];
+      for (int64_t j = 0; j < n; j++) {
+        double c = b[i + j * ldb];
+        b[k + j * ldb] = b[k + j * ldb] - r * c;
+      }
+    }
+  }
+}
+
+void dtrsmlt_left(int64_t m, int64_t n, const double* a, int64_t lda, double* b, int64_t ldb) {
+  for (int64_t i = m - 1; i >= 0; i--) {
+    double p = a[i + i * lda];
+    double invp = 1. / p;
+
+    for (int64_t j = 0; j < n; j++)
+      b[i + j * ldb] = b[i + j * ldb] * invp;
+    
+    for (int64_t k = 0; k < i; k++) {
+      double r = a[i + k * lda];
+      for (int64_t j = 0; j < n; j++) {
+        double c = b[i + j * ldb];
+        b[k + j * ldb] = b[k + j * ldb] - r * c;
       }
     }
   }
@@ -339,16 +376,16 @@ void nbd::minvl(const Matrix& A, Matrix& B) {
   cMatrix(work, A.M, A.N);
   cpyMatToMat(A.M, A.N, A, work, 0, 0, 0, 0);
   chol_decomp(work);
-  LAPACKE_dpotrs(LAPACK_COL_MAJOR, 'L', B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
+  //LAPACKE_dpotrs(LAPACK_COL_MAJOR, 'L', B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
+  dtrsml_left(B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
+  dtrsmlt_left(B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
 }
 
 void nbd::chol_decomp(Matrix& A) {
-  //LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A.M, A.A.data(), A.M);
   dpotrf(A.M, A.A.data(), A.M);
 }
 
 void nbd::trsm_lowerA(Matrix& A, const Matrix& L) {
-  //cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, A.M, A.N, 1., L.A.data(), L.M, A.A.data(), A.M);
   dtrsmlt_right(A.M, A.N, L.A.data(), L.M, A.A.data(), A.M);
 }
 
@@ -377,11 +414,13 @@ void nbd::chol_solve(Vector& X, const Matrix& A) {
 }
 
 void nbd::fw_solve(Vector& X, const Matrix& L) {
-  cblas_dtrsv(CblasColMajor, CblasLower, CblasNoTrans, CblasNonUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
+  //cblas_dtrsv(CblasColMajor, CblasLower, CblasNoTrans, CblasNonUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
+  dtrsml_left(X.N, 1, L.A.data(), L.M, X.X.data(), X.N);
 }
 
 void nbd::bk_solve(Vector& X, const Matrix& L) {
-  cblas_dtrsv(CblasColMajor, CblasLower, CblasTrans, CblasNonUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
+  //cblas_dtrsv(CblasColMajor, CblasLower, CblasTrans, CblasNonUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
+  dtrsmlt_left(X.N, 1, L.A.data(), L.M, X.X.data(), X.N);
 }
 
 void nbd::mvec(char ta, const Matrix& A, const Vector& X, Vector& B, double alpha, double beta) {
