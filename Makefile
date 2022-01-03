@@ -1,7 +1,7 @@
 
 CC	= g++ -std=c++11 -O3 -I.
 MPI_CC	= mpicxx -O3 -I.
-LC	= -lm -llapacke -lblas
+LC	= -lm
 
 #CC	= icpc -std=c++11 -O3 -I.
 #MPI_CC	= mpiicpc -O3 -I.

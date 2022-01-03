@@ -2,8 +2,7 @@
 
 #include "linalg.hxx"
 
-#include "cblas.h"
-
+#include <cmath>
 #include <algorithm>
 #include <iostream>
 #include <cstdlib>
@@ -252,8 +251,50 @@ void dtrsmlt_left(int64_t m, int64_t n, const double* a, int64_t lda, double* b,
 }
 
 void dgemv(char ta, int64_t m, int64_t n, double alpha, const double* a, int64_t lda, const double* x, int64_t incx, double beta, double* y, int64_t incy) {
-  auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
-  cblas_dgemv(CblasColMajor, tac, m, n, alpha, a, lda, x, incx, beta, y, incy);
+  
+  if (ta == 'T' || ta == 't') {
+    int64_t lenx = m;
+    int64_t leny = n;
+
+    for (int64_t i = 0; i < leny; i++) {
+      double e = 0.;
+      if (beta == 1.)
+        e = y[i * incy];
+      else if (beta != 0.)
+        e = beta * y[i * incy];
+      
+      double s = 0.;
+      for (int64_t j = 0; j < lenx; j++) {
+        double aji = a[j + i * lda];
+        double xj = x[j * incx];
+        s = s + aji * xj;
+      }
+
+      y[i * incy] = e + s * alpha;
+    }
+  }
+  else if (ta == 'N' || ta == 'n') {
+    int64_t lenx = n;
+    int64_t leny = m;
+
+    for (int64_t i = 0; i < leny; i++) {
+      double e = 0.;
+      if (beta == 1.)
+        e = y[i * incy];
+      else if (beta != 0.)
+        e = beta * y[i * incy];
+      
+      double s = 0.;
+      for (int64_t j = 0; j < lenx; j++) {
+        double aij = a[i + j * lda];
+        double xj = x[j * incx];
+        s = s + aij * xj;
+      }
+
+      y[i * incy] = e + s * alpha;
+    }
+  }
+
 }
 
 void dgemm(char ta, char tb, int64_t m, int64_t n, int64_t k, double alpha, const double* a, int64_t lda, const double* b, int64_t ldb, double beta, double* c, int64_t ldc) {
@@ -278,13 +319,27 @@ void dcopy(int64_t n, const double* x, int64_t incx, double* y, int64_t incy) {
 }
 
 void dscal(int64_t n, double alpha, double* x, int64_t incx) {
-  for (int64_t i = 0; i < n; i++)
-    x[i * incx] = alpha * x[i * incx];
+  if (alpha == 0.)
+    for (int64_t i = 0; i < n; i++)
+      x[i * incx] = 0.;
+  else if (alpha != 1.)
+    for (int64_t i = 0; i < n; i++)
+      x[i * incx] = alpha * x[i * incx];
 }
 
 void daxpy(int64_t n, double alpha, const double* x, int64_t incx, double* y, int64_t incy) {
   for (int64_t i = 0; i < n; i++)
     y[i * incy] = y[i * incy] + alpha * x[i * incx];
+}
+
+void dnrm2(int64_t n, const double* x, int64_t incx, double* nrm_out) {
+  double nrm = 0.;
+  for (int64_t i = 0; i < n; i++) {
+    double e = x[i * incx];
+    nrm = nrm + e * e;
+  }
+  nrm = sqrt(nrm);
+  *nrm_out = nrm;
 }
 
 void nbd::cMatrix(Matrix& mat, int64_t m, int64_t n) {
@@ -464,7 +519,7 @@ void nbd::pvc_bk(const Vector& Xs, const Vector& Xc, const Matrix& Us, const Mat
 }
 
 void nbd::vnrm2(const Vector& A, double* nrm) {
-  *nrm = cblas_dnrm2(A.N, A.X.data(), 1);
+  dnrm2(A.N, A.X.data(), 1, nrm);
 }
 
 void nbd::verr2(const Vector& A, const Vector& B, double* err) {
