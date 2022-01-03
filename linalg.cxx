@@ -100,7 +100,10 @@ void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, d
     }
 
   }
+
   *rank = k;
+  if (epi2 > 0.)
+    fprintf(stderr, "LRA reached full iterations.\n");
 }
 
 void dorth(char ecoq, int64_t m, int64_t n, double* r, int64_t ldr, double* q, int64_t ldq) {
@@ -249,6 +252,27 @@ void dtrsmlt_left(int64_t m, int64_t n, const double* a, int64_t lda, double* b,
   }
 }
 
+void dgemv(char ta, int64_t m, int64_t n, double alpha, const double* a, int64_t lda, const double* x, int64_t incx, double beta, double* y, int64_t incy) {
+  auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
+  cblas_dgemv(CblasColMajor, tac, m, n, alpha, a, lda, x, incx, beta, y, incy);
+}
+
+void dgemm(char ta, char tb, int64_t m, int64_t n, int64_t k, double alpha, const double* a, int64_t lda, const double* b, int64_t ldb, double beta, double* c, int64_t ldc) {
+  int64_t ma = m;
+  int64_t na = k;
+  if (ta == 'T' || ta == 't') {
+    ma = k;
+    na = m;
+  }
+
+  if (tb == 'T' || tb == 't')
+    for (int64_t i = 0; i < n; i++)
+      dgemv(ta, ma, na, alpha, a, lda, b + i, ldb, beta, c + i * ldc, 1);
+  else if (tb == 'N' || tb == 'n')
+    for (int64_t i = 0; i < n; i++)
+      dgemv(ta, ma, na, alpha, a, lda, b + i * ldb, 1, beta, c + i * ldc, 1);
+}
+
 void nbd::cMatrix(Matrix& mat, int64_t m, int64_t n) {
   mat.A.resize(m * n);
   mat.M = m;
@@ -330,9 +354,10 @@ void nbd::zeroVector(Vector& A) {
 
 void nbd::mmult(char ta, char tb, const Matrix& A, const Matrix& B, Matrix& C, double alpha, double beta) {
   int64_t k = (ta == 'N' || ta == 'n') ? A.N : A.M;
-  auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
+  /*auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
   auto tbc = (tb == 'N' || tb == 'n') ? CblasNoTrans : CblasTrans;
-  cblas_dgemm(CblasColMajor, tac, tbc, C.M, C.N, k, alpha, A.A.data(), A.M, B.A.data(), B.M, beta, C.A.data(), C.M);
+  cblas_dgemm(CblasColMajor, tac, tbc, C.M, C.N, k, alpha, A.A.data(), A.M, B.A.data(), B.M, beta, C.A.data(), C.M);*/
+  dgemm(ta, tb, C.M, C.N, k, alpha, A.A.data(), A.M, B.A.data(), B.M, beta, C.A.data(), C.M);
 }
 
 void nbd::msample(char ta, int64_t lenR, const Matrix& A, const double* R, Matrix& C) {
@@ -376,7 +401,6 @@ void nbd::minvl(const Matrix& A, Matrix& B) {
   cMatrix(work, A.M, A.N);
   cpyMatToMat(A.M, A.N, A, work, 0, 0, 0, 0);
   chol_decomp(work);
-  //LAPACKE_dpotrs(LAPACK_COL_MAJOR, 'L', B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
   dtrsml_left(B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
   dtrsmlt_left(B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
 }
@@ -414,18 +438,17 @@ void nbd::chol_solve(Vector& X, const Matrix& A) {
 }
 
 void nbd::fw_solve(Vector& X, const Matrix& L) {
-  //cblas_dtrsv(CblasColMajor, CblasLower, CblasNoTrans, CblasNonUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
   dtrsml_left(X.N, 1, L.A.data(), L.M, X.X.data(), X.N);
 }
 
 void nbd::bk_solve(Vector& X, const Matrix& L) {
-  //cblas_dtrsv(CblasColMajor, CblasLower, CblasTrans, CblasNonUnit, X.N, L.A.data(), L.M, X.X.data(), 1);
   dtrsmlt_left(X.N, 1, L.A.data(), L.M, X.X.data(), X.N);
 }
 
 void nbd::mvec(char ta, const Matrix& A, const Vector& X, Vector& B, double alpha, double beta) {
-  auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
-  cblas_dgemv(CblasColMajor, tac, A.M, A.N, alpha, A.A.data(), A.M, X.X.data(), 1, beta, B.X.data(), 1);
+  /*auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
+  cblas_dgemv(CblasColMajor, tac, A.M, A.N, alpha, A.A.data(), A.M, X.X.data(), 1, beta, B.X.data(), 1);*/
+  dgemv(ta, A.M, A.N, alpha, A.A.data(), A.M, X.X.data(), 1, beta, B.X.data(), 1);
 }
 
 void nbd::pvc_fw(const Vector& X, const Matrix& Us, const Matrix& Uc, Vector& Xs, Vector& Xc) {
