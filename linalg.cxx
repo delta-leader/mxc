@@ -3,7 +3,6 @@
 #include "linalg.hxx"
 
 #include "cblas.h"
-#include "lapacke.h"
 
 #include <algorithm>
 #include <iostream>
@@ -258,11 +257,11 @@ void dgemv(char ta, int64_t m, int64_t n, double alpha, const double* a, int64_t
 }
 
 void dgemm(char ta, char tb, int64_t m, int64_t n, int64_t k, double alpha, const double* a, int64_t lda, const double* b, int64_t ldb, double beta, double* c, int64_t ldc) {
-  int64_t ma = m;
-  int64_t na = k;
-  if (ta == 'T' || ta == 't') {
-    ma = k;
-    na = m;
+  int64_t ma = k;
+  int64_t na = m;
+  if (ta == 'N' || ta == 'n') {
+    ma = m;
+    na = k;
   }
 
   if (tb == 'T' || tb == 't')
@@ -271,6 +270,21 @@ void dgemm(char ta, char tb, int64_t m, int64_t n, int64_t k, double alpha, cons
   else if (tb == 'N' || tb == 'n')
     for (int64_t i = 0; i < n; i++)
       dgemv(ta, ma, na, alpha, a, lda, b + i * ldb, 1, beta, c + i * ldc, 1);
+}
+
+void dcopy(int64_t n, const double* x, int64_t incx, double* y, int64_t incy) {
+  for (int64_t i = 0; i < n; i++)
+    y[i * incy] = x[i * incx];
+}
+
+void dscal(int64_t n, double alpha, double* x, int64_t incx) {
+  for (int64_t i = 0; i < n; i++)
+    x[i * incx] = alpha * x[i * incx];
+}
+
+void daxpy(int64_t n, double alpha, const double* x, int64_t incx, double* y, int64_t incy) {
+  for (int64_t i = 0; i < n; i++)
+    y[i * incy] = y[i * incy] + alpha * x[i * incx];
 }
 
 void nbd::cMatrix(Matrix& mat, int64_t m, int64_t n) {
@@ -292,7 +306,7 @@ void nbd::cpyFromMatrix(char trans, const Matrix& A, double* V) {
     incv = A.N;
   }
   for (int64_t j = 0; j < A.N; j++)
-    cblas_dcopy(A.M, &A.A[j * A.M], 1, &V[j * iv], incv);
+    dcopy(A.M, &A.A[j * A.M], 1, &V[j * iv], incv);
 }
 
 void nbd::cpyFromVector(const Vector& A, double* v) {
@@ -304,8 +318,8 @@ void nbd::maxpby(Matrix& A, const double* v, double alpha, double beta) {
   if (beta == 0.)
     std::fill(A.A.data(), A.A.data() + size, 0.);
   else if (beta != 1.)
-    cblas_dscal(size, beta, A.A.data(), 1);
-  cblas_daxpy(size, alpha, v, 1, A.A.data(), 1);
+    dscal(size, beta, A.A.data(), 1);
+  daxpy(size, alpha, v, 1, A.A.data(), 1);
 }
 
 void nbd::vaxpby(Vector& A, const double* v, double alpha, double beta) {
@@ -313,8 +327,8 @@ void nbd::vaxpby(Vector& A, const double* v, double alpha, double beta) {
   if (beta == 0.)
     std::fill(A.X.data(), A.X.data() + size, 0.);
   else if (beta != 1.)
-    cblas_dscal(size, beta, A.X.data(), 1);
-  cblas_daxpy(size, alpha, v, 1, A.X.data(), 1);
+    dscal(size, beta, A.X.data(), 1);
+  daxpy(size, alpha, v, 1, A.X.data(), 1);
 }
 
 void nbd::cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_t y1, int64_t x1, int64_t y2, int64_t x2) {
@@ -354,9 +368,6 @@ void nbd::zeroVector(Vector& A) {
 
 void nbd::mmult(char ta, char tb, const Matrix& A, const Matrix& B, Matrix& C, double alpha, double beta) {
   int64_t k = (ta == 'N' || ta == 'n') ? A.N : A.M;
-  /*auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
-  auto tbc = (tb == 'N' || tb == 'n') ? CblasNoTrans : CblasTrans;
-  cblas_dgemm(CblasColMajor, tac, tbc, C.M, C.N, k, alpha, A.A.data(), A.M, B.A.data(), B.M, beta, C.A.data(), C.M);*/
   dgemm(ta, tb, C.M, C.N, k, alpha, A.A.data(), A.M, B.A.data(), B.M, beta, C.A.data(), C.M);
 }
 
@@ -365,35 +376,28 @@ void nbd::msample(char ta, int64_t lenR, const Matrix& A, const double* R, Matri
     std::cerr << "Insufficent random vector: " << C.N << " x 100 needed " << lenR << " provided." << std::endl;
     return;
   }
-  bool noTransA = (ta == 'N' || ta == 'n');
   int64_t k = A.M;
   int64_t inca = 1;
-  auto tac = CblasTrans;
-  if (noTransA) {
+  if (ta == 'N' || ta == 'n') {
     k = A.N;
-    tac = CblasNoTrans;
     inca = A.M;
   }
 
   int64_t rk = lenR / C.N;
   int64_t lk = k % rk;
   if (lk > 0)
-    cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, C.N, lk, 1., A.A.data(), A.M, R, lk, 1., C.A.data(), C.M);
+    dgemm(ta, 'N', C.M, C.N, lk, 1., A.A.data(), A.M, R, lk, 1., C.A.data(), C.M);
   if (k > rk)
     for (int64_t i = lk; i < k; i += rk)
-      cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, C.N, rk, 1., &A.A[i * inca], A.M, R, rk, 1., C.A.data(), C.M);
+      dgemm(ta, 'N', C.M, C.N, rk, 1., &A.A[i * inca], A.M, R, rk, 1., C.A.data(), C.M);
 }
 
 void nbd::msample_m(char ta, const Matrix& A, const Matrix& B, Matrix& C) {
-  bool noTransA = (ta == 'N' || ta == 'n');
   int64_t k = A.M;
-  auto tac = CblasTrans;
-  if (noTransA) {
+  if (ta == 'N' || ta == 'n')
     k = A.N;
-    tac = CblasNoTrans;
-  }
   int64_t nrhs = std::min(B.N, C.N);
-  cblas_dgemm(CblasColMajor, tac, CblasNoTrans, C.M, nrhs, k, 1., A.A.data(), A.M, B.A.data(), B.M, 1., C.A.data(), C.M);
+  dgemm(ta, 'N', C.M, nrhs, k, 1., A.A.data(), A.M, B.A.data(), B.M, 1., C.A.data(), C.M);
 }
 
 void nbd::minvl(const Matrix& A, Matrix& B) {
@@ -422,14 +426,14 @@ void nbd::utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
 
 void nbd::axat(Matrix& A, Matrix& AT) {
   for (int64_t j = 0; j < A.N; j++)
-    cblas_daxpy(A.M, 1., &AT.A[j], AT.M, &A.A[j * A.M], 1);
+    daxpy(A.M, 1., &AT.A[j], AT.M, &A.A[j * A.M], 1);
   for (int64_t i = 0; i < A.M; i++)
-    cblas_dcopy(A.N, &A.A[i], A.M, &AT.A[i * AT.M], 1);
+    dcopy(A.N, &A.A[i], A.M, &AT.A[i * AT.M], 1);
 }
 
 void nbd::madd(Matrix& A, const Matrix& B) {
   int64_t size = A.M * A.N;
-  cblas_daxpy(size, 1., &B.A[0], 1, &A.A[0], 1);
+  daxpy(size, 1., &B.A[0], 1, &A.A[0], 1);
 }
 
 void nbd::chol_solve(Vector& X, const Matrix& A) {
@@ -446,8 +450,6 @@ void nbd::bk_solve(Vector& X, const Matrix& L) {
 }
 
 void nbd::mvec(char ta, const Matrix& A, const Vector& X, Vector& B, double alpha, double beta) {
-  /*auto tac = (ta == 'N' || ta == 'n') ? CblasNoTrans : CblasTrans;
-  cblas_dgemv(CblasColMajor, tac, A.M, A.N, alpha, A.A.data(), A.M, X.X.data(), 1, beta, B.X.data(), 1);*/
   dgemv(ta, A.M, A.N, alpha, A.A.data(), A.M, X.X.data(), 1, beta, B.X.data(), 1);
 }
 
