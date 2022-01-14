@@ -2,7 +2,7 @@
 
 #include "bodies.hxx"
 #include "solver.hxx"
-#include "dist.h"
+#include "dist.hxx"
 
 #include "mpi.h"
 #include <random>
@@ -73,7 +73,7 @@ int main(int argc, char* argv[]) {
   solveRelErr(&err, rhs.back(), X, *leaf);
   printf("%d ERR: %e\n", mpi_rank, err);
 
-  MPI_Finalize();
   if (mpi_rank == 0) stopTimer(ptime, "program");
+  MPI_Finalize();
   return 0;
 }
