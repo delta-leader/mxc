@@ -30,4 +30,8 @@ namespace nbd {
 
   void butterflySumX(Vectors& X, const GlobalIndex& gi);
 
+  void startTimer(double* wtime);
+
+  void stopTimer(double wtime, const char str[]);
+
 };

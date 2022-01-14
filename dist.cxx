@@ -665,3 +665,12 @@ void nbd::butterflySumX(Vectors& X, const GlobalIndex& gi) {
   free(SRC_DATA);
   free(RM_DATA);
 }
+
+void nbd::startTimer(double* wtime) {
+  *wtime = MPI_Wtime();
+}
+
+void nbd::stopTimer(double wtime, const char str[]) {
+  double etime = MPI_Wtime();
+  printf("%-20s : %f s\n", str, etime - wtime);
+}

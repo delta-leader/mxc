@@ -3,10 +3,6 @@ CC	= g++ -std=c++11 -O3 -I.
 MPI_CC	= mpicxx -O3 -I.
 LC	= -lm
 
-#CC	= icpc -std=c++11 -O3 -I.
-#MPI_CC	= mpiicpc -O3 -I.
-#LC	= -lm -lmkl_core -lmkl_sequential -lmkl_intel_lp64
-
 all: domain bodies linalg kernel basis umv solver dist main
 	$(MPI_CC) main.o domain.o bodies.o linalg.o kernel.o basis.o umv.o solver.o dist.o $(LC)
 

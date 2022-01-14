@@ -2,7 +2,7 @@
 
 #include "bodies.hxx"
 #include "solver.hxx"
-#include "timer.h"
+#include "dist.h"
 
 #include "mpi.h"
 #include <random>
@@ -19,7 +19,8 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
-  if (mpi_rank == 0) start("program");
+  double ptime, ftime;
+  if (mpi_rank == 0) startTimer(&ptime);
 
   int64_t Nbody = 40000;
   int64_t Ncrit = 100;
@@ -49,11 +50,11 @@ int main(int argc, char* argv[]) {
   allocBasis(basis, local, bodies.LENS.data());
 
   MPI_Barrier(MPI_COMM_WORLD);
-  if (mpi_rank == 0) start("factor");
+  if (mpi_rank == 0) startTimer(&ftime);
   factorA(nodes, basis, local, 1.e-7, R.data(), R.size());
 
   MPI_Barrier(MPI_COMM_WORLD);
-  if (mpi_rank == 0) stop("factor");
+  if (mpi_rank == 0) stopTimer(ftime, "factor");
 
   Vectors X;
   Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., std::pow(654, mpi_rank));
@@ -63,16 +64,16 @@ int main(int argc, char* argv[]) {
   blockAxEb(B, ef, X, *leaf, bodies);
 
   MPI_Barrier(MPI_COMM_WORLD);
-  if (mpi_rank == 0) start("solve");
+  if (mpi_rank == 0) startTimer(&ftime);
   solveA(rhs, nodes, basis, local);
 
   MPI_Barrier(MPI_COMM_WORLD);
-  if (mpi_rank == 0) stop("solve");
+  if (mpi_rank == 0) stopTimer(ftime, "solve");
   double err;
   solveRelErr(&err, rhs.back(), X, *leaf);
   printf("%d ERR: %e\n", mpi_rank, err);
 
   MPI_Finalize();
-  if (mpi_rank == 0) stop("program");
+  if (mpi_rank == 0) stopTimer(ptime, "program");
   return 0;
 }
