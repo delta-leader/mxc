@@ -1,6 +1,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, double* u, int64_t ldu, double* vt, int64_t ldvt, int64_t* rank);
 
 void dorth(char ecoq, int64_t m, int64_t n, double* r, int64_t ldr, double* q, int64_t ldq);
@@ -25,3 +29,6 @@ void daxpy(int64_t n, double alpha, const double* x, int64_t incx, double* y, in
 
 void dnrm2(int64_t n, const double* x, int64_t incx, double* nrm_out);
 
+#ifdef __cplusplus
+}
+#endif

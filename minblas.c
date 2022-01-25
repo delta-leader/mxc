@@ -1,4 +1,5 @@
 
+#include "minblas.h"
 
 #include <stdio.h>
 #include <stdlib.h>
