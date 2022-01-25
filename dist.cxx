@@ -2,6 +2,7 @@
 #include "dist.hxx"
 
 #include "mpi.h"
+#include <cstdio>
 #include <cstdlib>
 #include <algorithm>
 
