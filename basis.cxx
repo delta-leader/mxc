@@ -101,16 +101,21 @@ void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrice
     zeroMatrix(C1[i]);
     zeroMatrix(C2[i]);
   }
+  double ct;
 
   sampleC1(C1, gi, A, R, lenR);
+  startTimer(&ct);
   DistributeMatricesList(C1, gi);
+  stopTimer(ct, "comm1 time");
   sampleC2(C2, gi, A, C1);
   orthoBasis(repi, gi, C2, basis.DIMO);
+  startTimer(&ct);
   DistributeDims(basis.DIMO, gi);
   allocUcUo(basis, gi, C2);
   
   DistributeMatricesList(basis.Uc, gi);
   DistributeMatricesList(basis.Uo, gi);
+  stopTimer(ct, "comm2 time");
 }
 
 void nbd::nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev, const GlobalIndex& gprev) {
