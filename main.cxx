@@ -3,6 +3,7 @@
 #include "bodies.hxx"
 #include "solver.hxx"
 #include "dist.hxx"
+#include "minblas.h"
 
 #include "mpi.h"
 #include <random>
@@ -10,7 +11,6 @@
 #include <cmath>
 
 using namespace nbd;
-
 
 int main(int argc, char* argv[]) {
 
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) startTimer(&ftime);
-  factorA(nodes, basis, local, 1.e-7, R.data(), R.size());
+  factorA(nodes, basis, local, 1.e-6, R.data(), R.size());
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) stopTimer(ftime, "factor");
@@ -74,6 +74,10 @@ int main(int argc, char* argv[]) {
   printf("%d ERR: %e\n", mpi_rank, err);
 
   if (mpi_rank == 0) stopTimer(ptime, "program");
+
+  int64_t* flops = getFLOPS();
+  double gf = flops[0] * 1.e-9;
+  printf("%d GFLOPS: %f\n", mpi_rank, gf);
   MPI_Finalize();
   return 0;
 }

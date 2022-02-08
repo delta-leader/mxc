@@ -29,6 +29,8 @@ void daxpy(int64_t n, double alpha, const double* x, int64_t incx, double* y, in
 
 void dnrm2(int64_t n, const double* x, int64_t incx, double* nrm_out);
 
+int64_t* getFLOPS();
+
 #ifdef __cplusplus
 }
 #endif
