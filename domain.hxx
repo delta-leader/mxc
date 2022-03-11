@@ -20,13 +20,13 @@ namespace nbd {
     int64_t M;
     int64_t N;
     int64_t NNZ;
+    int64_t CBGN;
     std::vector<int64_t> CSC_COLS;
     std::vector<int64_t> CSC_ROWS;
   };
 
   struct GlobalIndex {
     int64_t BOXES;
-    int64_t GBEGIN;
     int64_t SELF_I;
     int64_t TWIN_I;
     std::vector<int64_t> NGB_RNKS;
@@ -53,6 +53,8 @@ namespace nbd {
   void Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain);
 
   void lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j);
+
+  void Lookup_GlobalI(int64_t& ilocal, int64_t iglobal, int64_t boxes, const int64_t ngbs[], int64_t ngb_len);
 
   void Lookup_GlobalI(int64_t& ilocal, const GlobalIndex& gi, int64_t iglobal);
 

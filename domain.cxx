@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <algorithm>
+#include <cstdio>
 
 using namespace nbd;
 
@@ -107,6 +108,7 @@ void nbd::Global_Partition(GlobalDomain& goDomain, int64_t rank, int64_t size, i
 void nbd::Interactions(CSC& rels, int64_t y, int64_t xbegin, int64_t xend, int64_t dim, int64_t theta) {
   rels.M = y;
   rels.N = xend - xbegin;
+  rels.CBGN = xbegin;
   rels.CSC_COLS.resize(rels.N + 1);
   rels.CSC_ROWS.clear();
   rels.CSC_COLS[0] = 0;
@@ -142,7 +144,6 @@ GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goD
     int64_t my_rank = rank >> lvl_diff;
     int64_t my_twin = my_rank ^ (int64_t)1;
     gi.BOXES = (int64_t)1 << ilocal;
-    gi.GBEGIN = my_rank * gi.BOXES;
 
     std::vector<int64_t> work(size);
     int64_t len = Z_neighbors(work.data(), my_rank, goDomain.DIM, size, theta);
@@ -186,19 +187,22 @@ void nbd::Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain)
 }
 
 void nbd::lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j) {
-  if (j < 0 || j >= rels.N)
+  int64_t lj = j - rels.CBGN;
+  if (lj < 0 || lj >= rels.N)
   { ij = -1; return; }
   int64_t k = std::distance(rels.CSC_ROWS.data(), 
-    std::find(rels.CSC_ROWS.data() + rels.CSC_COLS[j], rels.CSC_ROWS.data() + rels.CSC_COLS[j + 1], i));
-  ij = (k < rels.CSC_COLS[j + 1]) ? k : -1;
+    std::find(rels.CSC_ROWS.data() + rels.CSC_COLS[lj], rels.CSC_ROWS.data() + rels.CSC_COLS[lj + 1], i));
+  ij = (k < rels.CSC_COLS[lj + 1]) ? k : -1;
+}
+
+void nbd::Lookup_GlobalI(int64_t& ilocal, int64_t iglobal, int64_t boxes, const int64_t ngbs[], int64_t ngb_len) {
+  int64_t box_rank = iglobal / boxes;
+  int64_t i_rank = iglobal - box_rank * boxes;
+
+  int64_t box_ind = std::distance(ngbs, std::find(ngbs, ngbs + ngb_len, box_rank));
+  ilocal = (box_ind < ngb_len) ? (box_ind * boxes + i_rank) : -1;
 }
 
 void nbd::Lookup_GlobalI(int64_t& ilocal, const GlobalIndex& gi, int64_t iglobal) {
-  int64_t nboxes = gi.BOXES;
-  int64_t box_rank = iglobal / nboxes;
-  int64_t i_rank = iglobal - box_rank * nboxes;
-
-  int64_t box_ind = std::distance(gi.NGB_RNKS.begin(), std::find(gi.NGB_RNKS.begin(), gi.NGB_RNKS.end(), box_rank));
-  ilocal = (box_ind < gi.NGB_RNKS.size()) ? (box_ind * nboxes + i_rank) : -1;
+  Lookup_GlobalI(ilocal, iglobal, gi.BOXES, &gi.NGB_RNKS[0], gi.NGB_RNKS.size());
 }
-

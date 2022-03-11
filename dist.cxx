@@ -236,9 +236,8 @@ void nbd::DistributeDims(std::vector<int64_t>& dims, const GlobalIndex& gi) {
   }
 }
 
-void constructCOMM_AXAT(double** DATA, int64_t* LEN, int64_t RM_BOX, const Matrices& A, const GlobalIndex& gi) {
-  int64_t nboxes = gi.BOXES;
-  const CSC& rels = gi.RELS;
+void constructCOMM_AXAT(double** DATA, int64_t* LEN, int64_t RM_BOX, const Matrices& A, const CSC& rels) {
+  int64_t nboxes = rels.N;
   std::vector<int64_t> lens(nboxes);
   std::fill(lens.begin(), lens.end(), 0);
 
@@ -280,10 +279,8 @@ void constructCOMM_AXAT(double** DATA, int64_t* LEN, int64_t RM_BOX, const Matri
   *DATA = data;
 }
 
-void axRemoteV(int64_t RM_BOX, Matrices& A, const GlobalIndex& gi, const double* rmv) {
-  int64_t nboxes = gi.BOXES;
-  const CSC& rels = gi.RELS;
-
+void axRemoteV(int64_t RM_BOX, Matrices& A, const CSC& rels, const double* rmv) {
+  int64_t nboxes = rels.N;
   int64_t offset = 0;
   for (int64_t i = 0; i < rels.N; i++)
     for (int64_t ji = rels.CSC_COLS[i]; ji < rels.CSC_COLS[i + 1]; ji++) {
@@ -312,7 +309,7 @@ void nbd::axatDistribute(Matrices& A, const GlobalIndex& gi) {
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
     if (rm_rank != my_rank) {
-      constructCOMM_AXAT(&SRC_DATA[i], &LENS[i], gi.NGB_RNKS[i], A, gi);
+      constructCOMM_AXAT(&SRC_DATA[i], &LENS[i], gi.NGB_RNKS[i], A, gi.RELS);
       RM_DATA[i] = (double*)malloc(sizeof(double) * LENS[i]);
     }
   }
@@ -344,7 +341,7 @@ void nbd::axatDistribute(Matrices& A, const GlobalIndex& gi) {
   for (int64_t i = 0; i < neighbors.size(); i++) {
     int64_t rm_rank = neighbors[i];
     if (rm_rank != my_rank)
-      axRemoteV(gi.NGB_RNKS[i], A, gi, RM_DATA[i]);
+      axRemoteV(gi.NGB_RNKS[i], A, gi.RELS, RM_DATA[i]);
   }
 
   for (int64_t i = 0; i < neighbors.size(); i++) {

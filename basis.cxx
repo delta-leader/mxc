@@ -4,12 +4,10 @@
 
 using namespace nbd;
 
-void nbd::sampleC1(Matrices& C1, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR) {
-  const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
-  Matrix* C = &C1[gi.SELF_I * gi.BOXES];
+void nbd::sampleC1(Matrix* CL, const CSC& rels, const Matrices& A, const double* R, int64_t lenR) {
+  int64_t lbegin = rels.CBGN;
   for (int64_t j = 0; j < rels.N; j++) {
-    Matrix& cj = C[j];
+    Matrix& cj = CL[j];
 
     for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels.CSC_ROWS[ij];
@@ -20,26 +18,24 @@ void nbd::sampleC1(Matrices& C1, const GlobalIndex& gi, const Matrices& A, const
     }
 
     int64_t jj;
-    lookupIJ(jj, rels, lbegin + j, j);
+    lookupIJ(jj, rels, j + lbegin, j + lbegin);
     const Matrix& Ajj = A[jj];
     minvl(Ajj, cj);
   }
 }
 
 
-void nbd::sampleC2(Matrices& C2, const GlobalIndex& gi, const Matrices& A, const Matrices& C1) {
-  const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
-  Matrix* C = &C2[gi.SELF_I * gi.BOXES];
+void nbd::sampleC2(Matrix* CL, const CSC& rels, const Matrices& A, const Matrices& C1, const int64_t ngbs[], int64_t ngb_len) {
+  int64_t lbegin = rels.CBGN;
   for (int64_t j = 0; j < rels.N; j++) {
-    Matrix& cj = C[j];
+    Matrix& cj = CL[j];
 
     for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels.CSC_ROWS[ij];
       if (i == j + lbegin)
         continue;
       int64_t box_i;
-      Lookup_GlobalI(box_i, gi, i);
+      Lookup_GlobalI(box_i, i, rels.N, ngbs, ngb_len);
 
       const Matrix& Aij = A[ij];
       msample_m('T', Aij, C1[box_i], cj);
@@ -47,17 +43,18 @@ void nbd::sampleC2(Matrices& C2, const GlobalIndex& gi, const Matrices& A, const
   }
 }
 
-void nbd::orthoBasis(double repi, const GlobalIndex& gi, Matrices& C, std::vector<int64_t>& dims_o) {
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
-  int64_t lend = lbegin + gi.BOXES;
-  for (int64_t i = lbegin; i < lend; i++)
+void nbd::orthoBasis(double repi, int64_t N, Matrix* C, int64_t* dims_o) {
+  for (int64_t i = 0; i < N; i++)
     orthoBase(repi, C[i], &dims_o[i]);
 }
 
 void nbd::allocBasis(Basis& basis, const LocalDomain& domain, const int64_t* bddims) {
   basis.resize(domain.size());
   for (int64_t i = 0; i < basis.size(); i++) {
-    int64_t nodes = domain[i].BOXES * domain[i].NGB_RNKS.size();
+    int64_t boxes = domain[i].BOXES;
+    int64_t nodes = boxes * domain[i].NGB_RNKS.size();
+    basis[i].LBOXES = boxes;
+    basis[i].LBGN = domain[i].SELF_I * boxes;
     basis[i].DIMS.resize(nodes);
     basis[i].DIMO.resize(nodes);
     basis[i].Uo.resize(nodes);
@@ -69,9 +66,9 @@ void nbd::allocBasis(Basis& basis, const LocalDomain& domain, const int64_t* bdd
   std::copy(bddims, bddims + nodes, leaf.DIMS.begin());
 }
 
-void nbd::allocUcUo(Base& basis, const GlobalIndex& gi, const Matrices& C) {
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
-  int64_t lend = lbegin + gi.BOXES;
+void nbd::allocUcUo(Base& basis, const Matrices& C) {
+  int64_t lbegin = basis.LBGN;
+  int64_t lend = lbegin + basis.LBOXES;
   for (int64_t i = 0; i < basis.DIMS.size(); i++) {
     int64_t dim = basis.DIMS[i];
     int64_t dim_o = basis.DIMO[i];
@@ -103,15 +100,16 @@ void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrice
   }
   double ct;
 
-  sampleC1(C1, gi, A, R, lenR);
+  int64_t lbegin = basis.LBGN;
+  sampleC1(&C1[lbegin], gi.RELS, A, R, lenR);
   startTimer(&ct);
   DistributeMatricesList(C1, gi);
   stopTimer(ct, "comm1 time");
-  sampleC2(C2, gi, A, C1);
-  orthoBasis(repi, gi, C2, basis.DIMO);
+  sampleC2(&C2[lbegin], gi.RELS, A, C1, &gi.NGB_RNKS[0], gi.NGB_RNKS.size());
+  orthoBasis(repi, basis.LBOXES, &C2[lbegin], &basis.DIMO[lbegin]);
   startTimer(&ct);
   DistributeDims(basis.DIMO, gi);
-  allocUcUo(basis, gi, C2);
+  allocUcUo(basis, C2);
   
   DistributeMatricesList(basis.Uc, gi);
   DistributeMatricesList(basis.Uo, gi);
@@ -121,7 +119,7 @@ void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrice
 void nbd::nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev, const GlobalIndex& gprev) {
   int64_t nboxes = gnext.BOXES;
   int64_t nbegin = gnext.SELF_I * nboxes;
-  int64_t ngbegin = gnext.GBEGIN;
+  int64_t ngbegin = gnext.RELS.CBGN;
 
   std::vector<int64_t>& dims = bsnext.DIMS;
   const std::vector<int64_t>& dimo = bsprev.DIMO;

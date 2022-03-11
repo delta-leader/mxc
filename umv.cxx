@@ -20,11 +20,11 @@ void nbd::splitA(Matrices& A_out, const GlobalIndex& gi, const Matrices& A, cons
 
 void nbd::factorAcc(Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
+  int64_t lbegin = rels.CBGN;
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
-    lookupIJ(ii, rels, i + lbegin, i);
+    lookupIJ(ii, rels, i + lbegin, i + lbegin);
     Matrix& A_ii = A_cc[ii];
     chol_decomp(A_ii);
 
@@ -38,11 +38,11 @@ void nbd::factorAcc(Matrices& A_cc, const GlobalIndex& gi) {
 
 void nbd::factorAoc(Matrices& A_oc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
+  int64_t lbegin = rels.CBGN;
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
-    lookupIJ(ii, rels, i + lbegin, i);
+    lookupIJ(ii, rels, i + lbegin, i + lbegin);
     const Matrix& A_ii = A_cc[ii];
     for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++)
       trsm_lowerA(A_oc[yi], A_ii);
@@ -51,11 +51,11 @@ void nbd::factorAoc(Matrices& A_oc, const Matrices& A_cc, const GlobalIndex& gi)
 
 void nbd::schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
+  int64_t lbegin = rels.CBGN;
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
-    lookupIJ(ii, rels, i + lbegin, i);
+    lookupIJ(ii, rels, i + lbegin, i + lbegin);
     const Matrix& A_iit = A_oc[ii];
     for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
       const Matrix& A_yi = A_oc[yi];
@@ -67,7 +67,7 @@ void nbd::schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi) {
 
 void nbd::axatLocal(Matrices& A, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
+  int64_t lbegin = rels.CBGN;
   int64_t lend = lbegin + gi.BOXES;
 
   for (int64_t i = 0; i < rels.N; i++)
@@ -76,7 +76,7 @@ void nbd::axatLocal(Matrices& A, const GlobalIndex& gi) {
       if (j > i + lbegin && j < lend) {
         Matrix& A_ji = A[ji];
         int64_t ij;
-        lookupIJ(ij, rels, i + lbegin, j - lbegin);
+        lookupIJ(ij, rels, i + lbegin, j);
         Matrix& A_ij = A[ij];
         axat(A_ji, A_ij);
       }
@@ -176,13 +176,13 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
 
   nextBasisDims(bsnext, Gnext, bsprev, Gprev);
   allocA(Mup, Gnext, bsnext.DIMS.data());
-  int64_t nbegin = Gnext.GBEGIN;
-  int64_t pbegin = Gprev.GBEGIN;
+  int64_t nbegin = Gnext.RELS.CBGN;
+  int64_t pbegin = Gprev.RELS.CBGN;
 
   for (int64_t j = 0; j < rels_up.N; j++) {
     int64_t gj = j + nbegin;
-    int64_t cj0 = (gj << 1) - pbegin;
-    int64_t cj1 = (gj << 1) + 1 - pbegin;
+    int64_t cj0 = (gj << 1);
+    int64_t cj1 = (gj << 1) + 1;
 
     for (int64_t ij = rels_up.CSC_COLS[j]; ij < rels_up.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels_up.CSC_ROWS[ij];

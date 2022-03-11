@@ -22,13 +22,13 @@ void nbd::basisXoc(char fwbk, RHS& vx, const Base& basis, const GlobalIndex& gi)
 
 void nbd::svAccFw(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
+  int64_t lbegin = rels.CBGN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
   recvFwSubstituted(Xc, gi);
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
-    lookupIJ(ii, rels, i + lbegin, i);
+    lookupIJ(ii, rels, i + lbegin, i + lbegin);
     const Matrix& A_ii = A_cc[ii];
     fw_solve(xlocal[i], A_ii);
 
@@ -48,7 +48,7 @@ void nbd::svAccFw(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
 
 void nbd::svAccBk(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.GBEGIN;
+  int64_t lbegin = rels.CBGN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
   recvBkSubstituted(Xc, gi);
 
@@ -64,7 +64,7 @@ void nbd::svAccBk(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
     }
 
     int64_t ii;
-    lookupIJ(ii, rels, i + lbegin, i);
+    lookupIJ(ii, rels, i + lbegin, i + lbegin);
     const Matrix& A_ii = A_cc[ii];
     bk_solve(xlocal[i], A_ii);
   }
@@ -131,8 +131,8 @@ Vector* nbd::allocRightHandSides(RHSS& rhs, const Basis& base, const LocalDomain
 }
 
 void nbd::permuteAndMerge(char fwbk, RHS& prev, const GlobalIndex& gprev, RHS& next, const GlobalIndex& gnext) {
-  int64_t nbegin = gnext.GBEGIN;
-  int64_t pbegin = gprev.GBEGIN;
+  int64_t nbegin = gnext.RELS.CBGN;
+  int64_t pbegin = gprev.RELS.CBGN;
   int64_t nboxes = gnext.BOXES;
   int64_t pboxes = gprev.BOXES;
   int64_t nloc = gnext.SELF_I * nboxes;
