@@ -28,18 +28,18 @@ void nbd::configureComm(int64_t level, const int64_t ngbs[], int64_t ngbs_len) {
 
     MPI_RANK = mpi_rank;
     MPI_LEVELS = (int64_t)std::log2(mpi_size);
-    comms.resize(MPI_LEVELS + 1);
+    COMMS.resize(MPI_LEVELS + 1);
   }
 
   if (level <= MPI_LEVELS && level >= 0) {
     int64_t lvl_diff = MPI_LEVELS - level;
     int64_t my_rank = MPI_RANK >> lvl_diff;
-    Communicator& gi = comms[level];
+    Communicator& gi = COMMS[level];
 
     int64_t self = std::distance(ngbs, std::find(ngbs, ngbs + ngbs_len, my_rank));
     if (self < ngbs_len) {
       int64_t my_twin = my_rank ^ (int64_t)1;
-      int64_t mask = rank - (my_rank << lvl_diff);
+      int64_t mask = MPI_RANK - (my_rank << lvl_diff);
       int64_t twi = std::distance(ngbs, std::find(ngbs, ngbs + ngbs_len, my_twin));
       gi.SELF_I = self;
       gi.TWIN_I = twi == ngbs_len ? -1 : twi;
@@ -63,7 +63,7 @@ void nbd::selfLocalRange(int64_t& ibegin, int64_t& iend, int64_t level) {
   }
 }
 
-void nbd::ngbsILocal(int64_t& ilocal, int64_t iglobal, int64_t level) {
+void nbd::neighborsILocal(int64_t& ilocal, int64_t iglobal, int64_t level) {
   if (level >= 0) {
     int64_t lvl_diff = level - MPI_LEVELS;
     int64_t boxes = lvl_diff > 0 ? ((int64_t)1 << lvl_diff) : 1;
@@ -83,7 +83,7 @@ void nbd::locateCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* 
   if (level >= 0) {
     int64_t lvl_diff = level - MPI_LEVELS;
     int64_t boxes = lvl_diff > 0 ? ((int64_t)1 << lvl_diff) : 1;
-    const Communicator& gi = lvl_diff > 0 ? COMMS[MPI_LEVELS] : COMMS[level];
+    Communicator& gi = lvl_diff > 0 ? COMMS[MPI_LEVELS] : COMMS[level];
     
     if (my_ind)
       *my_ind = gi.SELF_I;
@@ -100,7 +100,7 @@ void nbd::locateCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* 
 
 void nbd::locateButterflyCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* my_twi, int64_t* twi_rank) {
   if (level >= 0) {
-    const Communicator& gi = level > MPI_LEVELS ? COMMS[MPI_LEVELS] : COMMS[level];
+    Communicator& gi = level > MPI_LEVELS ? COMMS[MPI_LEVELS] : COMMS[level];
     
     if (my_ind)
       *my_ind = gi.SELF_I;

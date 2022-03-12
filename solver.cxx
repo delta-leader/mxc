@@ -24,7 +24,7 @@ void nbd::svAccFw(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
   int64_t lbegin = rels.CBGN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
-  recvFwSubstituted(Xc, gi);
+  recvFwSubstituted(Xc, gi.LEVEL);
 
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
