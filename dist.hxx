@@ -12,6 +12,10 @@ namespace nbd {
 
   void neighborsILocal(int64_t& ilocal, int64_t iglobal, int64_t level);
 
+  void neighborsIGlobal(int64_t& iglobal, int64_t ilocal, int64_t level);
+
+  void neighborContentLength(int64_t& len, int64_t level);
+
   void locateCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* nboxes, int64_t** ngbs, int64_t* ngbs_len);
 
   void locateButterflyCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* my_twi, int64_t* twi_rank);
@@ -22,7 +26,7 @@ namespace nbd {
 
   void DistributeMatricesList(Matrices& lis, int64_t level);
 
-  void DistributeDims(std::vector<int64_t>& dims, int64_t level);
+  void DistributeDims(int64_t dims[], int64_t level);
 
   void axatDistribute(Matrices& A, const CSC& rels, int64_t level);
 

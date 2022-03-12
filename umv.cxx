@@ -145,7 +145,7 @@ void nbd::factorNode(Node& n, Base& basis, const GlobalIndex& gi, double repi, c
   double btime, ftime;
   startTimer(&ftime);
   startTimer(&btime);
-  sampleA(basis, repi, gi, n.A, R, lenR);
+  sampleA(basis, repi, gi.RELS, n.A, R, lenR);
   stopTimer(btime, "basis time");
   
   allocSubMatrices(n, gi, basis.DIMS.data(), basis.DIMO.data());
@@ -174,7 +174,7 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
   const CSC& rels_up = Gnext.RELS;
   const CSC& rels_low = Gprev.RELS;
 
-  nextBasisDims(bsnext, Gnext, bsprev, Gprev);
+  nextBasisDims(bsnext, bsprev);
   allocA(Mup, Gnext, bsnext.DIMS.data());
   int64_t nbegin = Gnext.RELS.CBGN;
   int64_t pbegin = Gprev.RELS.CBGN;

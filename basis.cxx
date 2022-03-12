@@ -4,10 +4,12 @@
 
 using namespace nbd;
 
-void nbd::sampleC1(Matrix* CL, const CSC& rels, const Matrices& A, const double* R, int64_t lenR) {
+void nbd::sampleC1(Matrices& C1, const CSC& rels, const Matrices& A, const double* R, int64_t lenR, int64_t level) {
   int64_t lbegin = rels.CBGN;
+  int64_t ibegin = 0, iend;
+  selfLocalRange(ibegin, iend, level);
   for (int64_t j = 0; j < rels.N; j++) {
-    Matrix& cj = CL[j];
+    Matrix& cj = C1[j + ibegin];
 
     for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels.CSC_ROWS[ij];
@@ -25,17 +27,19 @@ void nbd::sampleC1(Matrix* CL, const CSC& rels, const Matrices& A, const double*
 }
 
 
-void nbd::sampleC2(Matrix* CL, const CSC& rels, const Matrices& A, const Matrices& C1, const int64_t ngbs[], int64_t ngb_len) {
+void nbd::sampleC2(Matrices& C2, const CSC& rels, const Matrices& A, const Matrices& C1, int64_t level) {
   int64_t lbegin = rels.CBGN;
+  int64_t ibegin = 0, iend;
+  selfLocalRange(ibegin, iend, level);
   for (int64_t j = 0; j < rels.N; j++) {
-    Matrix& cj = CL[j];
+    Matrix& cj = C2[j + ibegin];
 
     for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels.CSC_ROWS[ij];
       if (i == j + lbegin)
         continue;
-      int64_t box_i;
-      Lookup_GlobalI(box_i, i, rels.N, ngbs, ngb_len);
+      int64_t box_i = i;
+      neighborsILocal(box_i, i, level);
 
       const Matrix& Aij = A[ij];
       msample_m('T', Aij, C1[box_i], cj);
@@ -43,18 +47,20 @@ void nbd::sampleC2(Matrix* CL, const CSC& rels, const Matrices& A, const Matrice
   }
 }
 
-void nbd::orthoBasis(double repi, int64_t N, Matrix* C, int64_t* dims_o) {
-  for (int64_t i = 0; i < N; i++)
+void nbd::orthoBasis(double repi, Matrices& C, int64_t dims_o[], int64_t level) {
+  int64_t ibegin = 0;
+  int64_t iend = C.size();
+  selfLocalRange(ibegin, iend, level);
+  for (int64_t i = ibegin; i < iend; i++)
     orthoBase(repi, C[i], &dims_o[i]);
 }
 
-void nbd::allocBasis(Basis& basis, const LocalDomain& domain, const int64_t* bddims) {
-  basis.resize(domain.size());
-  for (int64_t i = 0; i < basis.size(); i++) {
-    int64_t boxes = domain[i].BOXES;
-    int64_t nodes = boxes * domain[i].NGB_RNKS.size();
-    basis[i].LBOXES = boxes;
-    basis[i].LBGN = domain[i].SELF_I * boxes;
+void nbd::allocBasis(Basis& basis, int64_t levels, const int64_t ldims[]) {
+  basis.resize(levels + 1);
+  for (int64_t i = 0; i <= levels; i++) {
+    int64_t nodes = (int64_t)1 << i;
+    neighborContentLength(nodes, i);
+    basis[i].LEVEL = i;
     basis[i].DIMS.resize(nodes);
     basis[i].DIMO.resize(nodes);
     basis[i].Uo.resize(nodes);
@@ -63,13 +69,16 @@ void nbd::allocBasis(Basis& basis, const LocalDomain& domain, const int64_t* bdd
 
   Base& leaf = basis.back();
   int64_t nodes = leaf.DIMS.size();
-  std::copy(bddims, bddims + nodes, leaf.DIMS.begin());
+  std::copy(ldims, ldims + nodes, leaf.DIMS.begin());
 }
 
 void nbd::allocUcUo(Base& basis, const Matrices& C) {
-  int64_t lbegin = basis.LBGN;
-  int64_t lend = lbegin + basis.LBOXES;
-  for (int64_t i = 0; i < basis.DIMS.size(); i++) {
+  int64_t len = basis.DIMS.size();
+  int64_t level = basis.LEVEL;
+  int64_t lbegin = 0;
+  int64_t lend = len;
+  selfLocalRange(lbegin, lend, level);
+  for (int64_t i = 0; i < len; i++) {
     int64_t dim = basis.DIMS[i];
     int64_t dim_o = basis.DIMO[i];
     int64_t dim_c = dim - dim_o;
@@ -87,53 +96,57 @@ void nbd::allocUcUo(Base& basis, const Matrices& C) {
   }
 }
 
-void nbd::sampleA(Base& basis, double repi, const GlobalIndex& gi, const Matrices& A, const double* R, int64_t lenR) {
+void nbd::sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, const double* R, int64_t lenR) {
   Matrices C1(basis.DIMS.size());
   Matrices C2(basis.DIMS.size());
 
-  for (int64_t i = 0; i < basis.DIMS.size(); i++) {
+  int64_t len = basis.DIMS.size();
+  for (int64_t i = 0; i < len; i++) {
     int64_t dim = basis.DIMS[i];
     cMatrix(C1[i], dim, dim);
     cMatrix(C2[i], dim, dim);
     zeroMatrix(C1[i]);
     zeroMatrix(C2[i]);
   }
-  double ct;
 
-  int64_t lbegin = basis.LBGN;
-  sampleC1(&C1[lbegin], gi.RELS, A, R, lenR);
-  startTimer(&ct);
-  DistributeMatricesList(C1, gi.LEVEL);
-  stopTimer(ct, "comm1 time");
-  sampleC2(&C2[lbegin], gi.RELS, A, C1, &gi.NGB_RNKS[0], gi.NGB_RNKS.size());
-  orthoBasis(repi, basis.LBOXES, &C2[lbegin], &basis.DIMO[lbegin]);
-  startTimer(&ct);
-  DistributeDims(basis.DIMO, gi.LEVEL);
+  int64_t level = basis.LEVEL;
+  sampleC1(C1, rels, A, R, lenR, level);
+  DistributeMatricesList(C1, level);
+  sampleC2(C2, rels, A, C1, level);
+  orthoBasis(repi, C2, &basis.DIMO[0], level);
+  DistributeDims(&basis.DIMO[0], level);
   allocUcUo(basis, C2);
   
-  DistributeMatricesList(basis.Uc, gi.LEVEL);
-  DistributeMatricesList(basis.Uo, gi.LEVEL);
-  stopTimer(ct, "comm2 time");
+  DistributeMatricesList(basis.Uc, level);
+  DistributeMatricesList(basis.Uo, level);
 }
 
-void nbd::nextBasisDims(Base& bsnext, const GlobalIndex& gnext, const Base& bsprev, const GlobalIndex& gprev) {
-  int64_t nboxes = gnext.BOXES;
-  int64_t nbegin = gnext.SELF_I * nboxes;
-  int64_t ngbegin = gnext.RELS.CBGN;
+void nbd::nextBasisDims(Base& bsnext, const Base& bsprev) {
+  int64_t level = bsnext.LEVEL;
+  int64_t ibegin = 0;
+  int64_t iend = bsnext.DIMS.size();
+  selfLocalRange(ibegin, iend, level);
+  int64_t nboxes = iend - ibegin;
 
-  std::vector<int64_t>& dims = bsnext.DIMS;
-  const std::vector<int64_t>& dimo = bsprev.DIMO;
+  int64_t* dims = &bsnext.DIMS[0];
+  const int64_t* dimo = &bsprev.DIMO[0];
+  int64_t clevel = bsprev.LEVEL;
 
   for (int64_t i = 0; i < nboxes; i++) {
-    int64_t nloc = i + nbegin;
-    int64_t nrnk = i + ngbegin;
+    int64_t nloc = i + ibegin;
+    int64_t nrnk = nloc;
+    neighborsIGlobal(nrnk, nloc, level);
+
     int64_t c0rnk = nrnk << 1;
     int64_t c1rnk = (nrnk << 1) + 1;
-    int64_t c0, c1;
-    Lookup_GlobalI(c0, gprev, c0rnk);
-    Lookup_GlobalI(c1, gprev, c1rnk);
-    dims[nloc] = dimo[c0] + dimo[c1];
+    int64_t c0 = c0rnk;
+    int64_t c1 = c1rnk;
+    neighborsILocal(c0, c0rnk, clevel);
+    neighborsILocal(c1, c1rnk, clevel);
+
+    dims[nloc] = c0 > 0 ? dimo[c0] : 0;
+    dims[nloc] = dims[nloc] + c1 > 0 ? dimo[c1] : 0;
   }
-  DistributeDims(dims, gnext.LEVEL);
+  DistributeDims(dims, bsnext.LEVEL);
 }
 
