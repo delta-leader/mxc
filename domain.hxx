@@ -26,6 +26,7 @@ namespace nbd {
   };
 
   struct GlobalIndex {
+    int64_t LEVEL;
     int64_t BOXES;
     int64_t SELF_I;
     int64_t TWIN_I;

@@ -160,7 +160,7 @@ void nbd::factorNode(Node& n, Base& basis, const GlobalIndex& gi, double repi, c
   axatLocal(n.S, gi);
   double ct;
   startTimer(&ct);
-  axatDistribute(n.S, gi);
+  axatDistribute(n.S, gi.RELS, gi.LEVEL);
   stopTimer(ct, "comm3 time");
 
   for (int64_t i = 0; i < n.S.size(); i++)
@@ -221,7 +221,7 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
   }
   
   if (rels_low.N == rels_up.N)
-    butterflySumA(Mup, Gprev);
+    butterflySumA(Mup, Gprev.LEVEL);
 }
 
 

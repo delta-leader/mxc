@@ -1,6 +1,7 @@
 
 #include "domain.hxx"
 
+#include "dist.hxx"
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
@@ -161,6 +162,9 @@ GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goD
     int64_t xbegin = my_rank * gi.BOXES;
     int64_t xend = xbegin + gi.BOXES;
     Interactions(gi.RELS, y, xbegin, xend, goDomain.DIM, theta);
+
+    gi.LEVEL = i;
+    configureComm(i, &gi.NGB_RNKS[0], len);
   }
   return &loDomain[goDomain.LEVELS];
 }

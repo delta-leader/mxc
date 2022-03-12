@@ -114,7 +114,7 @@ void nbd::Random_bodies(LocalBodies& bodies, const GlobalDomain& goDomain, const
   int64_t* lens = &bodies.LENS[ind * nboxes];
   int64_t* offsets = &bodies.OFFSETS[ind * nboxes];
   Bucket_sort(bodies_begin, lens, offsets, nbody, nboxes, goDomain);
-  DistributeBodies(bodies, gi);
+  DistributeBodies(bodies, gi.LEVEL);
 }
 
 
@@ -173,7 +173,7 @@ Vector* nbd::randomVectors(Vectors& B, const GlobalIndex& gi, const LocalBodies&
     offset = offset + bodies.LENS[i];
   }
 
-  DistributeVectorsList(B, gi);
+  DistributeVectorsList(B, gi.LEVEL);
   return &B[lbegin];
 }
 

@@ -43,14 +43,14 @@ void nbd::svAccFw(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
     }
   }
 
-  sendFwSubstituted(Xc, gi);
+  sendFwSubstituted(Xc, gi.LEVEL);
 }
 
 void nbd::svAccBk(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
   const CSC& rels = gi.RELS;
   int64_t lbegin = rels.CBGN;
   Vector* xlocal = &Xc[gi.SELF_I * gi.BOXES];
-  recvBkSubstituted(Xc, gi);
+  recvBkSubstituted(Xc, gi.LEVEL);
 
   for (int64_t i = rels.N - 1; i >= 0; i--) {
     for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
@@ -69,7 +69,7 @@ void nbd::svAccBk(Vectors& Xc, const Matrices& A_cc, const GlobalIndex& gi) {
     bk_solve(xlocal[i], A_ii);
   }
   
-  sendBkSubstituted(Xc, gi);
+  sendBkSubstituted(Xc, gi.LEVEL);
 }
 
 void nbd::svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const GlobalIndex& gi) {
@@ -84,7 +84,7 @@ void nbd::svAocFw(Vectors& Xo, const Vectors& Xc, const Matrices& A_oc, const Gl
       const Matrix& A_yx = A_oc[yx];
       mvec('N', A_yx, xlocal[x], Xo[box_y], -1., 1.);
     }
-  distributeSubstituted(Xo, gi);
+  distributeSubstituted(Xo, gi.LEVEL);
 }
 
 void nbd::svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const GlobalIndex& gi) {
@@ -157,7 +157,7 @@ void nbd::permuteAndMerge(char fwbk, RHS& prev, const GlobalIndex& gprev, RHS& n
     }
 
     if (nboxes == pboxes)
-      butterflySumX(next.X, gprev);
+      butterflySumX(next.X, gprev.LEVEL);
   }
   else if (fwbk == 'B' || fwbk == 'b') {
     for (int64_t i = 0; i < nboxes; i++) {
@@ -177,7 +177,7 @@ void nbd::permuteAndMerge(char fwbk, RHS& prev, const GlobalIndex& gprev, RHS& n
       }
     }
 
-    DistributeVectorsList(prev.Xo, gprev);
+    DistributeVectorsList(prev.Xo, gprev.LEVEL);
   }
 }
 

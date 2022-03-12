@@ -2,33 +2,43 @@
 #pragma once
 
 #include "bodies.hxx"
-#include "solver.hxx"
+#include "linalg.hxx"
 
 namespace nbd {
 
-  void DistributeBodies(LocalBodies& bodies, const GlobalIndex& gi);
+  void configureComm(int64_t level, const int64_t ngbs[], int64_t ngs_len);
 
-  void DistributeVectorsList(Vectors& B, const GlobalIndex& gi);
+  void selfLocalRange(int64_t& ibegin, int64_t& iend, int64_t level);
 
-  void DistributeMatricesList(Matrices& lis, const GlobalIndex& gi);
+  void neighborsILocal(int64_t& ilocal, int64_t iglobal, int64_t level);
 
-  void DistributeDims(std::vector<int64_t>& dims, const GlobalIndex& gi);
+  void locateCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* nboxes, int64_t** ngbs, int64_t* ngbs_len);
 
-  void axatDistribute(Matrices& A, const GlobalIndex& gi);
+  void locateButterflyCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* my_twi, int64_t* twi_rank);
 
-  void butterflySumA(Matrices& A, const GlobalIndex& gi);
+  void DistributeBodies(LocalBodies& bodies, int64_t level);
 
-  void sendFwSubstituted(const Vectors& X, const GlobalIndex& gi);
+  void DistributeVectorsList(Vectors& B, int64_t level);
 
-  void sendBkSubstituted(const Vectors& X, const GlobalIndex& gi);
+  void DistributeMatricesList(Matrices& lis, int64_t level);
 
-  void recvFwSubstituted(Vectors& X, const GlobalIndex& gi);
+  void DistributeDims(std::vector<int64_t>& dims, int64_t level);
 
-  void recvBkSubstituted(Vectors& X, const GlobalIndex& gi);
+  void axatDistribute(Matrices& A, const CSC& rels, int64_t level);
 
-  void distributeSubstituted(Vectors& X, const GlobalIndex& gi);
+  void butterflySumA(Matrices& A, int64_t level);
 
-  void butterflySumX(Vectors& X, const GlobalIndex& gi);
+  void sendFwSubstituted(const Vectors& X, int64_t level);
+
+  void sendBkSubstituted(const Vectors& X, int64_t level);
+
+  void recvFwSubstituted(Vectors& X, int64_t level);
+
+  void recvBkSubstituted(Vectors& X, int64_t level);
+
+  void distributeSubstituted(Vectors& X, int64_t level);
+
+  void butterflySumX(Vectors& X, int64_t level);
 
   void startTimer(double* wtime);
 
