@@ -4,24 +4,23 @@
 
 using namespace nbd;
 
-void nbd::splitA(Matrices& A_out, const GlobalIndex& gi, const Matrices& A, const Matrices& U, const Matrices& V) {
-  const CSC& rels = gi.RELS;
-  const Matrix* vlocal = &V[gi.SELF_I * gi.BOXES];
+void nbd::splitA(Matrices& A_out, const CSC& rels, const Matrices& A, const Matrices& U, const Matrices& V, int64_t level) {
+  int64_t ibegin = 0, iend;
+  selfLocalRange(ibegin, iend, level);
+  const Matrix* vlocal = &V[ibegin];
 
   for (int64_t x = 0; x < rels.N; x++) {
     for (int64_t yx = rels.CSC_COLS[x]; yx < rels.CSC_COLS[x + 1]; yx++) {
       int64_t y = rels.CSC_ROWS[yx];
-      int64_t box_y;
-      Lookup_GlobalI(box_y, gi, y);
+      int64_t box_y = y;
+      neighborsILocal(box_y, y, level);
       utav(U[box_y], A[yx], vlocal[x], A_out[yx]);
     }
   }
 }
 
-void nbd::factorAcc(Matrices& A_cc, const GlobalIndex& gi) {
-  const CSC& rels = gi.RELS;
+void nbd::factorAcc(Matrices& A_cc, const CSC& rels) {
   int64_t lbegin = rels.CBGN;
-
   for (int64_t i = 0; i < rels.N; i++) {
     int64_t ii;
     lookupIJ(ii, rels, i + lbegin, i + lbegin);
@@ -36,8 +35,7 @@ void nbd::factorAcc(Matrices& A_cc, const GlobalIndex& gi) {
   }
 }
 
-void nbd::factorAoc(Matrices& A_oc, const Matrices& A_cc, const GlobalIndex& gi) {
-  const CSC& rels = gi.RELS;
+void nbd::factorAoc(Matrices& A_oc, const Matrices& A_cc, const CSC& rels) {
   int64_t lbegin = rels.CBGN;
 
   for (int64_t i = 0; i < rels.N; i++) {
@@ -49,8 +47,7 @@ void nbd::factorAoc(Matrices& A_oc, const Matrices& A_cc, const GlobalIndex& gi)
   }
 }
 
-void nbd::schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi) {
-  const CSC& rels = gi.RELS;
+void nbd::schurCmplm(Matrices& S, const Matrices& A_oc, const CSC& rels) {
   int64_t lbegin = rels.CBGN;
 
   for (int64_t i = 0; i < rels.N; i++) {
@@ -65,10 +62,9 @@ void nbd::schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi) {
   }
 }
 
-void nbd::axatLocal(Matrices& A, const GlobalIndex& gi) {
-  const CSC& rels = gi.RELS;
+void nbd::axatLocal(Matrices& A, const CSC& rels) {
   int64_t lbegin = rels.CBGN;
-  int64_t lend = lbegin + gi.BOXES;
+  int64_t lend = lbegin + rels.N;
 
   for (int64_t i = 0; i < rels.N; i++)
     for (int64_t ji = rels.CSC_COLS[i]; ji < rels.CSC_COLS[i + 1]; ji++) {
@@ -83,31 +79,30 @@ void nbd::axatLocal(Matrices& A, const GlobalIndex& gi) {
     }
 }
 
-Matrices* nbd::allocNodes(Nodes& nodes, const LocalDomain& domain) {
-  nodes.resize(domain.size());
-  for (int64_t i = 0; i < nodes.size(); i++) {
-    int64_t nnz = domain[i].RELS.NNZ;
+void nbd::allocNodes(Nodes& nodes, const CSC rels[], int64_t levels) {
+  nodes.resize(levels + 1);
+  for (int64_t i = 0; i <= levels; i++) {
+    int64_t nnz = rels[i].NNZ;
     nodes[i].A.resize(nnz);
     nodes[i].A_cc.resize(nnz);
     nodes[i].A_oc.resize(nnz);
     nodes[i].A_oo.resize(nnz);
     nodes[i].S.resize(nnz);
   }
-  return &(nodes.back().A);
 }
 
-void nbd::allocA(Matrices& A, const GlobalIndex& gi, const int64_t* dims) {
-  const CSC& rels = gi.RELS;
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
+void nbd::allocA(Matrices& A, const CSC& rels, const int64_t dims[], int64_t level) {
+  int64_t ibegin = 0, iend;
+  selfLocalRange(ibegin, iend, level);
 
   for (int64_t j = 0; j < rels.N; j++) {
-    int64_t box_j = lbegin + j;
+    int64_t box_j = ibegin + j;
     int64_t nbodies_j = dims[box_j];
 
     for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels.CSC_ROWS[ij];
-      int64_t box_i;
-      Lookup_GlobalI(box_i, gi, i);
+      int64_t box_i = i;
+      neighborsILocal(box_i, i, level);
       int64_t nbodies_i = dims[box_i];
 
       Matrix& A_ij = A[ij];
@@ -117,19 +112,19 @@ void nbd::allocA(Matrices& A, const GlobalIndex& gi, const int64_t* dims) {
   }
 }
 
-void nbd::allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo) {
-  const CSC& rels = gi.RELS;
-  int64_t nboxes = gi.BOXES;
+void nbd::allocSubMatrices(Node& n, const CSC& rels, const int64_t dims[], const int64_t dimo[], int64_t level) {
+  int64_t ibegin = 0, iend;
+  selfLocalRange(ibegin, iend, level);
 
   for (int64_t j = 0; j < rels.N; j++) {
-    int64_t box_j = gi.SELF_I * nboxes + j;
+    int64_t box_j = ibegin + j;
     int64_t dimo_j = dimo[box_j];
     int64_t dimc_j = dims[box_j] - dimo_j;
 
     for (int64_t ij = rels.CSC_COLS[j]; ij < rels.CSC_COLS[j + 1]; ij++) {
       int64_t i = rels.CSC_ROWS[ij];
-      int64_t box_i;
-      Lookup_GlobalI(box_i, gi, i);
+      int64_t box_i = i;
+      neighborsILocal(box_i, i, level);
       int64_t dimo_i = dimo[box_i];
       int64_t dimc_i = dims[box_i] - dimo_i;
 
@@ -141,26 +136,26 @@ void nbd::allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, 
   }
 }
 
-void nbd::factorNode(Node& n, Base& basis, const GlobalIndex& gi, double repi, const double* R, int64_t lenR) {
+void nbd::factorNode(Node& n, Base& basis, const CSC& rels, double repi, const double* R, int64_t lenR, int64_t level) {
   double btime, ftime;
   startTimer(&ftime);
   startTimer(&btime);
-  sampleA(basis, repi, gi.RELS, n.A, R, lenR);
+  sampleA(basis, repi, rels, n.A, R, lenR, level);
   stopTimer(btime, "basis time");
   
-  allocSubMatrices(n, gi, basis.DIMS.data(), basis.DIMO.data());
-  splitA(n.A_cc, gi, n.A, basis.Uc, basis.Uc);
-  splitA(n.A_oc, gi, n.A, basis.Uo, basis.Uc);
-  splitA(n.A_oo, gi, n.A, basis.Uo, basis.Uo);
+  allocSubMatrices(n, rels, &basis.DIMS[0], &basis.DIMO[0], level);
+  splitA(n.A_cc, rels, n.A, basis.Uc, basis.Uc, level);
+  splitA(n.A_oc, rels, n.A, basis.Uo, basis.Uc, level);
+  splitA(n.A_oo, rels, n.A, basis.Uo, basis.Uo, level);
 
-  factorAcc(n.A_cc, gi);
-  factorAoc(n.A_oc, n.A_cc, gi);
-  schurCmplm(n.S, n.A_oc, gi);
+  factorAcc(n.A_cc, rels);
+  factorAoc(n.A_oc, n.A_cc, rels);
+  schurCmplm(n.S, n.A_oc, rels);
 
-  axatLocal(n.S, gi);
+  axatLocal(n.S, rels);
   double ct;
   startTimer(&ct);
-  axatDistribute(n.S, gi.RELS, gi.LEVEL);
+  axatDistribute(n.S, rels, level);
   stopTimer(ct, "comm3 time");
 
   for (int64_t i = 0; i < n.S.size(); i++)
@@ -168,16 +163,13 @@ void nbd::factorNode(Node& n, Base& basis, const GlobalIndex& gi, double repi, c
   stopTimer(ftime, "factor time");
 }
 
-void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const Node& Aprev, const Base& bsprev, const GlobalIndex& Gprev) {
+void nbd::nextNode(Node& Anext, Base& bsnext, const CSC& rels_up, const Node& Aprev, const Base& bsprev, const CSC& rels_low, int64_t nlevel) {
   Matrices& Mup = Anext.A;
   const Matrices& Mlow = Aprev.A_oo;
-  const CSC& rels_up = Gnext.RELS;
-  const CSC& rels_low = Gprev.RELS;
 
-  nextBasisDims(bsnext, bsprev);
-  allocA(Mup, Gnext, bsnext.DIMS.data());
-  int64_t nbegin = Gnext.RELS.CBGN;
-  int64_t pbegin = Gprev.RELS.CBGN;
+  nextBasisDims(bsnext, bsprev, nlevel);
+  allocA(Mup, rels_up, &bsnext.DIMS[0], nlevel);
+  int64_t nbegin = rels_up.CBGN;
 
   for (int64_t j = 0; j < rels_up.N; j++) {
     int64_t gj = j + nbegin;
@@ -201,41 +193,42 @@ void nbd::nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const No
 
       if (i01 >= 0) {
         const Matrix& m01 = Mlow[i01];
-        int64_t nbegin = Mup[ij].N - m01.N;
-        cpyMatToMat(m01.M, m01.N, m01, Mup[ij], 0, 0, 0, nbegin);
+        int64_t xbegin = Mup[ij].N - m01.N;
+        cpyMatToMat(m01.M, m01.N, m01, Mup[ij], 0, 0, 0, xbegin);
       }
 
       if (i10 >= 0) {
         const Matrix& m10 = Mlow[i10];
-        int64_t mbegin = Mup[ij].M - m10.M;
-        cpyMatToMat(m10.M, m10.N, m10, Mup[ij], 0, 0, mbegin, 0);
+        int64_t ybegin = Mup[ij].M - m10.M;
+        cpyMatToMat(m10.M, m10.N, m10, Mup[ij], 0, 0, ybegin, 0);
       }
 
       if (i11 >= 0) {
         const Matrix& m11 = Mlow[i11];
-        int64_t mbegin = Mup[ij].M - m11.M;
-        int64_t nbegin = Mup[ij].N - m11.N;
-        cpyMatToMat(m11.M, m11.N, m11, Mup[ij], 0, 0, mbegin, nbegin);
+        int64_t ybegin = Mup[ij].M - m11.M;
+        int64_t xbegin = Mup[ij].N - m11.N;
+        cpyMatToMat(m11.M, m11.N, m11, Mup[ij], 0, 0, ybegin, xbegin);
       }
     }
   }
   
-  if (rels_low.N == rels_up.N)
-    butterflySumA(Mup, Gprev.LEVEL);
+  int64_t clevel = nlevel + 1;
+  if (rels_low.N == 1)
+    butterflySumA(Mup, clevel);
 }
 
 
-void nbd::factorA(Nodes& A, Basis& B, const LocalDomain& domain, double repi, const double* R, int64_t lenR) {
-  for (int64_t i = domain.size() - 1; i > 0; i--) {
-    const GlobalIndex& gi = domain[i];
+void nbd::factorA(Node A[], Base B[], const GlobalIndex rels[], int64_t levels, double repi, const double* R, int64_t lenR) {
+  for (int64_t i = levels; i > 0; i--) {
     Node& Ai = A[i];
     Base& Bi = B[i];
-    factorNode(Ai, Bi, gi, repi, R, lenR);
+    const CSC& ri = rels[i].RELS;
+    factorNode(Ai, Bi, ri, repi, R, lenR, i);
 
-    const GlobalIndex& gn = domain[i - 1];
     Node& An = A[i - 1];
     Base& Bn = B[i - 1];
-    nextNode(An, Bn, gn, Ai, Bi, gi);
+    const CSC& rn = rels[i - 1].RELS;
+    nextNode(An, Bn, rn, Ai, Bi, ri, i);
   }
   chol_decomp(A[0].A[0]);
 }

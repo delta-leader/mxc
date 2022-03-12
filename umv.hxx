@@ -15,26 +15,26 @@ namespace nbd {
 
   typedef std::vector<Node> Nodes;
 
-  void splitA(Matrices& A_out, const GlobalIndex& gi, const Matrices& A, const Matrices& U, const Matrices& V);
+  void splitA(Matrices& A_out, const CSC& rels, const Matrices& A, const Matrices& U, const Matrices& V, int64_t level);
 
-  void factorAcc(Matrices& A_cc, const GlobalIndex& gi);
+  void factorAcc(Matrices& A_cc, const CSC& rels);
 
-  void factorAoc(Matrices& A_oc, const Matrices& A_cc, const GlobalIndex& gi);
+  void factorAoc(Matrices& A_oc, const Matrices& A_cc, const CSC& rels);
 
-  void schurCmplm(Matrices& S, const Matrices& A_oc, const GlobalIndex& gi);
+  void schurCmplm(Matrices& S, const Matrices& A_oc, const CSC& rels);
 
-  void axatLocal(Matrices& A, const GlobalIndex& gi);
+  void axatLocal(Matrices& A, const CSC& rels);
 
-  Matrices* allocNodes(Nodes& nodes, const LocalDomain& domain);
+  void allocNodes(Nodes& nodes, const CSC rels[], int64_t levels);
 
-  void allocA(Matrices& A, const GlobalIndex& gi, const int64_t* dims);
+  void allocA(Matrices& A, const CSC& rels, const int64_t dims[], int64_t level);
 
-  void allocSubMatrices(Node& n, const GlobalIndex& gi, const int64_t* dims, const int64_t* dimo);
+  void allocSubMatrices(Node& n, const CSC& rels, const int64_t dims[], const int64_t dimo[], int64_t level);
 
-  void factorNode(Node& n, Base& basis, const GlobalIndex& gi, double repi, const double* R, int64_t lenR);
+  void factorNode(Node& n, Base& basis, const CSC& rels, double repi, const double* R, int64_t lenR, int64_t level);
 
-  void nextNode(Node& Anext, Base& bsnext, const GlobalIndex& Gnext, const Node& Aprev, const Base& bsprev, const GlobalIndex& Gprev);
+  void nextNode(Node& Anext, Base& bsnext, const CSC& rels_up, const Node& Aprev, const Base& bsprev, const CSC& rels_low, int64_t nlevel);
 
-  void factorA(Nodes& A, Basis& B, const LocalDomain& domain, double repi, const double* R, int64_t lenR);
+  void factorA(Node A[], Base B[], const GlobalIndex rels[], int64_t levels, double repi, const double* R, int64_t lenR);
 
 };

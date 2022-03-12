@@ -7,7 +7,6 @@
 namespace nbd {
 
   struct Base {
-    int64_t LEVEL;
     std::vector<int64_t> DIMS;
     std::vector<int64_t> DIMO;
     Matrices Uc;
@@ -24,10 +23,10 @@ namespace nbd {
 
   void allocBasis(Basis& basis, int64_t levels, const int64_t ldims[]);
 
-  void allocUcUo(Base& basis, const Matrices& C);
+  void allocUcUo(Base& basis, const Matrices& C, int64_t level);
 
-  void sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, const double* R, int64_t lenR);
+  void sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, const double* R, int64_t lenR, int64_t level);
 
-  void nextBasisDims(Base& bsnext, const Base& bsprev);
+  void nextBasisDims(Base& bsnext, const Base& bsprev, int64_t nlevel);
 
 };

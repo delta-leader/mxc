@@ -60,7 +60,6 @@ void nbd::allocBasis(Basis& basis, int64_t levels, const int64_t ldims[]) {
   for (int64_t i = 0; i <= levels; i++) {
     int64_t nodes = (int64_t)1 << i;
     neighborContentLength(nodes, i);
-    basis[i].LEVEL = i;
     basis[i].DIMS.resize(nodes);
     basis[i].DIMO.resize(nodes);
     basis[i].Uo.resize(nodes);
@@ -72,9 +71,8 @@ void nbd::allocBasis(Basis& basis, int64_t levels, const int64_t ldims[]) {
   std::copy(ldims, ldims + nodes, leaf.DIMS.begin());
 }
 
-void nbd::allocUcUo(Base& basis, const Matrices& C) {
+void nbd::allocUcUo(Base& basis, const Matrices& C, int64_t level) {
   int64_t len = basis.DIMS.size();
-  int64_t level = basis.LEVEL;
   int64_t lbegin = 0;
   int64_t lend = len;
   selfLocalRange(lbegin, lend, level);
@@ -96,7 +94,7 @@ void nbd::allocUcUo(Base& basis, const Matrices& C) {
   }
 }
 
-void nbd::sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, const double* R, int64_t lenR) {
+void nbd::sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, const double* R, int64_t lenR, int64_t level) {
   Matrices C1(basis.DIMS.size());
   Matrices C2(basis.DIMS.size());
 
@@ -109,33 +107,31 @@ void nbd::sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, 
     zeroMatrix(C2[i]);
   }
 
-  int64_t level = basis.LEVEL;
   sampleC1(C1, rels, A, R, lenR, level);
   DistributeMatricesList(C1, level);
   sampleC2(C2, rels, A, C1, level);
   orthoBasis(repi, C2, &basis.DIMO[0], level);
   DistributeDims(&basis.DIMO[0], level);
-  allocUcUo(basis, C2);
+  allocUcUo(basis, C2, level);
   
   DistributeMatricesList(basis.Uc, level);
   DistributeMatricesList(basis.Uo, level);
 }
 
-void nbd::nextBasisDims(Base& bsnext, const Base& bsprev) {
-  int64_t level = bsnext.LEVEL;
+void nbd::nextBasisDims(Base& bsnext, const Base& bsprev, int64_t nlevel) {
   int64_t ibegin = 0;
   int64_t iend = bsnext.DIMS.size();
-  selfLocalRange(ibegin, iend, level);
+  selfLocalRange(ibegin, iend, nlevel);
   int64_t nboxes = iend - ibegin;
 
   int64_t* dims = &bsnext.DIMS[0];
   const int64_t* dimo = &bsprev.DIMO[0];
-  int64_t clevel = bsprev.LEVEL;
+  int64_t clevel = nlevel + 1;
 
   for (int64_t i = 0; i < nboxes; i++) {
     int64_t nloc = i + ibegin;
     int64_t nrnk = nloc;
-    neighborsIGlobal(nrnk, nloc, level);
+    neighborsIGlobal(nrnk, nloc, nlevel);
 
     int64_t c0rnk = nrnk << 1;
     int64_t c1rnk = (nrnk << 1) + 1;
@@ -147,6 +143,6 @@ void nbd::nextBasisDims(Base& bsnext, const Base& bsprev) {
     dims[nloc] = c0 >= 0 ? dimo[c0] : 0;
     dims[nloc] = dims[nloc] + (c1 >= 0 ? dimo[c1] : 0);
   }
-  DistributeDims(dims, bsnext.LEVEL);
+  DistributeDims(dims, nlevel);
 }
 
