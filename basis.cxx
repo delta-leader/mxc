@@ -144,8 +144,8 @@ void nbd::nextBasisDims(Base& bsnext, const Base& bsprev) {
     neighborsILocal(c0, c0rnk, clevel);
     neighborsILocal(c1, c1rnk, clevel);
 
-    dims[nloc] = c0 > 0 ? dimo[c0] : 0;
-    dims[nloc] = dims[nloc] + c1 > 0 ? dimo[c1] : 0;
+    dims[nloc] = c0 >= 0 ? dimo[c0] : 0;
+    dims[nloc] = dims[nloc] + (c1 >= 0 ? dimo[c1] : 0);
   }
   DistributeDims(dims, bsnext.LEVEL);
 }

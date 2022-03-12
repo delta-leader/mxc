@@ -47,11 +47,11 @@ int main(int argc, char* argv[]) {
   BlockCSC(*A, ef, *leaf, bodies);
 
   Basis basis;
-  allocBasis(basis, local, bodies.LENS.data());
+  allocBasis(basis, leaf->LEVEL, bodies.LENS.data());
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) startTimer(&ftime);
-  factorA(nodes, basis, local, 1.e-4, R.data(), R.size());
+  factorA(nodes, basis, local, 1.e-6, R.data(), R.size());
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) stopTimer(ftime, "factor");
