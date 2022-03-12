@@ -35,6 +35,6 @@ namespace nbd {
 
   void nextNode(Node& Anext, Base& bsnext, const CSC& rels_up, const Node& Aprev, const Base& bsprev, const CSC& rels_low, int64_t nlevel);
 
-  void factorA(Node A[], Base B[], const GlobalIndex rels[], int64_t levels, double repi, const double* R, int64_t lenR);
+  void factorA(Node A[], Base B[], const CSC rels[], int64_t levels, double repi, const double* R, int64_t lenR);
 
 };

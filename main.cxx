@@ -38,12 +38,13 @@ int main(int argc, char* argv[]) {
   LocalBodies bodies;
 
   Global_Partition(domain, mpi_rank, mpi_size, Nbody, Ncrit, dim, 0., std::pow(Nbody, 1. / dim));
-  GlobalIndex* leaf = Local_Partition(local, domain, theta);
+  std::vector<CSC> rels;
+  GlobalIndex* leaf = Local_Partition(local, rels, domain, theta);
 
   Random_bodies(bodies, domain, *leaf, std::pow(987, mpi_rank));
 
   Nodes nodes;
-  allocNodes(nodes, local);
+  allocNodes(nodes, &rels[0], leaf->LEVEL);
   Matrices& A = nodes.back().A;
   BlockCSC(A, ef, *leaf, bodies);
 
@@ -52,7 +53,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) startTimer(&ftime);
-  factorA(&nodes[0], &basis[0], local, leaf->LEVEL, 1.e-6, R.data(), R.size());
+  factorA(&nodes[0], &basis[0], &rels[0], leaf->LEVEL, 1.e-6, R.data(), R.size());
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) stopTimer(ftime, "factor");

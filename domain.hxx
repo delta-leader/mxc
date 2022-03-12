@@ -49,7 +49,7 @@ namespace nbd {
 
   void Interactions(CSC& rels, int64_t y, int64_t xbegin, int64_t xend, int64_t dim, int64_t theta);
 
-  GlobalIndex* Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, int64_t theta);
+  GlobalIndex* Local_Partition(LocalDomain& loDomain, std::vector<CSC>& rels, const GlobalDomain& goDomain, int64_t theta);
 
   void Local_bounds(double* Xmin, double* Xmax, const GlobalDomain& goDomain);
 

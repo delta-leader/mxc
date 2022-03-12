@@ -125,11 +125,12 @@ void nbd::Interactions(CSC& rels, int64_t y, int64_t xbegin, int64_t xend, int64
 }
 
 
-GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goDomain, int64_t theta) {
+GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, std::vector<CSC>& rels, const GlobalDomain& goDomain, int64_t theta) {
   int64_t rank = goDomain.MY_RANK;
   int64_t my_level = goDomain.MY_LEVEL;
 
   loDomain.resize(goDomain.LEVELS + 1);
+  rels.resize(goDomain.LEVELS + 1);
   for (int64_t i = 0; i <= goDomain.LEVELS; i++) {
     GlobalIndex& gi = loDomain[i];
 
@@ -162,6 +163,7 @@ GlobalIndex* nbd::Local_Partition(LocalDomain& loDomain, const GlobalDomain& goD
     int64_t xbegin = my_rank * gi.BOXES;
     int64_t xend = xbegin + gi.BOXES;
     Interactions(gi.RELS, y, xbegin, xend, goDomain.DIM, theta);
+    Interactions(rels[i], y, xbegin, xend, goDomain.DIM, theta);
 
     gi.LEVEL = i;
     configureComm(i, &gi.NGB_RNKS[0], len);
