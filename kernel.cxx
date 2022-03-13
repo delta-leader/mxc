@@ -167,12 +167,11 @@ void selectMultipole(Cell& cell, const int64_t arows[], int64_t rank) {
   std::copy(mc.begin(), mc.end(), cell.Multipole.begin());
 }
 
-void nbd::P2Mmat(EvalFunc ef, Cell* ci, const Bodies& rm, int64_t dim, Matrix& u, double epi, int64_t rank) {
+void nbd::P2Mmat(EvalFunc ef, Cell* ci, const Body rm[], int64_t n, int64_t dim, Matrix& u, double epi, int64_t rank) {
   Bodies src;
   childMultipoles(src, *ci, dim);
 
   int64_t m = src.size();
-  int64_t n = rm.size();
   if (m > 0 && n > 0) {
     std::vector<double> a(m * n);
     std::vector<double> ax(m * rank);

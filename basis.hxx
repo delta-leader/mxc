@@ -2,7 +2,6 @@
 #pragma once
 
 #include "build_tree.hxx"
-#include "linalg.hxx"
 
 namespace nbd {
 

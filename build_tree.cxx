@@ -267,7 +267,7 @@ void nbd::evaluateBasis(Matrices& basis, EvalFunc ef, Cells& cells, Cell* c, con
   Bodies remote;
   remoteBodies(remote, sp_pts, *c, bodies, dim);
   int64_t i = c - &cells[0];
-  P2Mmat(ef, c, remote, dim, basis[i], 1.e-12, rank);
+  P2Mmat(ef, c, &remote[0], remote.size(), dim, basis[i], 1.e-12, rank);
 }
 
 void nbd::traverse(EvalFunc ef, Cells& cells, int64_t dim, Matrices& base, const Bodies& bodies, int64_t sp_pts, int64_t theta, int64_t rank) {

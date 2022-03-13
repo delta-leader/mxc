@@ -73,7 +73,7 @@ void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
   cMatrix(U, A.M, rank);
   cMatrix(V, A.N, rank);
 
-  dlra(prec ? repi : 0., A.M, A.N, rank, A.A.data(), A.M, U.A.data(), A.M, V.A.data(), A.N, rnk_out);
+  dlra(prec ? repi : 0., A.M, A.N, rank, A.A.data(), A.M, U.A.data(), A.M, V.A.data(), A.N, rnk_out, NULL);
   rank = *rnk_out;
 
   if (A.N < A.M)
