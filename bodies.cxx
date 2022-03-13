@@ -177,12 +177,13 @@ Vector* nbd::randomVectors(Vectors& B, const GlobalIndex& gi, const LocalBodies&
   return &B[lbegin];
 }
 
-void nbd::blockAxEb(Vector* B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies) {
+void nbd::blockAxEb(Vectors& B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies) {
   int64_t lbegin = gi.SELF_I * gi.BOXES;
   int64_t dim = bodies.DIM;
+  Vector *Bloc = &B[lbegin];
   for (int64_t i = 0; i < gi.BOXES; i++) {
-    cVector(B[i], bodies.LENS[i + lbegin]);
-    zeroVector(B[i]);
+    cVector(Bloc[i], bodies.LENS[i + lbegin]);
+    zeroVector(Bloc[i]);
   }
   
   const CSC& rels = gi.RELS;
@@ -199,7 +200,7 @@ void nbd::blockAxEb(Vector* B, EvalFunc ef, const Vectors& X, const GlobalIndex&
       int64_t nbodies_i = bodies.LENS[box_i];
       int64_t offset_i = bodies.OFFSETS[box_i] * dim;
       const double* bodies_i = &bodies.BODIES[offset_i];
-      mvec_kernel(ef, nbodies_j, nbodies_i, bodies_j, bodies_i, dim, X[box_i].X.data(), B[j].X.data());
+      mvec_kernel(ef, nbodies_j, nbodies_i, bodies_j, bodies_i, dim, X[box_i].X.data(), Bloc[j].X.data());
     }
   }
 }

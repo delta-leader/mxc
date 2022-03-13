@@ -30,7 +30,7 @@ namespace nbd {
 
   Vector* randomVectors(Vectors& B, const GlobalIndex& gi, const LocalBodies& bodies, double min, double max, unsigned int seed);
 
-  void blockAxEb(Vector* B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies);
+  void blockAxEb(Vectors& B, EvalFunc ef, const Vectors& X, const GlobalIndex& gi, const LocalBodies& bodies);
 
 
 };

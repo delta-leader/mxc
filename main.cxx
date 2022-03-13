@@ -62,12 +62,12 @@ int main(int argc, char* argv[]) {
   Vector* Xlocal = randomVectors(X, *leaf, bodies, -1., 1., std::pow(654, mpi_rank));
 
   RHSS rhs;
-  Vector* B = allocRightHandSides(rhs, basis, local);
-  blockAxEb(B, ef, X, *leaf, bodies);
+  allocRightHandSides(rhs, &basis[0], leaf->LEVEL);
+  blockAxEb(rhs.back().X, ef, X, *leaf, bodies);
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) startTimer(&ftime);
-  solveA(rhs, nodes, basis, local);
+  solveA(&rhs[0], &nodes[0], &basis[0], &rels[0], leaf->LEVEL);
 
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) stopTimer(ftime, "solve");
