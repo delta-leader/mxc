@@ -209,15 +209,16 @@ void nbd::solveA(RHS X[], const Node A[], const Base B[], const CSC rels[], int6
   }
 }
 
-void nbd::solveRelErr(double* err_out, const RHS& X, const Vectors& ref, const GlobalIndex& gi) {
-  int64_t lbegin = gi.SELF_I * gi.BOXES;
-  int64_t lend = lbegin + gi.BOXES;
+void nbd::solveRelErr(double* err_out, const Vector X[], const Vectors& ref, int64_t level) {
+  int64_t ibegin = 0;
+  int64_t iend = ref.size();
+  selfLocalRange(ibegin, iend, level);
   double err = 0.;
   double nrm = 0.;
 
-  for (int64_t i = lbegin; i < lend; i++) {
+  for (int64_t i = ibegin; i < iend; i++) {
     double e, n;
-    verr2(X.X[i], ref[i], &e);
+    verr2(X[i], ref[i], &e);
     vnrm2(ref[i], &n);
     err = err + e;
     nrm = nrm + n;

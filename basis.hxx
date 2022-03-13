@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include "domain.hxx"
+#include "build_tree.hxx"
 #include "linalg.hxx"
 
 namespace nbd {

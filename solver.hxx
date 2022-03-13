@@ -29,7 +29,7 @@ namespace nbd {
 
   void solveA(RHS X[], const Node A[], const Base B[], const CSC rels[], int64_t levels);
 
-  void solveRelErr(double* err_out, const RHS& X, const Vectors& ref, const GlobalIndex& gi);
+  void solveRelErr(double* err_out, const Vector X[], const Vectors& ref, int64_t level);
 
 
 };

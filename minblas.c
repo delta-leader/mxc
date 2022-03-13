@@ -7,7 +7,7 @@
 
 int64_t FLOPS = 0;
 
-void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, double* u, int64_t ldu, double* vt, int64_t ldvt, int64_t* rank) {
+void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, double* u, int64_t ldu, double* vt, int64_t ldvt, int64_t* rank, int64_t* piv) {
   double nrm = 0.;
   double epi2 = epi * epi;
   double n2 = 1.;
@@ -30,6 +30,8 @@ void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, d
     }
 
     if (amax > 0.) {
+      if (piv != NULL)
+        piv[i] = ymax;
       int64_t xp = ymax / lda;
       int64_t yp = ymax - xp * lda;
       double ap = 1. / a[ymax];
@@ -97,6 +99,32 @@ void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, d
   FLOPS = FLOPS + 2 * m * n * i;
   if (epi2 > 0 && i == k)
     fprintf(stderr, "LRA reached full iterations.\n");
+}
+
+void didrow(double epi, int64_t m, int64_t n, int64_t k, double* a, int64_t lda, double* x, int64_t ldx, int64_t* arow, int64_t* rank) {
+  int64_t rnk;
+  double* u = (double*)malloc(sizeof(double) * m * k);
+  double* vt = (double*)malloc(sizeof(double)* n * k);
+  dlra(epi, m, n, k, a, lda, u, m, vt, n, &rnk, arow);
+  *rank = rnk;
+
+  double* r = (double*)malloc(sizeof(double) * rnk * rnk);
+  double* q = (double*)malloc(sizeof(double) * rnk * rnk);
+  for (int64_t i = 0; i < rnk; i++) {
+    int64_t ymax = arow[i];
+    int64_t xp = ymax / lda;
+    int64_t yp = ymax - xp * lda;
+    arow[i] = yp;
+    dcopy(rnk, u + yp, m, r + i, rnk);
+  }
+  dorth('F', rnk, rnk, r, rnk, q, rnk);
+  dtrsmr_right(m, rnk, r, rnk, u, m);
+  dgemm('N', 'T', m, rnk, rnk, 1., u, m, q, rnk, 0., x, ldx);
+
+  free(u);
+  free(vt);
+  free(r);
+  free(q);
 }
 
 void dorth(char ecoq, int64_t m, int64_t n, double* r, int64_t ldr, double* q, int64_t ldq) {
@@ -212,6 +240,25 @@ void dtrsmlt_right(int64_t m, int64_t n, const double* a, int64_t lda, double* b
   FLOPS = FLOPS + n * m * n / 3;
 }
 
+void dtrsmr_right(int64_t m, int64_t n, const double* a, int64_t lda, double* b, int64_t ldb) {
+  for (int64_t i = 0; i < n; i++) {
+    double p = a[i + i * lda];
+    double invp = 1. / p;
+
+    for (int64_t j = 0; j < m; j++)
+      b[j + i * ldb] = b[j + i * ldb] * invp;
+
+    for (int64_t k = i + 1; k < n; k++) {
+      double c = a[i + k * lda];
+      for (int64_t j = 0; j < m; j++) {
+        double r = b[j + i * ldb];
+        b[j + k * ldb] = b[j + k * ldb] - r * c;
+      }
+    }
+  }
+  FLOPS = FLOPS + n * m * n / 3;
+}
+
 void dtrsml_left(int64_t m, int64_t n, const double* a, int64_t lda, double* b, int64_t ldb) {
   for (int64_t i = 0; i < m; i++) {
     double p = a[i + i * lda];
@@ -241,6 +288,25 @@ void dtrsmlt_left(int64_t m, int64_t n, const double* a, int64_t lda, double* b,
     
     for (int64_t k = 0; k < i; k++) {
       double r = a[i + k * lda];
+      for (int64_t j = 0; j < n; j++) {
+        double c = b[i + j * ldb];
+        b[k + j * ldb] = b[k + j * ldb] - r * c;
+      }
+    }
+  }
+  FLOPS = FLOPS + m * n * m / 3;
+}
+
+void dtrsmr_left(int64_t m, int64_t n, const double* a, int64_t lda, double* b, int64_t ldb) {
+  for (int64_t i = m - 1; i >= 0; i--) {
+    double p = a[i + i * lda];
+    double invp = 1. / p;
+
+    for (int64_t j = 0; j < n; j++)
+      b[i + j * ldb] = b[i + j * ldb] * invp;
+
+    for (int64_t k = 0; k < i; k++) {
+      double r = a[k + i * lda];
       for (int64_t j = 0; j < n; j++) {
         double c = b[i + j * ldb];
         b[k + j * ldb] = b[k + j * ldb] - r * c;
@@ -332,6 +398,14 @@ void dscal(int64_t n, double alpha, double* x, int64_t incx) {
 void daxpy(int64_t n, double alpha, const double* x, int64_t incx, double* y, int64_t incy) {
   for (int64_t i = 0; i < n; i++)
     y[i * incy] = y[i * incy] + alpha * x[i * incx];
+  FLOPS = FLOPS + 2 * n;
+}
+
+void ddot(int64_t n, const double* x, int64_t incx, const double* y, int64_t incy, double* result) {
+  double s = 0.;
+  for (int64_t i = 0; i < n; i++)
+    s = s + y[i * incy] * x[i * incx];
+  *result = s;
   FLOPS = FLOPS + 2 * n;
 }
 

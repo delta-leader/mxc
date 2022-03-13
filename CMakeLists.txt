@@ -12,12 +12,13 @@ include_directories(./)
 
 add_executable(main
   minblas.c minblas.h
-  domain.cxx domain.hxx
+  build_tree.cxx build_tree.hxx
   kernel.cxx kernel.hxx
   linalg.cxx linalg.hxx
   bodies.cxx bodies.hxx
   basis.cxx basis.hxx
   umv.cxx umv.hxx
+  h2mv.cxx h2mv.hxx
   solver.cxx solver.hxx
   dist.cxx dist.hxx
   main.cxx

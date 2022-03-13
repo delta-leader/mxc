@@ -1,8 +1,7 @@
 
 #pragma once
 
-#include "bodies.hxx"
-#include "linalg.hxx"
+#include "build_tree.hxx"
 
 namespace nbd {
 
@@ -19,8 +18,6 @@ namespace nbd {
   void locateCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* nboxes, int64_t** ngbs, int64_t* ngbs_len);
 
   void locateButterflyCOMM(int64_t level, int64_t* my_ind, int64_t* my_rank, int64_t* my_twi, int64_t* twi_rank);
-
-  void DistributeBodies(LocalBodies& bodies, int64_t level);
 
   void DistributeVectorsList(Vectors& B, int64_t level);
 
