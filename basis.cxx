@@ -55,7 +55,7 @@ void nbd::orthoBasis(double repi, Matrices& C, int64_t dims_o[], int64_t level) 
     orthoBase(repi, C[i], &dims_o[i]);
 }
 
-void nbd::allocBasis(Basis& basis, int64_t levels, const int64_t ldims[]) {
+void nbd::allocBasis(Basis& basis, int64_t levels) {
   basis.resize(levels + 1);
   for (int64_t i = 0; i <= levels; i++) {
     int64_t nodes = (int64_t)1 << i;
@@ -65,10 +65,41 @@ void nbd::allocBasis(Basis& basis, int64_t levels, const int64_t ldims[]) {
     basis[i].Uo.resize(nodes);
     basis[i].Uc.resize(nodes);
   }
+}
 
-  Base& leaf = basis.back();
-  int64_t nodes = leaf.DIMS.size();
-  std::copy(ldims, ldims + nodes, leaf.DIMS.begin());
+void nbd::fillDimsFromCell(Base& basis, const Cell* cell, int64_t level) {
+  int64_t ibegin = 0;
+  int64_t iend = basis.DIMS.size();
+  selfLocalRange(ibegin, iend, level);
+  int64_t nodes = iend - ibegin;
+
+  int64_t len = 0;
+  std::vector<const Cell*> leaves(nodes);
+  findCellsAtLevel(&leaves[0], &len, cell, level);
+  for (int64_t i = 0; i < len; i++) {
+    const Cell* ci = leaves[i];
+    int64_t ii = ci->ZID;
+    int64_t ni = ci->NBODY;
+    if (ci->NCHILD > 0) {
+      ni = 0;
+      for (int64_t n = 0; n < ci->NCHILD; n++)
+        ni = ni + ci->CHILD[n].Multipole.size();
+    }
+    int64_t mi = ci->Multipole.size();
+    int64_t box_i = ii;
+    neighborsILocal(box_i, ii, level);
+
+    basis.DIMS[box_i] = ni;
+    /*if (mi > 0) {
+      basis.DIMO[box_i] = mi;
+      cMatrix(basis.Uo[box_i], mi, ni);
+      cpyFromMatrix('N', ci->Base, basis.Uo[box_i].A.data());
+    }*/
+  }
+
+  DistributeDims(&basis.DIMS[0], level);
+  //DistributeDims(&basis.DIMO[0], level);
+  //DistributeMatricesList(basis.Uo, level);
 }
 
 void nbd::allocUcUo(Base& basis, const Matrices& C, int64_t level) {
@@ -117,6 +148,7 @@ void nbd::sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, 
   DistributeMatricesList(basis.Uc, level);
   DistributeMatricesList(basis.Uo, level);
 }
+
 
 void nbd::nextBasisDims(Base& bsnext, const Base& bsprev, int64_t nlevel) {
   int64_t ibegin = 0;

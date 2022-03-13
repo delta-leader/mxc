@@ -48,9 +48,11 @@ void nbd::eval(EvalFunc ef, const Body* bi, const Body* bj, int64_t dim, double*
 }
 
 
-void nbd::P2P(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const double x[], double b[]) {
+void nbd::P2P(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const Vector& X, Vector& B) {
   int64_t m = ci->NBODY;
   int64_t n = cj->NBODY;
+  const double* x = &X.X[0];
+  double* b = &B.X[0];
 
   for (int64_t i = 0; i < m; i++) {
     double sum = b[i];
@@ -79,25 +81,40 @@ void nbd::P2Pmat(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, Matri
   }
 }
 
-
-void nbd::M2L(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const double M[], double L[]) {
+void nbd::M2L(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const double m[], double l[]) {
   const std::vector<int64_t>& mi = ci->Multipole;
   const std::vector<int64_t>& mj = cj->Multipole;
-  int64_t m = mi.size();
-  int64_t n = mj.size();
-  const double* mm = &M[cj->MPOS];
-  double* ll = &L[ci->MPOS];
+  int64_t y = mi.size();
+  int64_t x = mj.size();
 
-  for (int64_t i = 0; i < m; i++) {
+  for (int64_t i = 0; i < y; i++) {
     int64_t bi = mi[i];
-    double sum = ll[i];
-    for (int64_t j = 0; j < n; j++) {
+    double sum = l[i];
+    for (int64_t j = 0; j < x; j++) {
       double r2;
       int64_t bj = mj[j];
       eval(ef, ci->BODY + bi, cj->BODY + bj, dim, &r2);
-      sum += r2 * mm[j];
+      sum += r2 * m[j];
     }
-    ll[i] = sum;
+    l[i] = sum;
+  }
+}
+
+void nbd::M2Lc(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const Vector& M, Vector& L) {
+  int64_t off_m = 0;
+  for (int64_t j = 0; j < cj->NCHILD; j++) {
+    const Cell* ccj = cj->CHILD + j;
+    int64_t off_l = 0;
+    for (int64_t i = 0; i < ci->NCHILD; i++) {
+      const Cell* cci = ci->CHILD + i;
+      int64_t len_far = cci->listFar.size();
+      for (int64_t k = 0; k < len_far; k++)
+        if (cci->listFar[k] == ccj)
+          M2L(ef, cci, ccj, dim, &M.X[off_m], &L.X[off_l]);
+
+      off_l = off_l + cci->Multipole.size();
+    }
+    off_m = off_m + ccj->Multipole.size();
   }
 }
 
@@ -139,6 +156,7 @@ void childMultipoles(Bodies& multipole, Cell& cell, int64_t dim) {
         int64_t nloc = loc + c.Multipole[n];
         for (int64_t d = 0; d < dim; d++)
           multipole[count].X[d] = cell.BODY[nloc].X[d];
+        multipole[count].B = cell.BODY[nloc].B;
         cell.Multipole[count] = nloc;
         count += 1;
       }
@@ -254,68 +272,3 @@ void nbd::L2C(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, Matrix& 
   }
 }
 
-void nbd::P2M(const Cell* cell, const Matrix& ba, const double x[], double m[]) {
-  int64_t mm = cell->NBODY;
-  int64_t n = cell->Multipole.size();
-  int64_t m_off = cell->MPOS;
-  dgemv('T', mm, n, 1., &ba.A[0], mm, x, 1, 0., &m[m_off], 1);
-}
-
-void nbd::M2M(const Cell* cell, const Matrix& ba, double m[]) {
-  int64_t n = cell->Multipole.size();
-  double* m_parent = &m[cell->MPOS];
-  int64_t u_off = 0;
-  if (ba.M > 0)
-    for (int64_t j = 0; j < cell->NCHILD; j++) {
-      const Cell* cj = cell->CHILD + j;
-      int64_t jj = cj->ZID;
-      int64_t mj = cj->Multipole.size();
-      int64_t m_off = cj->MPOS;
-      dgemv('T', mj, n, 1., &ba.A[u_off], ba.M, &m[m_off], 1, 1., m_parent, 1);
-      u_off += mj;
-    }
-}
-
-void nbd::L2L(const Cell* cell, const Matrix& ba, double l[]) {
-  int64_t n = cell->Multipole.size();
-  const double* l_parent = &l[cell->MPOS];
-  int64_t u_off = 0;
-  if (ba.M > 0)
-    for (int64_t j = 0; j < cell->NCHILD; j++) {
-      const Cell* cj = cell->CHILD + j;
-      int64_t m = cj->Multipole.size();
-      int64_t l_off = cj->MPOS;
-      dgemv('N', m, n, 1., &ba.A[u_off], ba.M, l_parent, 1, 1., &l[l_off], 1);
-      u_off += m;
-    }
-}
-
-void nbd::L2P(const Cell* cell, const Matrix& ba, const double l[], double b[]) {
-  int64_t m = cell->NBODY;
-  int64_t n = cell->Multipole.size();
-  int64_t l_off = cell->MPOS;
-  dgemv('N', m, n, 1., &ba.A[0], m, &l[l_off], 1, 0., b, 1);
-}
-
-void nbd::M2X(const Cell* cell, const double m[], double x[]) {
-  int64_t n = cell->Multipole.size();
-  int64_t m_off = cell->MPOS;
-  dcopy(n, &m[m_off], 1, x, 1);
-}
-
-void nbd::X2M(const Cell* cell, const double x[], double m[]) {
-  int64_t n = cell->Multipole.size();
-  int64_t m_off = cell->MPOS;
-  dcopy(n, x, 1, &m[m_off], 1);
-}
-
-void nbd::factorD(Matrix& a) {
-  int64_t n = a.M;
-  dpotrf(n, &a.A[0], n);
-}
-
-void nbd::invD(const Matrix& a, double* x) {
-  int64_t n = a.M;
-  dtrsml_left(n, 1, &a.A[0], n, x, n);
-  dtrsmlt_left(n, 1, &a.A[0], n, x, n);
-}

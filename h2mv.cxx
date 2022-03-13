@@ -1,171 +1,218 @@
 
 #include "h2mv.hxx"
+#include "dist.hxx"
 
 #include <cmath>
 
 using namespace nbd;
 
-void nbd::upwardPassLeaf(const Cells& cells, const Matrices& base, const double* x, double* m) {
-  int64_t len = cells.size();
-  int64_t x_off = 0;
-  for (int64_t i = 0; i < len; i++) {
-    const Cell& c = cells[i];
-    if (c.NCHILD == 0) {
-      P2M(&c, base[i], &x[x_off], m);
-      x_off += c.NBODY;
+void nbd::interTrans(char updn, MatVec& vx, const Matrices& basis, int64_t level) {
+  int64_t len = (int64_t)1 << level;
+  int64_t lbegin = 0;
+  int64_t lend = len;
+  selfLocalRange(lbegin, lend, level);
+  Vectors& X = vx.X;
+  Vectors& M = vx.M;
+  Vectors& L = vx.L;
+  Vectors& B = vx.B;
+
+  if (updn == 'U' || updn == 'u')
+    for (int64_t i = lbegin; i < lend; i++)
+      mvec('T', basis[i], X[i], M[i], 1., 0.);
+  else if (updn == 'D' || updn == 'd')
+    for (int64_t i = lbegin; i < lend; i++)
+      mvec('N', basis[i], L[i], B[i], 1., 1.);
+}
+
+
+void nbd::horizontalPass(Vectors& B, const Vectors& X, EvalFunc ef, const Cell* cell, int64_t dim, int64_t level) {
+  int64_t ibegin = 0;
+  int64_t iend = (int64_t)1 << level;
+  selfLocalRange(ibegin, iend, level);
+  int64_t nodes = iend - ibegin;
+
+  int64_t len = 0;
+  std::vector<const Cell*> cells(nodes);
+  findCellsAtLevel(&cells[0], &len, cell, level);
+
+  for (int64_t j = 0; j < len; j++) {
+    const Cell* cj = cells[j];
+    int64_t lislen = cj->listNear.size();
+    int64_t lj = cj->ZID;
+    neighborsILocal(lj, cj->ZID, level);
+    Vector& L = B[lj];
+
+    for (int64_t i = 0; i < lislen; i++) {
+      const Cell* ci = cj->listNear[i];
+      int64_t li = ci->ZID;
+      neighborsILocal(li, ci->ZID, level);
+      const Vector& M = X[li];
+      M2Lc(ef, ci, cj, dim, M, L);
     }
   }
 }
 
-void nbd::downwardPassLeaf(const Cells& cells, const Matrices& base, const double* l, double* b) {
-  int64_t len = cells.size();
-  int64_t b_off = 0;
-  for (int64_t i = 0; i < len; i++) {
-    const Cell& c = cells[i];
-    if (c.NCHILD == 0) {
-      L2P(&c, base[i], l, &b[b_off]);
-      b_off += c.NBODY;
+void nbd::closeQuarter(Vectors& B, const Vectors& X, EvalFunc ef, const Cell* cell, int64_t dim, int64_t level) {
+  int64_t ibegin = 0;
+  int64_t iend = (int64_t)1 << level;
+  selfLocalRange(ibegin, iend, level);
+  int64_t nodes = iend - ibegin;
+
+  int64_t len = 0;
+  std::vector<const Cell*> cells(nodes);
+  findCellsAtLevel(&cells[0], &len, cell, level);
+
+  for (int64_t j = 0; j < len; j++) {
+    const Cell* cj = cells[j];
+    int64_t lislen = cj->listNear.size();
+    int64_t lj = cj->ZID;
+    neighborsILocal(lj, cj->ZID, level);
+    Vector& Bj = B[lj];
+
+    for (int64_t i = 0; i < lislen; i++) {
+      const Cell* ci = cj->listNear[i];
+      int64_t li = ci->ZID;
+      neighborsILocal(li, ci->ZID, level);
+      const Vector& Xi = X[li];
+      P2P(ef, ci, cj, dim, Xi, Bj);
     }
   }
 }
 
+void nbd::permuteAndMerge(char fwbk, Vectors& px, Vectors& nx, int64_t nlevel) {
+  int64_t plevel = nlevel + 1;
+  int64_t nloc = 0;
+  int64_t nend = (int64_t)1 << nlevel;
+  int64_t ploc = 0;
+  int64_t pend = (int64_t)1 << plevel;
+  selfLocalRange(nloc, nend, nlevel);
+  selfLocalRange(ploc, pend, plevel);
 
-void nbd::horizontalPass(EvalFunc ef, const Cells& cells, int64_t dim, int64_t level, const double* m, double* l) {
-  int64_t range = (int64_t)1 << level;
-  std::vector<int64_t> offs(range);
-  range = 0;
-  findCellsAtLevel(&offs[0], &range, &cells[0], &cells[0], level);
+  int64_t nboxes = nend - nloc;
+  int64_t pboxes = pend - ploc;
+  int64_t nbegin = 0;
+  int64_t pbegin = 0;
+  neighborsIGlobal(nbegin, nloc, nlevel);
+  neighborsIGlobal(pbegin, ploc, plevel);
 
-  for (int64_t i = 0; i < range; i++) {
-    int64_t ii = offs[i];
-    const Cell& ci = cells[ii];
-    int64_t lislen = ci.listFar.size();
-    for (int64_t j = 0; j < lislen; j++) {
-      const Cell* cj = ci.listFar[j];
-      M2L(ef, &ci, cj, dim, m, l);
-    }
-  }
-}
+  if (fwbk == 'F' || fwbk == 'f') {
+    for (int64_t i = 0; i < nboxes; i++) {
+      int64_t p = (i + nbegin) << 1;
+      int64_t c0 = p - pbegin;
+      int64_t c1 = p + 1 - pbegin;
+      Vector& x0 = nx[i + nloc];
 
-void nbd::upwardPass(const Cells& cells, int64_t level, const Matrices& base, double* m) {
-  int64_t range = (int64_t)1 << level;
-  std::vector<int64_t> offs(range);
-  range = 0;
-  findCellsAtLevel(&offs[0], &range, &cells[0], &cells[0], level);
+      if (c0 >= 0 && c0 < pboxes) {
+        const Vector& x1 = px[c0 + ploc];
+        cpyVecToVec(x1.N, x1, x0, 0, 0);
+      }
 
-  for (int64_t i = 0; i < range; i++) {
-    int64_t ii = offs[i];
-    M2M(&cells[ii], base[ii], m);
-  }
-}
-
-void nbd::downwardPass(const Cells& cells, int64_t level, const Matrices& base, double* l) {
-  int64_t range = (int64_t)1 << level;
-  std::vector<int64_t> offs(range);
-  range = 0;
-  findCellsAtLevel(&offs[0], &range, &cells[0], &cells[0], level);
-
-  for (int64_t i = 0; i < range; i++) {
-    int64_t ii = offs[i];
-    L2L(&cells[ii], base[ii], l);
-  }
-}
-
-void nbd::closeQuarter(EvalFunc ef, const Cells& cells, int64_t dim, const double* x, double* b) {
-  const Body* begin = cells[0].BODY;
-  int64_t len = cells.size();
-  for (int64_t y = 0; y < len; y++) {
-    const Cell& ci = cells[y];
-    int64_t yi = ci.BODY - begin;
-    if (ci.NCHILD == 0) {
-      int64_t len_ci = ci.listNear.size();
-      for (int64_t j = 0; j < len_ci; j++) {
-        const Cell* cj = ci.listNear[j];
-        int64_t xi = cj->BODY - begin;
-        P2P(ef, &ci, cj, dim, &x[xi], &b[yi]);
+      if (c1 >= 0 && c1 < pboxes) {
+        const Vector& x2 = px[c1 + ploc];
+        cpyVecToVec(x2.N, x2, x0, 0, x0.N - x2.N);
       }
     }
+
+    if (nboxes == pboxes)
+      butterflySumX(nx, plevel);
+  }
+  else if (fwbk == 'B' || fwbk == 'b') {
+    for (int64_t i = 0; i < nboxes; i++) {
+      int64_t p = (i + nbegin) << 1;
+      int64_t c0 = p - pbegin;
+      int64_t c1 = p + 1 - pbegin;
+      const Vector& x0 = nx[i + nloc];
+
+      if (c0 >= 0 && c0 < pboxes) {
+        Vector& x1 = px[c0 + ploc];
+        cpyVecToVec(x1.N, x0, x1, 0, 0);
+      }
+
+      if (c1 >= 0 && c1 < pboxes) {
+        Vector& x2 = px[c1 + ploc];
+        cpyVecToVec(x2.N, x0, x2, x0.N - x2.N, 0);
+      }
+    }
+
+    DistributeVectorsList(px, plevel);
   }
 }
 
-void nbd::zeroC(const Cell* cell, double* c, int64_t lmin, int64_t lmax) {
-  if (cell->LEVEL <= lmax) {
-    double* begin = &c[cell->MPOS];
-    int64_t len = cell->Multipole.size();
-    if (cell->LEVEL >= lmin)
-      std::fill(begin, begin + len, 0.);
+void nbd::allocMatVec(MatVec vx[], const Base base[], int64_t levels) {
+  for (int64_t i = 0; i <= levels; i++) {
+    int64_t nodes = base[i].DIMS.size();
+    MatVec& vx_i = vx[i];
+    Vectors& ix = vx_i.X;
+    Vectors& im = vx_i.M;
+    Vectors& il = vx_i.L;
+    Vectors& ib = vx_i.B;
+    ix.resize(nodes);
+    im.resize(nodes);
+    il.resize(nodes);
+    ib.resize(nodes);
 
-    for (int64_t i = 0; i < cell->NCHILD; i++)
-      zeroC(cell->CHILD + i, c, lmin, lmax);
+    for (int64_t n = 0; n < nodes; n++) {
+      int64_t dim = base[i].DIMS[n];
+      int64_t dim_o = base[i].DIMO[n];
+      cVector(ix[n], dim);
+      cVector(ib[n], dim);
+      cVector(im[n], dim_o);
+      cVector(il[n], dim_o);
+      zeroVector(ix[n]);
+      zeroVector(ib[n]);
+      zeroVector(im[n]);
+      zeroVector(il[n]);
+    }
   }
 }
 
-void nbd::multiplyC(EvalFunc ef, const Cells& cells, int64_t dim, int64_t level, const Matrices& base, double* m, double* l) {
-  zeroC(&cells[0], m, 0, level - 1);
-  zeroC(&cells[0], l, 0, level);
-  horizontalPass(ef, cells, dim, level, m, l);
+void nbd::resetMatVec(MatVec vx[], const Vectors& X, int64_t levels) {
+  for (int64_t i = 0; i <= levels; i++) {
+    MatVec& vx_i = vx[i];
+    int64_t nodes = vx_i.X.size();
+    Vectors& ix = vx_i.X;
+    Vectors& im = vx_i.M;
+    Vectors& il = vx_i.L;
+    Vectors& ib = vx_i.B;
 
-  for (int64_t i = level - 1; i >= 0; i--) {
-    upwardPass(cells, i, base, m);
-    horizontalPass(ef, cells, dim, i, m, l);
+    for (int64_t n = 0; n < nodes; n++) {
+      zeroVector(ix[n]);
+      zeroVector(ib[n]);
+      zeroVector(im[n]);
+      zeroVector(il[n]);
+    }
   }
 
-  for (int64_t i = 0; i < level; i++)
-    downwardPass(cells, i, base, l);
+  int64_t ibegin = 0;
+  int64_t iend = (int64_t)1 << levels;
+  selfLocalRange(ibegin, iend, levels);
+  Vectors& xleaf = vx[levels].X;
+  for (int64_t i = ibegin; i <= iend; i++)
+    cpyFromVector(X[i], xleaf[i].X.data());
 }
 
+void nbd::h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* locals[], const Base basis[], int64_t dim, const Vectors& X, int64_t levels) {
+  resetMatVec(vx, X, levels);
 
-void nbd::h2mv_complete(EvalFunc ef, const Cells& cells, int64_t dim, const Matrices& base, const double* x, double* b) {
-  int64_t len = cells.size();
-  int64_t level = 0;
-  int64_t lm = 0;
-  for (int64_t i = 0; i < len; i++) {
-    level = level < cells[i].LEVEL ? cells[i].LEVEL : level;
-    lm = lm + cells[i].Multipole.size();
+  for (int64_t i = levels; i > 0; i--) {
+    interTrans('U', vx[i], basis[i].Uo, i);
+    permuteAndMerge('F', vx[i].M, vx[i - 1].X, i - 1);
   }
+  horizontalPass(vx[0].B, vx[0].X, ef, locals[0], dim, 0);
 
-  std::vector<double> m(lm);
-  std::vector<double> l(lm);
-
-  upwardPassLeaf(cells, base, x, &m[0]);
-  multiplyC(ef, cells, dim, level, base, &m[0], &l[0]);
-  downwardPassLeaf(cells, base, &l[0], b);
-  closeQuarter(ef, cells, dim, x, b);
-}
-
-int64_t nbd::C2X(const Cells& cells, int64_t level, const double* c, double* x) {
-  int64_t range = (int64_t)1 << level;
-  std::vector<int64_t> offs(range);
-  range = 0;
-  findCellsAtLevel(&offs[0], &range, &cells[0], &cells[0], level);
-
-  int64_t len = 0;
-  for (int64_t i = 0; i < range; i++) {
-    int64_t ii = offs[i];
-    const Cell* ci = &cells[ii];
-    M2X(ci, c, &x[len]);
-    int64_t n = ci->Multipole.size();
-    len = len + n;
+  for (int64_t i = 1; i <= levels; i++) {
+    permuteAndMerge('B', vx[i].L, vx[i - 1].B, i - 1);
+    horizontalPass(vx[i].B, vx[i].X, ef, locals[i], dim, i);
+    interTrans('D', vx[i], basis[i].Uo, i);
   }
-  return len;
 }
 
-int64_t nbd::X2C(const Cells& cells, int64_t level, const double* x, double* c) {
-  int64_t range = (int64_t)1 << level;
-  std::vector<int64_t> offs(range);
-  range = 0;
-  findCellsAtLevel(&offs[0], &range, &cells[0], &cells[0], level);
-
-  int64_t len = 0;
-  for (int64_t i = 0; i < range; i++) {
-    int64_t ii = offs[i];
-    const Cell* ci = &cells[ii];
-    X2M(ci, &x[len], c);
-    int64_t n = ci->Multipole.size();
-    len = len + n;
-  }
-  return len;
+void nbd::h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* locals[], const Base basis[], int64_t dim, const Vectors& X, int64_t levels) {
+  h2MatVecLR(vx, ef, locals, basis, dim, X, levels);
+  closeQuarter(vx[levels].B, vx[levels].X, ef, locals[levels], dim, levels);
 }
+
+/*
 
 void woodburyP1(EvalFunc ef, const Cells& cells, int64_t dim, int64_t level, const Matrices& base, double* x1, double* x2, double* c1, double* c2) {
   int64_t len = cells.size();
@@ -207,7 +254,7 @@ void woodburyP2(EvalFunc ef, const Cells& cells, int64_t dim, int64_t level, con
 
 
 void h2inv_step(EvalFunc ef, const Cells& cells, int64_t dim, int64_t level, const Matrices& base, const Matrices d[], const CSC rels[], double* x1, double* x2, double* c1, double* c2) {
-  /*Matrix d_dense;
+  Matrix d_dense;
   convertSparse2Dense(rels[level], d[level], d_dense);
   factorD(d_dense);
 
@@ -240,7 +287,7 @@ void h2inv_step(EvalFunc ef, const Cells& cells, int64_t dim, int64_t level, con
   for (int64_t i = 0; i < len; i++)
     x2[i] = x2[i] - x3[i];
   woodburyP2(ef, cells, dim, level, base, x2, x1, c1, c2);
-  invD(d_dense, x1);*/
+  invD(d_dense, x1);
 }
 
 void nbd::h2inv(EvalFunc ef, const Cells& cells, int64_t dim, const Matrices& base, const Matrices d[], const CSC rels[], double* x) {
@@ -255,4 +302,4 @@ void nbd::h2inv(EvalFunc ef, const Cells& cells, int64_t dim, const Matrices& ba
   int64_t len = cells.size();
   int64_t level_m = (int64_t)std::log2(len);
   h2inv_step(ef, cells, dim, level_m, base, d, rels, x, &x2[0], &c1[0], &c2[0]);
-}
+}*/

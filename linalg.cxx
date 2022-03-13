@@ -58,7 +58,7 @@ void nbd::cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_
   for (int64_t j = 0; j < n; j++) {
     int64_t j1 = y1 + (x1 + j) * m1.M;
     int64_t j2 = y2 + (x2 + j) * m2.M;
-    std::copy(&m1.A[j1], &m1.A[j1 + m], &m2.A[j2]);
+    std::copy(&m1.A[j1], &m1.A[j1] + m, &m2.A[j2]);
   }
 }
 

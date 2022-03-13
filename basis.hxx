@@ -20,7 +20,9 @@ namespace nbd {
 
   void orthoBasis(double repi, Matrices& C, int64_t dims_o[], int64_t level);
 
-  void allocBasis(Basis& basis, int64_t levels, const int64_t ldims[]);
+  void allocBasis(Basis& basis, int64_t levels);
+  
+  void fillDimsFromCell(Base& basis, const Cell* cell, int64_t level);
 
   void allocUcUo(Base& basis, const Matrices& C, int64_t level);
 

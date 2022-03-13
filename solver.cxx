@@ -1,5 +1,6 @@
 
 #include "solver.hxx"
+#include "h2mv.hxx"
 #include "dist.hxx"
 
 using namespace nbd;
@@ -133,83 +134,24 @@ void nbd::allocRightHandSides(RHSS& rhs, const Base base[], int64_t levels) {
   }
 }
 
-void nbd::permuteAndMerge(char fwbk, RHS& prev, RHS& next, int64_t nlevel) {
-  int64_t plevel = nlevel + 1;
-  int64_t nloc = 0;
-  int64_t nend = next.X.size();
-  int64_t ploc = 0;
-  int64_t pend = prev.X.size();
-  selfLocalRange(nloc, nend, nlevel);
-  selfLocalRange(ploc, pend, plevel);
-
-  int64_t nboxes = nend - nloc;
-  int64_t pboxes = pend - ploc;
-  int64_t nbegin = 0;
-  int64_t pbegin = 0;
-  neighborsIGlobal(nbegin, nloc, nlevel);
-  neighborsIGlobal(pbegin, ploc, plevel);
-
-  if (fwbk == 'F' || fwbk == 'f') {
-    for (int64_t i = 0; i < nboxes; i++) {
-      int64_t p = (i + nbegin) << 1;
-      int64_t c0 = p - pbegin;
-      int64_t c1 = p + 1 - pbegin;
-      Vector& x0 = next.X[i + nloc];
-
-      if (c0 >= 0 && c0 < pboxes) {
-        const Vector& x1 = prev.Xo[c0 + ploc];
-        cpyVecToVec(x1.N, x1, x0, 0, 0);
-      }
-
-      if (c1 >= 0 && c1 < pboxes) {
-        const Vector& x2 = prev.Xo[c1 + ploc];
-        cpyVecToVec(x2.N, x2, x0, 0, x0.N - x2.N);
-      }
-    }
-
-    if (nboxes == pboxes)
-      butterflySumX(next.X, plevel);
-  }
-  else if (fwbk == 'B' || fwbk == 'b') {
-    for (int64_t i = 0; i < nboxes; i++) {
-      int64_t p = (i + nbegin) << 1;
-      int64_t c0 = p - pbegin;
-      int64_t c1 = p + 1 - pbegin;
-      const Vector& x0 = next.X[i + nloc];
-
-      if (c0 >= 0 && c0 < pboxes) {
-        Vector& x1 = prev.Xo[c0 + ploc];
-        cpyVecToVec(x1.N, x0, x1, 0, 0);
-      }
-
-      if (c1 >= 0 && c1 < pboxes) {
-        Vector& x2 = prev.Xo[c1 + ploc];
-        cpyVecToVec(x2.N, x0, x2, x0.N - x2.N, 0);
-      }
-    }
-
-    DistributeVectorsList(prev.Xo, plevel);
-  }
-}
-
 void nbd::solveA(RHS X[], const Node A[], const Base B[], const CSC rels[], int64_t levels) {
   for (int64_t i = levels; i > 0; i--) {
     basisXoc('F', X[i], B[i], i);
     svAccFw(X[i].Xc, A[i].A_cc, rels[i], i);
     svAocFw(X[i].Xo, X[i].Xc, A[i].A_oc, rels[i], i);
-    permuteAndMerge('F', X[i], X[i - 1], i - 1);
+    permuteAndMerge('F', X[i].X, X[i - 1].Xo, i - 1);
   }
   chol_solve(X[0].X[0], A[0].A[0]);
   
   for (int64_t i = 1; i <= levels; i++) {
-    permuteAndMerge('B', X[i], X[i - 1], i - 1);
+    permuteAndMerge('B', X[i].X, X[i - 1].Xo, i - 1);
     svAocBk(X[i].Xc, X[i].Xo, A[i].A_oc, rels[i], i);
     svAccBk(X[i].Xc, A[i].A_cc, rels[i], i);
     basisXoc('B', X[i], B[i], i);
   }
 }
 
-void nbd::solveRelErr(double* err_out, const Vector X[], const Vectors& ref, int64_t level) {
+void nbd::solveRelErr(double* err_out, const Vectors& X, const Vectors& ref, int64_t level) {
   int64_t ibegin = 0;
   int64_t iend = ref.size();
   selfLocalRange(ibegin, iend, level);

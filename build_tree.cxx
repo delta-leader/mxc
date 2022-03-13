@@ -1,5 +1,6 @@
 
 #include "build_tree.hxx"
+#include "dist.hxx"
 
 #include <cmath>
 #include <random>
@@ -131,7 +132,6 @@ void iterNonLeaf(int64_t levels, Cells& cells, Cell* head, int64_t ncells, int64
         tail->NCHILD = 1;
         tail->ZID = pi;
         tail->LEVEL = levels;
-        tail->MPOS = 0;
         getIX(tail->ZX, pi, dim);
         count += 1;
       }
@@ -146,7 +146,7 @@ void iterNonLeaf(int64_t levels, Cells& cells, Cell* head, int64_t ncells, int64
   }
 }
 
-void nbd::buildTree(Cells& cells, Bodies& bodies, int64_t ncrit, const double dmin[], const double dmax[], int64_t dim) {
+int64_t nbd::buildTree(Cells& cells, Bodies& bodies, int64_t ncrit, const double dmin[], const double dmax[], int64_t dim) {
   int64_t nbody = bodies.size();
   int64_t levels = (int64_t)(std::log2(nbody / ncrit));
   int64_t len = (int64_t)1 << levels;
@@ -174,7 +174,6 @@ void nbd::buildTree(Cells& cells, Bodies& bodies, int64_t ncrit, const double dm
       ci->NCHILD = 0;
       ci->ZID = i;
       ci->LEVEL = levels;
-      ci->MPOS = 0;
       getIX(ci->ZX, i, dim);
       bcount += buckets[i];
     }
@@ -187,10 +186,11 @@ void nbd::buildTree(Cells& cells, Bodies& bodies, int64_t ncrit, const double dm
   cells[0].NCHILD = root->NCHILD;
   cells[0].ZID = root->ZID;
   cells[0].LEVEL = root->LEVEL;
-  cells[0].MPOS = root->MPOS;
   getIX(cells[0].ZX, root->ZID, dim);
   cells.pop_back();
+  return levels;
 }
+
 
 void nbd::getList(Cell* Ci, Cell* Cj, int64_t dim, int64_t theta) {
   if (Ci->LEVEL < Cj->LEVEL)
@@ -218,15 +218,15 @@ void nbd::getList(Cell* Ci, Cell* Cj, int64_t dim, int64_t theta) {
   }
 }
 
-void nbd::findCellsAtLevel(int64_t off[], int64_t* len, const Cell* cell, const Cell* root, int64_t level) {
+void nbd::findCellsAtLevel(const Cell* cells[], int64_t* len, const Cell* cell, int64_t level) {
   if (level == cell->LEVEL) {
     int64_t i = *len;
-    off[i] = std::distance(root, cell);
+    cells[i] = cell;
     *len = i + 1;
   }
   else if (level > cell->LEVEL && cell->NCHILD > 0)
     for (int64_t i = 0; i < cell->NCHILD; i++)
-      findCellsAtLevel(off, len, cell->CHILD + i, root, level);
+      findCellsAtLevel(cells, len, cell->CHILD + i, level);
 }
 
 
@@ -259,36 +259,47 @@ void nbd::remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bod
   }
 }
 
-void nbd::evaluateBasis(Matrices& basis, EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, int64_t sp_pts, int64_t rank, int64_t dim) {
+void nbd::traverse(Cells& cells, Cell* locals[], int64_t levels, int64_t dim, int64_t theta, int64_t mpi_rank, int64_t mpi_size) {
+  getList(&cells[0], &cells[0], dim, theta);
+  int64_t mpi_levels = mpi_size > 1 ? (int64_t)(std::log2(mpi_size)) : 0;
+
+  Cell* iter = &cells[0];
+  for (int64_t i = 0; i <= mpi_levels; i++) {
+    int64_t lvl_diff = mpi_levels - i;
+    int64_t my_rank = mpi_rank >> lvl_diff;
+    if (iter->LEVEL < i)
+      for (Cell* ci = iter->CHILD; ci != iter->CHILD + iter->NCHILD; ci++)
+        if (ci->ZID == my_rank)
+          iter = ci;
+    if (iter->ZID == my_rank) {
+      locals[i] = iter;
+      int64_t nlen = iter->listNear.size();
+      std::vector<int64_t> ngbs(nlen);
+      for (int64_t n = 0; n < nlen; n++) {
+        Cell* c = iter->listNear[n];
+        ngbs[n] = c->ZID;
+      }
+
+      configureComm(mpi_rank, i, &ngbs[0], nlen);
+    }
+  }
+
+  if (iter->ZID == mpi_rank)
+    for (int64_t i = mpi_levels + 1; i <= levels; i++)
+      locals[i] = iter;
+}
+
+void nbd::evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, int64_t sp_pts, int64_t rank, int64_t dim) {
   if (c->NCHILD > 0)
     for (int64_t i = 0; i < c->NCHILD; i++)
-      evaluateBasis(basis, ef, cells, c->CHILD + i, bodies, sp_pts, rank, dim);
+      evaluateBasis(ef, cells, c->CHILD + i, bodies, sp_pts, rank, dim);
 
   Bodies remote;
   remoteBodies(remote, sp_pts, *c, bodies, dim);
-  int64_t i = c - &cells[0];
-  P2Mmat(ef, c, &remote[0], remote.size(), dim, basis[i], 1.e-12, rank);
+  P2Mmat(ef, c, remote.data(), remote.size(), dim, c->Base, 1.e-12, rank);
+  invBasis(c->Base, c->Biv);
 }
 
-void nbd::traverse(EvalFunc ef, Cells& cells, int64_t dim, Matrices& base, const Bodies& bodies, int64_t sp_pts, int64_t theta, int64_t rank) {
-  getList(&cells[0], &cells[0], dim, theta);
-  base.resize(cells.size());
-  evaluateBasis(base, ef, cells, &cells[0], bodies, sp_pts, rank, dim);
-
-  int64_t p = 0;
-  int64_t len = cells.size();
-  for (int64_t i = 0; i < len; i++) {
-    cells[i].MPOS = p;
-    p = p + cells[i].Multipole.size();
-  }
-}
-
-void nbd::invAllBase(const Matrices& base, Matrices& binv) {
-  int64_t len = base.size();
-  binv.resize(len);
-  for (int64_t i = 0; i < len; i++)
-    invBasis(base[i], binv[i]);
-}
 
 void nbd::relationsNear(CSC rels[], const Cells& cells, int64_t mpi_rank, int64_t mpi_size) {
   int64_t levels = 0;
@@ -361,7 +372,7 @@ void nbd::lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j) {
 }
 
 
-void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, const Cells& cells, int64_t dim, const Matrices& uinv, const Matrices& d_child, const CSC& csc_child) {
+void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, const Cells& cells, int64_t dim, const Matrices& d_child, const CSC& csc_child) {
   int64_t m = 0;
   int64_t n = 0;
   for (int64_t i = 0; i < ci->NCHILD; i++) {
@@ -381,11 +392,9 @@ void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, c
   for (int64_t i = 0; i < ci->NCHILD; i++) {
     const Cell* cii = ci->CHILD + i;
     const std::vector<Cell*>& cii_m2l = cii->listFar;
-    int64_t uii = std::distance(&cells[0], cii);
     int64_t x_off = 0;
     for (int64_t j = 0; j < cj->NCHILD; j++) {
       const Cell* cjj = cj->CHILD + j;
-      int64_t ujj = std::distance(&cells[0], cjj);
       if (std::find(cii_m2l.begin(), cii_m2l.end(), cjj) != cii_m2l.end())
         L2C(ef, cii, cjj, dim, d, y_off, x_off);
       else {
@@ -394,7 +403,7 @@ void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, c
         int64_t ij;
         lookupIJ(ij, csc_child, zii, zjj);
         if (ij >= 0)
-          D2C(d_child[ij], uinv[uii], uinv[ujj], d, y_off, x_off);
+          D2C(d_child[ij], cii->Biv, cjj->Biv, d, y_off, x_off);
       }
       x_off = x_off + cjj->Multipole.size();
     }
@@ -402,10 +411,10 @@ void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, c
   }
 }
 
-void evaluateIntermediate(EvalFunc ef, const Cell* c, const Cells& cells, int64_t dim, const CSC csc[], const Matrices& uinv, Matrices d[]) {
+void evaluateIntermediate(EvalFunc ef, const Cell* c, const Cells& cells, int64_t dim, const CSC csc[], Matrices d[]) {
   if (c->NCHILD > 0) {
     for (int64_t i = 0; i < c->NCHILD; i++)
-      evaluateIntermediate(ef, c->CHILD + i, cells, dim, csc, uinv, d);
+      evaluateIntermediate(ef, c->CHILD + i, cells, dim, csc, d);
 
     int64_t zj = c->ZID;
     int64_t level = c->LEVEL;
@@ -416,16 +425,43 @@ void evaluateIntermediate(EvalFunc ef, const Cell* c, const Cells& cells, int64_
       int64_t ij;
       lookupIJ(ij, csc[level], zi, zj);
       if (ij >= 0)
-        writeIntermediate(d[level][ij], ef, ci, c, cells, dim, uinv, d[level + 1], csc[level + 1]);
+        writeIntermediate(d[level][ij], ef, ci, c, cells, dim, d[level + 1], csc[level + 1]);
     }
   }
 }
 
-void nbd::evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t dim, const Matrices& uinv, const CSC rels[], int64_t levels) {
+void nbd::evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t dim, const CSC rels[], int64_t levels) {
   Matrices& dleaf = d[levels];
   const CSC& cleaf = rels[levels];
   for (int64_t i = 0; i <= levels; i++)
     d[i].resize(rels[i].NNZ);
   evaluateLeafNear(d[levels], ef, &cells[0], dim, cleaf);
-  evaluateIntermediate(ef, &cells[0], cells, dim, &rels[0], uinv, &d[0]);
+  evaluateIntermediate(ef, &cells[0], cells, dim, &rels[0], &d[0]);
+}
+
+void nbd::loadX(Vectors& X, const Cell* cell, int64_t level) {
+  int64_t xlen = (int64_t)1 << level;
+  neighborContentLength(xlen, level);
+  X.resize(xlen);
+
+  int64_t ibegin = 0;
+  int64_t iend = (int64_t)1 << level;
+  selfLocalRange(ibegin, iend, level);
+  int64_t nodes = iend - ibegin;
+
+  int64_t len;
+  std::vector<const Cell*> cells(nodes);
+  findCellsAtLevel(&cells[0], &len, cell, level);
+
+  for (int64_t i = 0; i < len; i++) {
+    const Cell* ci = cells[i];
+    int64_t li = ci->ZID;
+    neighborsILocal(li, ci->ZID, level);
+    Vector& Xi = X[li];
+    cVector(Xi, ci->NBODY);
+
+    for (int64_t n = 0; n < ci->NBODY; n++)
+      Xi.X[n] = ci->BODY[n].B;
+  }
+  DistributeVectorsList(X, level);
 }

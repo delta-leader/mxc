@@ -25,11 +25,9 @@ namespace nbd {
 
   void allocRightHandSides(RHSS& rhs, const Base base[], int64_t levels);
 
-  void permuteAndMerge(char fwbk, RHS& prev, RHS& next, int64_t nlevel);
-
   void solveA(RHS X[], const Node A[], const Base B[], const CSC rels[], int64_t levels);
 
-  void solveRelErr(double* err_out, const Vector X[], const Vectors& ref, int64_t level);
+  void solveRelErr(double* err_out, const Vectors& X, const Vectors& ref, int64_t level);
 
 
 };

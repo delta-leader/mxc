@@ -23,7 +23,8 @@ namespace nbd {
     std::vector<Cell*> listFar;
     std::vector<Cell*> listNear;
     std::vector<int64_t> Multipole;
-    int64_t MPOS;
+    Matrix Base;
+    Matrix Biv;
   };
 
   typedef std::vector<Cell> Cells;
@@ -45,19 +46,17 @@ namespace nbd {
 
   void bucketSort(Bodies& bodies, int64_t buckets[], int64_t slices[], const double dmin[], const double dmax[], int64_t dim);
 
-  void buildTree(Cells& cells, Bodies& bodies, int64_t ncrit, const double dmin[], const double dmax[], int64_t dim);
+  int64_t buildTree(Cells& cells, Bodies& bodies, int64_t ncrit, const double dmin[], const double dmax[], int64_t dim);
 
   void getList(Cell* Ci, Cell* Cj, int64_t dim, int64_t theta);
 
-  void findCellsAtLevel(int64_t off[], int64_t* len, const Cell* cell, const Cell* root, int64_t level);
+  void findCellsAtLevel(const Cell* cells[], int64_t* len, const Cell* cell, int64_t level);
 
   void remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bodies& bodies, int64_t dim);
 
-  void evaluateBasis(Matrices& basis, EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, int64_t sp_pts, int64_t rank, int64_t dim);
+  void traverse(Cells& cells, Cell* locals[], int64_t levels, int64_t dim, int64_t theta, int64_t mpi_rank, int64_t mpi_size);
 
-  void traverse(EvalFunc ef, Cells& cells, int64_t dim, Matrices& base, const Bodies& bodies, int64_t sp_pts, int64_t theta, int64_t rank);
-
-  void invAllBase(const Matrices& base, Matrices& binv);
+  void evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, int64_t sp_pts, int64_t rank, int64_t dim);
 
   void relationsNear(CSC rels[], const Cells& cells, int64_t mpi_rank, int64_t mpi_size);
 
@@ -65,7 +64,9 @@ namespace nbd {
 
   void lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j);
 
-  void evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t dim, const Matrices& uinv, const CSC rels[], int64_t levels);
+  void evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t dim, const CSC rels[], int64_t levels);
+
+  void loadX(Vectors& X, const Cell* cell, int64_t level);
 
 }
 
