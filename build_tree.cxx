@@ -449,7 +449,7 @@ void nbd::loadX(Vectors& X, const Cell* cell, int64_t level) {
   selfLocalRange(ibegin, iend, level);
   int64_t nodes = iend - ibegin;
 
-  int64_t len;
+  int64_t len = 0;
   std::vector<const Cell*> cells(nodes);
   findCellsAtLevel(&cells[0], &len, cell, level);
 

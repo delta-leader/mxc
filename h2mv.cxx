@@ -35,19 +35,19 @@ void nbd::horizontalPass(Vectors& B, const Vectors& X, EvalFunc ef, const Cell* 
   std::vector<const Cell*> cells(nodes);
   findCellsAtLevel(&cells[0], &len, cell, level);
 
-  for (int64_t j = 0; j < len; j++) {
-    const Cell* cj = cells[j];
-    int64_t lislen = cj->listNear.size();
-    int64_t lj = cj->ZID;
-    neighborsILocal(lj, cj->ZID, level);
-    Vector& L = B[lj];
+  for (int64_t i = 0; i < len; i++) {
+    const Cell* ci = cells[i];
+    int64_t lislen = ci->listNear.size();
+    int64_t li = ci->ZID;
+    neighborsILocal(li, ci->ZID, level);
+    Vector& Bi = B[li];
 
-    for (int64_t i = 0; i < lislen; i++) {
-      const Cell* ci = cj->listNear[i];
-      int64_t li = ci->ZID;
-      neighborsILocal(li, ci->ZID, level);
-      const Vector& M = X[li];
-      M2Lc(ef, ci, cj, dim, M, L);
+    for (int64_t j = 0; j < lislen; j++) {
+      const Cell* cj = ci->listNear[j];
+      int64_t lj = cj->ZID;
+      neighborsILocal(lj, cj->ZID, level);
+      const Vector& Xj = X[lj];
+      M2Lc(ef, ci, cj, dim, Xj, Bi);
     }
   }
 }
@@ -62,19 +62,19 @@ void nbd::closeQuarter(Vectors& B, const Vectors& X, EvalFunc ef, const Cell* ce
   std::vector<const Cell*> cells(nodes);
   findCellsAtLevel(&cells[0], &len, cell, level);
 
-  for (int64_t j = 0; j < len; j++) {
-    const Cell* cj = cells[j];
-    int64_t lislen = cj->listNear.size();
-    int64_t lj = cj->ZID;
-    neighborsILocal(lj, cj->ZID, level);
-    Vector& Bj = B[lj];
+  for (int64_t i = 0; i < len; i++) {
+    const Cell* ci = cells[i];
+    int64_t lislen = ci->listNear.size();
+    int64_t li = ci->ZID;
+    neighborsILocal(li, ci->ZID, level);
+    Vector& Bi = B[li];
 
-    for (int64_t i = 0; i < lislen; i++) {
-      const Cell* ci = cj->listNear[i];
-      int64_t li = ci->ZID;
-      neighborsILocal(li, ci->ZID, level);
-      const Vector& Xi = X[li];
-      P2P(ef, ci, cj, dim, Xi, Bj);
+    for (int64_t j = 0; j < lislen; j++) {
+      const Cell* cj = ci->listNear[j];
+      int64_t lj = cj->ZID;
+      neighborsILocal(lj, cj->ZID, level);
+      const Vector& Xj = X[lj];
+      P2P(ef, ci, cj, dim, Xj, Bi);
     }
   }
 }
