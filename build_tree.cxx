@@ -267,16 +267,19 @@ void nbd::traverse(Cells& cells, Cell* locals[], int64_t levels, int64_t dim, in
   for (int64_t i = 0; i <= mpi_levels; i++) {
     int64_t lvl_diff = mpi_levels - i;
     int64_t my_rank = mpi_rank >> lvl_diff;
-    if (iter->LEVEL < i)
-      for (Cell* ci = iter->CHILD; ci != iter->CHILD + iter->NCHILD; ci++)
-        if (ci->ZID == my_rank)
-          iter = ci;
+    if (iter->LEVEL < i) {
+      int64_t nchild = iter->NCHILD;
+      Cell* child = iter->CHILD;
+      for (int64_t n = 0; n < nchild; n++)
+        if (child[n].ZID == my_rank)
+          iter = child + n;
+    }
     if (iter->ZID == my_rank) {
       locals[i] = iter;
       int64_t nlen = iter->listNear.size();
       std::vector<int64_t> ngbs(nlen);
       for (int64_t n = 0; n < nlen; n++) {
-        Cell* c = iter->listNear[n];
+        Cell* c = (iter->listNear)[n];
         ngbs[n] = c->ZID;
       }
 
@@ -451,6 +454,7 @@ void nbd::loadX(Vectors& X, const Cell* cell, int64_t level) {
 
   int64_t len = 0;
   std::vector<const Cell*> cells(nodes);
+  std::vector<int64_t> dims(xlen);
   findCellsAtLevel(&cells[0], &len, cell, level);
 
   for (int64_t i = 0; i < len; i++) {
@@ -459,9 +463,16 @@ void nbd::loadX(Vectors& X, const Cell* cell, int64_t level) {
     neighborsILocal(li, ci->ZID, level);
     Vector& Xi = X[li];
     cVector(Xi, ci->NBODY);
+    dims[li] = ci->NBODY;
 
     for (int64_t n = 0; n < ci->NBODY; n++)
       Xi.X[n] = ci->BODY[n].B;
   }
+
+  DistributeDims(&dims[0], level);
+
+  for (int64_t i = 0; i < xlen; i++)
+    if (X[i].N != dims[i])
+      cVector(X[i], dims[i]);
   DistributeVectorsList(X, level);
 }

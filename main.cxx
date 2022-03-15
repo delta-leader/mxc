@@ -28,13 +28,13 @@ int main(int argc, char* argv[]) {
   for (int64_t i = 0; i < R.size(); i++)
     R[i] = -1. + 2. * ((double)std::rand() / RAND_MAX);
 
-  double my_min[]{ 0., 0., -1.e2 };
-  double my_max[]{ 1., 1., 1.e2 };
+  std::vector<double> my_min(dim + 1, 0.);
+  std::vector<double> my_max(dim + 1, 1.);
 
   Bodies body(Nbody);
-  randomBodies(body, Nbody, my_min, my_max, dim, 1234);
+  randomBodies(body, Nbody, &my_min[0], &my_max[0], dim, 1234);
   Cells cell;
-  int64_t levels = buildTree(cell, body, Ncrit, my_min, my_max, dim);
+  int64_t levels = buildTree(cell, body, Ncrit, &my_min[0], &my_max[0], dim);
 
   std::vector<Cell*> locals(levels + 1);
   traverse(cell, &locals[0], levels, dim, theta, mpi_rank, mpi_size);
@@ -49,9 +49,9 @@ int main(int argc, char* argv[]) {
 
   Basis basis;
   allocBasis(basis, levels);
-  fillDimsFromCell(basis.back(), &cell[0], levels);
+  fillDimsFromCell(basis.back(), locals[levels], levels);
 
-  factorA(&nodes[0], &basis[0], &rels[0], levels, 1.e-6, R.data(), R.size());
+  factorA(&nodes[0], &basis[0], &rels[0], levels, 1.e-7, R.data(), R.size());
 
   Vectors X;
   loadX(X, locals[levels], levels);
@@ -64,11 +64,11 @@ int main(int argc, char* argv[]) {
 
   double err;
   solveRelErr(&err, rhs[levels].X, X, levels);
-  printf("%d ERR: %e\n", mpi_rank, err);
+  printf("%lld ERR: %e\n", mpi_rank, err);
 
   int64_t* flops = getFLOPS();
   double gf = flops[0] * 1.e-9;
-  printf("%d GFLOPS: %f\n", mpi_rank, gf);
+  printf("%lld GFLOPS: %f\n", mpi_rank, gf);
   closeComm();
   return 0;
 }
