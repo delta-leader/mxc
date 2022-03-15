@@ -52,9 +52,11 @@ namespace nbd {
 
   void findCellsAtLevel(const Cell* cells[], int64_t* len, const Cell* cell, int64_t level);
 
+  const Cell* findLocalAtLevel(const Cell* cell, int64_t level, int64_t mpi_rank, int64_t mpi_size);
+
   void remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bodies& bodies, int64_t dim);
 
-  void traverse(Cells& cells, Cell* locals[], int64_t levels, int64_t dim, int64_t theta, int64_t mpi_rank, int64_t mpi_size);
+  void traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta, int64_t mpi_rank, int64_t mpi_size);
 
   void evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, int64_t sp_pts, int64_t rank, int64_t dim);
 

@@ -187,29 +187,32 @@ void nbd::resetMatVec(MatVec vx[], const Vectors& X, int64_t levels) {
   int64_t iend = (int64_t)1 << levels;
   selfLocalRange(ibegin, iend, levels);
   Vectors& xleaf = vx[levels].X;
-  for (int64_t i = ibegin; i <= iend; i++)
+  for (int64_t i = ibegin; i < iend; i++)
     cpyFromVector(X[i], xleaf[i].X.data());
 }
 
-void nbd::h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* locals[], const Base basis[], int64_t dim, const Vectors& X, int64_t levels) {
+void nbd::h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels, int64_t mpi_rank, int64_t mpi_size) {
   resetMatVec(vx, X, levels);
 
   for (int64_t i = levels; i > 0; i--) {
     interTrans('U', vx[i], basis[i].Uo, i);
     permuteAndMerge('F', vx[i].M, vx[i - 1].X, i - 1);
   }
-  horizontalPass(vx[0].B, vx[0].X, ef, locals[0], dim, 0);
+  const Cell* local = root;
+  horizontalPass(vx[0].B, vx[0].X, ef, local, dim, 0);
 
   for (int64_t i = 1; i <= levels; i++) {
     permuteAndMerge('B', vx[i].L, vx[i - 1].B, i - 1);
-    horizontalPass(vx[i].B, vx[i].X, ef, locals[i], dim, i);
     interTrans('D', vx[i], basis[i].Uo, i);
+    local = findLocalAtLevel(local, i, mpi_rank, mpi_size);
+    horizontalPass(vx[i].B, vx[i].X, ef, local, dim, i);
   }
 }
 
-void nbd::h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* locals[], const Base basis[], int64_t dim, const Vectors& X, int64_t levels) {
-  h2MatVecLR(vx, ef, locals, basis, dim, X, levels);
-  closeQuarter(vx[levels].B, vx[levels].X, ef, locals[levels], dim, levels);
+void nbd::h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels, int64_t mpi_rank, int64_t mpi_size) {
+  h2MatVecLR(vx, ef, root, basis, dim, X, levels, mpi_rank, mpi_size);
+  const Cell* local = findLocalAtLevel(root, levels, mpi_rank, mpi_size);
+  closeQuarter(vx[levels].B, vx[levels].X, ef, local, dim, levels);
 }
 
 /*

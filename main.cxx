@@ -35,9 +35,9 @@ int main(int argc, char* argv[]) {
   randomBodies(body, Nbody, &my_min[0], &my_max[0], dim, 1234);
   Cells cell;
   int64_t levels = buildTree(cell, body, Ncrit, &my_min[0], &my_max[0], dim);
-
-  std::vector<Cell*> locals(levels + 1);
-  traverse(cell, &locals[0], levels, dim, theta, mpi_rank, mpi_size);
+  traverse(cell, levels, dim, theta, mpi_rank, mpi_size);
+  const Cell* lcleaf = &cell[0];
+  lcleaf = findLocalAtLevel(lcleaf, levels, mpi_rank, mpi_size);
 
   std::vector<CSC> rels(levels + 1);
   relationsNear(&rels[0], cell, mpi_rank, mpi_size);
@@ -49,16 +49,16 @@ int main(int argc, char* argv[]) {
 
   Basis basis;
   allocBasis(basis, levels);
-  fillDimsFromCell(basis.back(), locals[levels], levels);
+  fillDimsFromCell(basis.back(), lcleaf, levels);
 
   factorA(&nodes[0], &basis[0], &rels[0], levels, 1.e-7, R.data(), R.size());
 
   Vectors X;
-  loadX(X, locals[levels], levels);
+  loadX(X, lcleaf, levels);
 
   RHSS rhs;
   allocRightHandSides(rhs, &basis[0], levels);
-  closeQuarter(rhs[levels].X, X, ef, locals[levels], dim, levels);
+  closeQuarter(rhs[levels].X, X, ef, lcleaf, dim, levels);
 
   solveA(&rhs[0], &nodes[0], &basis[0], &rels[0], levels);
 

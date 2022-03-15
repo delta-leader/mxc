@@ -23,9 +23,9 @@ namespace nbd {
 
   void resetMatVec(MatVec vx[], const Vectors& X, int64_t levels);
 
-  void h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* locals[], const Base basis[], int64_t dim, const Vectors& X, int64_t levels);
+  void h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels, int64_t mpi_rank, int64_t mpi_size);
 
-  void h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* locals[], const Base basis[], int64_t dim, const Vectors& X, int64_t levels);
+  void h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels, int64_t mpi_rank, int64_t mpi_size);
 
   void zeroC(const Cell* cell, double* c, int64_t lmin, int64_t lmax);
 

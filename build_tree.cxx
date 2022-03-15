@@ -229,6 +229,28 @@ void nbd::findCellsAtLevel(const Cell* cells[], int64_t* len, const Cell* cell, 
       findCellsAtLevel(cells, len, cell->CHILD + i, level);
 }
 
+const Cell* nbd::findLocalAtLevel(const Cell* cell, int64_t level, int64_t mpi_rank, int64_t mpi_size) {
+  const Cell* iter = cell;
+  int64_t mpi_levels = mpi_size > 1 ? (int64_t)(std::log2(mpi_size)) : 0;
+  int64_t iters = level < mpi_levels ? level : mpi_levels;
+
+  for (int64_t i = iter->LEVEL + 1; i <= iters; i++) {
+    int64_t lvl_diff = mpi_levels - i;
+    int64_t my_rank = mpi_rank >> lvl_diff;
+    int64_t nchild = iter->NCHILD;
+    Cell* child = iter->CHILD;
+    for (int64_t n = 0; n < nchild; n++)
+      if (child[n].ZID == my_rank)
+        iter = child + n;
+  }
+
+  int64_t my_rank = mpi_rank >> (mpi_levels - iters);
+  if (iter->ZID == my_rank)
+    return iter;
+  else
+    return nullptr;
+}
+
 
 void nbd::remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bodies& bodies, int64_t dim) {
   int64_t avail = bodies.size();
@@ -259,37 +281,24 @@ void nbd::remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bod
   }
 }
 
-void nbd::traverse(Cells& cells, Cell* locals[], int64_t levels, int64_t dim, int64_t theta, int64_t mpi_rank, int64_t mpi_size) {
+void nbd::traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta, int64_t mpi_rank, int64_t mpi_size) {
   getList(&cells[0], &cells[0], dim, theta);
   int64_t mpi_levels = mpi_size > 1 ? (int64_t)(std::log2(mpi_size)) : 0;
 
-  Cell* iter = &cells[0];
+  const Cell* local = &cells[0];
   for (int64_t i = 0; i <= mpi_levels; i++) {
-    int64_t lvl_diff = mpi_levels - i;
-    int64_t my_rank = mpi_rank >> lvl_diff;
-    if (iter->LEVEL < i) {
-      int64_t nchild = iter->NCHILD;
-      Cell* child = iter->CHILD;
-      for (int64_t n = 0; n < nchild; n++)
-        if (child[n].ZID == my_rank)
-          iter = child + n;
-    }
-    if (iter->ZID == my_rank) {
-      locals[i] = iter;
-      int64_t nlen = iter->listNear.size();
+    local = findLocalAtLevel(local, i, mpi_rank, mpi_size);
+    if (local != nullptr) {
+      int64_t nlen = local->listNear.size();
       std::vector<int64_t> ngbs(nlen);
       for (int64_t n = 0; n < nlen; n++) {
-        Cell* c = (iter->listNear)[n];
+        Cell* c = (local->listNear)[n];
         ngbs[n] = c->ZID;
       }
 
       configureComm(mpi_rank, i, &ngbs[0], nlen);
     }
   }
-
-  if (iter->ZID == mpi_rank)
-    for (int64_t i = mpi_levels + 1; i <= levels; i++)
-      locals[i] = iter;
 }
 
 void nbd::evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, int64_t sp_pts, int64_t rank, int64_t dim) {

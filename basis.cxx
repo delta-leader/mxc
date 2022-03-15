@@ -76,30 +76,32 @@ void nbd::fillDimsFromCell(Base& basis, const Cell* cell, int64_t level) {
   int64_t len = 0;
   std::vector<const Cell*> leaves(nodes);
   findCellsAtLevel(&leaves[0], &len, cell, level);
+
   for (int64_t i = 0; i < len; i++) {
     const Cell* ci = leaves[i];
     int64_t ii = ci->ZID;
     int64_t ni = ci->NBODY;
     if (ci->NCHILD > 0) {
       ni = 0;
+      const Cell* cc = ci->CHILD;
       for (int64_t n = 0; n < ci->NCHILD; n++)
-        ni = ni + ci->CHILD[n].Multipole.size();
+        ni = ni + cc[n].Multipole.size();
     }
     int64_t mi = ci->Multipole.size();
     int64_t box_i = ii;
     neighborsILocal(box_i, ii, level);
 
     basis.DIMS[box_i] = ni;
-    /*if (mi > 0) {
-      basis.DIMO[box_i] = mi;
-      cMatrix(basis.Uo[box_i], mi, ni);
+    basis.DIMO[box_i] = mi;
+    if (mi > 0) {
+      cMatrix(basis.Uo[box_i], ni, mi);
       cpyFromMatrix('N', ci->Base, basis.Uo[box_i].A.data());
-    }*/
+    }
   }
 
   DistributeDims(&basis.DIMS[0], level);
-  //DistributeDims(&basis.DIMO[0], level);
-  //DistributeMatricesList(basis.Uo, level);
+  DistributeDims(&basis.DIMO[0], level);
+  DistributeMatricesList(basis.Uo, level);
 }
 
 void nbd::allocUcUo(Base& basis, const Matrices& C, int64_t level) {
