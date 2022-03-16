@@ -133,8 +133,6 @@ void nbd::permuteAndMerge(char fwbk, Vectors& px, Vectors& nx, int64_t nlevel) {
         cpyVecToVec(x2.N, x0, x2, x0.N - x2.N, 0);
       }
     }
-
-    DistributeVectorsList(px, plevel);
   }
 }
 
@@ -195,6 +193,7 @@ void nbd::h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* root, const Base basi
   resetMatVec(vx, X, levels);
 
   for (int64_t i = levels; i > 0; i--) {
+    DistributeVectorsList(vx[i].X, i);
     interTrans('U', vx[i], basis[i].Uo, i);
     permuteAndMerge('F', vx[i].M, vx[i - 1].X, i - 1);
   }
@@ -213,6 +212,28 @@ void nbd::h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* root, const Base bas
   h2MatVecLR(vx, ef, root, basis, dim, X, levels, mpi_rank, mpi_size);
   const Cell* local = findLocalAtLevel(root, levels, mpi_rank, mpi_size);
   closeQuarter(vx[levels].B, vx[levels].X, ef, local, dim, levels);
+}
+
+void nbd::h2MatVecReference(Vectors& B, EvalFunc ef, const Cell* root, int64_t dim, int64_t levels, int64_t mpi_rank, int64_t mpi_size) {
+  Vector X;
+  cVector(X, root->NBODY);
+  for (int64_t i = 0; i < root->NBODY; i++)
+    X.X[i] = root->BODY[i].B;
+
+  int64_t len = 0;
+  std::vector<const Cell*> cells((int64_t)1 << levels);
+  const Cell* local = findLocalAtLevel(root, levels, mpi_rank, mpi_size);
+  findCellsAtLevel(&cells[0], &len, root, levels);
+
+  for (int64_t i = 0; i < len; i++) {
+    const Cell* ci = cells[i];
+    int64_t lislen = ci->listNear.size();
+    int64_t li = ci->ZID;
+    neighborsILocal(li, ci->ZID, levels);
+    Vector& Bi = B[li];
+    cVector(Bi, ci->NBODY);
+    P2P(ef, ci, root, dim, X, Bi);
+  }
 }
 
 /*

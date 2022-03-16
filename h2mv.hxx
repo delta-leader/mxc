@@ -27,6 +27,8 @@ namespace nbd {
 
   void h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels, int64_t mpi_rank, int64_t mpi_size);
 
+  void h2MatVecReference(Vectors& B, EvalFunc ef, const Cell* root, int64_t dim, int64_t levels, int64_t mpi_rank, int64_t mpi_size);
+
   void zeroC(const Cell* cell, double* c, int64_t lmin, int64_t lmax);
 
   void multiplyC(EvalFunc ef, const Cells& cells, int64_t dim, int64_t level, const Matrices& base, double* m, double* l);

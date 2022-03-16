@@ -145,6 +145,7 @@ void nbd::solveA(RHS X[], const Node A[], const Base B[], const CSC rels[], int6
   
   for (int64_t i = 1; i <= levels; i++) {
     permuteAndMerge('B', X[i].Xo, X[i - 1].X, i - 1);
+    DistributeVectorsList(X[i].Xo, i);
     svAocBk(X[i].Xc, X[i].Xo, A[i].A_oc, rels[i], i);
     svAccBk(X[i].Xc, A[i].A_cc, rels[i], i);
     basisXoc('B', X[i], B[i], i);

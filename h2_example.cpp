@@ -3,6 +3,7 @@
 #include "kernel.hxx"
 #include "h2mv.hxx"
 #include "basis.hxx"
+#include "solver.hxx"
 #include "dist.hxx"
 
 #include <cstdio>
@@ -56,10 +57,12 @@ int main(int argc, char* argv[]) {
 
   h2MatVecAll(&vx[0], fun, &cell[0], &basis[0], dim, X, levels, mpi_rank, mpi_size);
 
-  /*zeroVector(b_ref);
-  P2P(fun, &cell[0], &cell[0], dim, x, b_ref);
+  Vectors Bref(X.size());
+  h2MatVecReference(Bref, fun, &cell[0], dim, levels, mpi_rank, mpi_size);
 
-  printf("H2-vec vs direct m-vec err %e\n", rel2err(&b.X[0], &b_ref.X[0], m, 1, m, m));*/
+  double err;
+  solveRelErr(&err, vx[levels].X, X, levels);
+  printf("H2-vec vs direct m-vec %lld ERR: %e\n", mpi_rank, err);
 
   closeComm();
   return 0;
