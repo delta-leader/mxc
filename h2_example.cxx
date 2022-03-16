@@ -15,9 +15,9 @@ int main(int argc, char* argv[]) {
   using namespace nbd;
 
   int64_t dim = 2;
-  int64_t m = 4000;
-  int64_t leaf = 200;
-  int64_t rank = 200;
+  int64_t m = 10000;
+  int64_t leaf = 100;
+  int64_t rank = 100;
   int64_t theta = 1;
 
   std::vector<double> my_min(dim + 1, 0.);
@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
   h2MatVecReference(Bref, fun, &cell[0], dim, levels, mpi_rank, mpi_size);
 
   double err;
-  solveRelErr(&err, vx[levels].X, X, levels);
+  solveRelErr(&err, vx[levels].B, Bref, levels);
   printf("H2-vec vs direct m-vec %lld ERR: %e\n", mpi_rank, err);
 
   closeComm();

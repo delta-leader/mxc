@@ -25,7 +25,7 @@ target_compile_options(nbd PRIVATE ${MPI_C_COMPILE_FLAGS})
 target_link_libraries(nbd ${MPI_C_LIBRARIES} ${MPI_C_LINK_FLAGS})
 
 add_executable(h2_example
-  h2_example.cpp
+  h2_example.cxx
 )
 target_link_libraries(h2_example nbd)
 target_include_directories(h2_example PRIVATE "./" )
