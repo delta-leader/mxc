@@ -223,7 +223,7 @@ void nbd::h2MatVecReference(Vectors& B, EvalFunc ef, const Cell* root, int64_t d
   int64_t len = 0;
   std::vector<const Cell*> cells((int64_t)1 << levels);
   const Cell* local = findLocalAtLevel(root, levels, mpi_rank, mpi_size);
-  findCellsAtLevel(&cells[0], &len, root, levels);
+  findCellsAtLevel(&cells[0], &len, local, levels);
 
   for (int64_t i = 0; i < len; i++) {
     const Cell* ci = cells[i];

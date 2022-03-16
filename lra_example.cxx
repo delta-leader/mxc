@@ -85,7 +85,7 @@ void compress_using_aca(int m, int n, int r, double* a, int lda) {
     }
   }
 
-  printf("aca rel err: %e, aca iters %d\n", rel2err(b.data(), a, m, n, m, lda), iters);
+  printf("aca rel err: %e, aca iters %lld\n", rel2err(b.data(), a, m, n, m, lda), iters);
 }
 
 
@@ -120,5 +120,5 @@ void compress_using_id(int m, int n, int r, double* a, int lda) {
     }
   }
 
-  printf("id rel err: %e, aca iters %d\n", rel2err(b.data(), a, m, n, m, lda), iters);
+  printf("id rel err: %e, aca iters %lld\n", rel2err(b.data(), a, m, n, m, lda), iters);
 }
