@@ -9,11 +9,6 @@ message(STATUS ${MPI_INCLUDE_PATH})
 message(STATUS ${MPI_C_LIBRARIES})
 include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
-find_package(OpenMP REQUIRED)
-if(OpenMP_FOUND)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-endif()
-
 add_library(nbd STATIC 
   minblas.c minblas.h
   build_tree.cxx build_tree.hxx

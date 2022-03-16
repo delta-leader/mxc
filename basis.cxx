@@ -101,6 +101,16 @@ void nbd::fillDimsFromCell(Base& basis, const Cell* cell, int64_t level) {
 
   DistributeDims(&basis.DIMS[0], level);
   DistributeDims(&basis.DIMO[0], level);
+
+  int64_t xlen = basis.DIMS.size();
+  for (int64_t i = 0; i < xlen; i++) {
+    Matrix& Ai = basis.Uo[i];
+    int64_t m = basis.DIMS[i];
+    int64_t n = basis.DIMO[i];
+    int64_t msize = m * n;
+    if (Ai.M != m || Ai.N != n)
+      cMatrix(Ai, m, n);
+  }
   DistributeMatricesList(basis.Uo, level);
 }
 

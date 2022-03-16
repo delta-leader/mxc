@@ -22,7 +22,7 @@ int main(int argc, char* argv[]) {
 
   std::vector<double> my_min(dim + 1, 0.);
   std::vector<double> my_max(dim + 1, 1.);
-  auto fun = dim == 2 ? l2d() : l3d();
+  EvalFunc fun = dim == 2 ? l2d() : l3d();
 
   Bodies body(m);
   randomBodies(body, m, &my_min[0], &my_max[0], dim, 1234);

@@ -3,8 +3,8 @@ CC	= g++ -std=c++11 -O3 -I.
 MPI_CC	= mpicxx -O3 -I.
 LC	= -lm
 
-all: build_tree minblas linalg kernel basis umv h2mv solver dist main
-	$(MPI_CC) main.o build_tree.o minblas.o linalg.o kernel.o basis.o umv.o h2mv.o solver.o dist.o $(LC)
+all: build_tree minblas linalg kernel basis umv h2mv solver dist h2
+	$(MPI_CC) h2_example.o build_tree.o minblas.o linalg.o kernel.o basis.o umv.o h2mv.o solver.o dist.o $(LC)
 
 build_tree: build_tree.cxx build_tree.hxx
 	$(CC) -c build_tree.cxx
@@ -35,6 +35,9 @@ dist: dist.cxx dist.hxx
 
 main: main.cxx
 	$(MPI_CC) -c main.cxx
+
+h2: h2_example.cxx
+	$(MPI_CC) -c h2_example.cxx
 
 clean:
 	rm -f *.o a.out
