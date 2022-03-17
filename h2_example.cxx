@@ -49,6 +49,19 @@ int main(int argc, char* argv[]) {
   std::vector<Matrices> d(levels + 1);
   evaluateNear(&d[0], fun, cell, dim, &cscs[0], levels);
 
+  std::srand(100);
+  std::vector<double> R(1 << 16);
+  for (int64_t i = 0; i < R.size(); i++)
+    R[i] = -1. + 2. * ((double)std::rand() / RAND_MAX);
+
+  local = &cell[0];
+  std::vector<SpDense> sp(levels + 1);
+  for (int64_t i = 0; i <= levels; i++) {
+    local = findLocalAtLevel(local, i, mpi_rank, mpi_size);
+    allocSpDense(sp[i], &cscs[0], i);
+    factorSpDense(sp[i], local, d[i], 1.e-7, &R[0], R.size());
+  }
+
   std::vector<MatVec> vx(levels + 1);
   allocMatVec(&vx[0], &basis[0], levels);
 
