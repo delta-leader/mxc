@@ -42,28 +42,26 @@ int main(int argc, char* argv[]) {
   std::vector<CSC> rels(levels + 1);
   relationsNear(&rels[0], cell, mpi_rank, mpi_size);
 
-  Nodes nodes;
-  allocNodes(nodes, &rels[0], levels);
-  Matrices& A = nodes.back().A;
+  Matrices A(rels[levels].NNZ);
   evaluateLeafNear(A, ef, &cell[0], dim, rels[levels]);
 
-  Basis basis;
-  allocBasis(basis, levels);
-  fillDimsFromCell(basis.back(), lcleaf, levels);
+  SpDense sp;
+  allocSpDense(sp, &rels[0], levels);
+  factorSpDense(sp, lcleaf, A, 1.e-7, &R[0], R.size());
 
-  factorA(&nodes[0], &basis[0], &rels[0], levels, 1.e-7, R.data(), R.size());
-
-  Vectors X;
+  Vectors X, Xref;
   loadX(X, lcleaf, levels);
+  loadX(Xref, lcleaf, levels);
 
-  RHSS rhs;
-  allocRightHandSides(rhs, &basis[0], levels);
-  closeQuarter(rhs[levels].X, X, ef, lcleaf, dim, levels);
+  RHSS rhs(levels + 1);
+  solveSpDense(&rhs[0], sp, X);
 
-  solveA(&rhs[0], &nodes[0], &basis[0], &rels[0], levels);
+  for (int64_t i = 0; i < X.size(); i++)
+    zeroVector(X[i]);
+  closeQuarter(X, rhs[levels].X, ef, lcleaf, dim, levels);
 
   double err;
-  solveRelErr(&err, rhs[levels].X, X, levels);
+  solveRelErr(&err, X, Xref, levels);
   printf("%lld ERR: %e\n", mpi_rank, err);
 
   int64_t* flops = getFLOPS();

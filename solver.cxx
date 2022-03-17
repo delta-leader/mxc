@@ -1,6 +1,5 @@
 
 #include "solver.hxx"
-#include "h2mv.hxx"
 #include "dist.hxx"
 
 using namespace nbd;
@@ -108,11 +107,10 @@ void nbd::svAocBk(Vectors& Xc, const Vectors& Xo, const Matrices& A_oc, const CS
     }
 }
 
-void nbd::allocRightHandSides(RHSS& rhs, const Base base[], int64_t levels) {
-  rhs.resize(levels + 1);
+void nbd::allocRightHandSides(RHS st[], const Base base[], int64_t levels) {
   for (int64_t i = 0; i <= levels; i++) {
     int64_t nodes = base[i].DIMS.size();
-    RHS& rhs_i = rhs[i];
+    RHS& rhs_i = st[i];
     Vectors& ix = rhs_i.X;
     Vectors& ixc = rhs_i.Xc;
     Vectors& ixo = rhs_i.Xo;
@@ -134,22 +132,59 @@ void nbd::allocRightHandSides(RHSS& rhs, const Base base[], int64_t levels) {
   }
 }
 
-void nbd::solveA(RHS X[], const Node A[], const Base B[], const CSC rels[], int64_t levels) {
+void nbd::solveA(RHS st[], const Node A[], const Base B[], const CSC rels[], const Vectors& X, int64_t levels) {
+  int64_t ibegin = 0;
+  int64_t iend = (int64_t)1 << levels;
+  selfLocalRange(ibegin, iend, levels);
+  int64_t nodes = iend - ibegin;
+  for (int64_t i = ibegin; i < iend; i++)
+    vaxpby(st[levels].X[i], &(X[i].X)[0], 1., 0.);
+  DistributeVectorsList(st[levels].X, levels);
+
   for (int64_t i = levels; i > 0; i--) {
-    basisXoc('F', X[i], B[i], i);
-    svAccFw(X[i].Xc, A[i].A_cc, rels[i], i);
-    svAocFw(X[i].Xo, X[i].Xc, A[i].A_oc, rels[i], i);
-    permuteAndMerge('F', X[i].Xo, X[i - 1].X, i - 1);
+    basisXoc('F', st[i], B[i], i);
+    svAccFw(st[i].Xc, A[i].A_cc, rels[i], i);
+    svAocFw(st[i].Xo, st[i].Xc, A[i].A_oc, rels[i], i);
+    permuteAndMerge('F', st[i].Xo, st[i - 1].X, i - 1);
   }
-  chol_solve(X[0].X[0], A[0].A[0]);
+  chol_solve(st[0].X[0], A[0].A[0]);
   
   for (int64_t i = 1; i <= levels; i++) {
-    permuteAndMerge('B', X[i].Xo, X[i - 1].X, i - 1);
-    DistributeVectorsList(X[i].Xo, i);
-    svAocBk(X[i].Xc, X[i].Xo, A[i].A_oc, rels[i], i);
-    svAccBk(X[i].Xc, A[i].A_cc, rels[i], i);
-    basisXoc('B', X[i], B[i], i);
+    permuteAndMerge('B', st[i].Xo, st[i - 1].X, i - 1);
+    DistributeVectorsList(st[i].Xo, i);
+    svAocBk(st[i].Xc, st[i].Xo, A[i].A_oc, rels[i], i);
+    svAccBk(st[i].Xc, A[i].A_cc, rels[i], i);
+    basisXoc('B', st[i], B[i], i);
   }
+}
+
+void nbd::allocSpDense(SpDense& sp, const CSC rels[], int64_t levels) {
+  sp.Levels = levels;
+  sp.D.resize(levels + 1);
+  sp.Basis.resize(levels + 1);
+  sp.Rels = rels;
+  allocNodes(sp.D, rels, levels);
+  allocBasis(sp.Basis, levels);
+}
+
+void nbd::factorSpDense(SpDense& sp, const Cell* local, const Matrices& D, double repi, const double* R, int64_t lenR) {
+  int64_t levels = sp.Levels;
+  fillDimsFromCell(sp.Basis[levels], local, levels);
+
+  int64_t nnz = sp.Rels[levels].NNZ;
+  for (int64_t i = 0; i < nnz; i++) {
+    Matrix& Ai = sp.D[levels].A[i];
+    const Matrix& Di = D[i];
+    if (Ai.M != Di.M || Ai.N != Di.N)
+      cMatrix(Ai, Di.M, Di.N);
+    maxpby(Ai, &Di.A[0], 1., 0.);
+  }
+  factorA(&sp.D[0], &sp.Basis[0], sp.Rels, levels, repi, R, lenR);
+}
+
+void nbd::solveSpDense(RHS st[], SpDense& sp, const Vectors& X) {
+  allocRightHandSides(st, &sp.Basis[0], sp.Levels);
+  solveA(st, &sp.D[0], &sp.Basis[0], sp.Rels, X, sp.Levels);
 }
 
 void nbd::solveRelErr(double* err_out, const Vectors& X, const Vectors& ref, int64_t level) {
