@@ -5,6 +5,7 @@
 #include <cmath>
 #include <random>
 #include <numeric>
+#include <algorithm>
 #include <cstdio>
 
 using namespace nbd;
@@ -456,7 +457,7 @@ void nbd::evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t di
   for (int64_t i = levels - 1; i >= 0; i--) {
     evaluateIntermediate(ef, &cells[0], cells, dim, &rels[i], &d[i], i);
     if (rels[i].N == rels[i + 1].N)
-      butterflySumA(d[i], i);
+      butterflySumA(d[i], i + 1);
   }
 }
 
