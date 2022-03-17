@@ -14,15 +14,16 @@ int main(int argc, char* argv[]) {
 
   using namespace nbd;
 
-  int64_t dim = 2;
-  int64_t m = 10000;
-  int64_t leaf = 100;
-  int64_t rank = 100;
-  int64_t theta = 1;
+  int64_t dim = 3;
+  int64_t m = 20000;
+  int64_t leaf = 256;
+  int64_t rank = 200;
+  int64_t theta = 2;
 
   std::vector<double> my_min(dim + 1, 0.);
   std::vector<double> my_max(dim + 1, 1.);
   EvalFunc fun = dim == 2 ? l2d() : l3d();
+  fun.singularity = m * 1.e2;
 
   Bodies body(m);
   randomBodies(body, m, &my_min[0], &my_max[0], dim, 1234);
@@ -32,7 +33,7 @@ int main(int argc, char* argv[]) {
   initComm(&argc, &argv);
 
   traverse(cell, levels, dim, theta);
-  evaluateBasis(fun, cell, &cell[0], body, 2000, rank, dim);
+  evaluateBasis(fun, cell, &cell[0], body, 1.e-4, 2000, rank, dim);
 
   const Cell* local = &cell[0];
   Basis basis;
@@ -57,7 +58,7 @@ int main(int argc, char* argv[]) {
   for (int64_t i = 0; i <= levels; i++) {
     local = findLocalAtLevel(local, i);
     allocSpDense(sp[i], &cscs[0], i);
-    factorSpDense(sp[i], local, d[i], 1.e-7, &R[0], R.size());
+    factorSpDense(sp[i], local, d[i], 1.e-4, &R[0], R.size());
   }
 
   std::vector<MatVec> vx(levels + 1);
@@ -76,6 +77,12 @@ int main(int argc, char* argv[]) {
   double err;
   solveRelErr(&err, vx[levels].B, Bref, levels);
   printf("H2-vec vs direct m-vec %lld ERR: %e\n", mpi_rank, err);
+
+  RHSS rhs(levels + 1);
+  solveH2(&rhs[0], &vx[0], &sp[0], fun, &cell[0], &basis[0], dim, Bref, levels);
+
+  solveRelErr(&err, rhs[levels].X, X, levels);
+  printf("H2-solve %lld ERR: %e\n", mpi_rank, err);
 
   closeComm();
   return 0;

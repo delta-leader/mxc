@@ -41,7 +41,7 @@ namespace nbd {
 
   void solveSpDense(RHS st[], const SpDense& sp, const Vectors& X);
 
-  void solveH2(RHS st[], MatVec vx[], const SpDense sps[], const Vectors& X, int64_t levels);
+  void solveH2(RHS st[], MatVec vx[], const SpDense sps[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels);
 
   void solveRelErr(double* err_out, const Vectors& X, const Vectors& ref, int64_t level);
 

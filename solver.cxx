@@ -187,9 +187,47 @@ void nbd::solveSpDense(RHS st[], const SpDense& sp, const Vectors& X) {
   solveA(st, &sp.D[0], &sp.Basis[0], sp.Rels, X, sp.Levels);
 }
 
-void nbd::solveH2(RHS st[], MatVec vx[], const SpDense sps[], const Vectors& X, int64_t levels) {
+void nbd::solveH2(RHS st[], MatVec vx[], const SpDense sps[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels) {
   solveSpDense(st, sps[levels], X);
-  
+
+  if (levels > 0) {
+    h2MatVecLR(vx, ef, root, basis, dim, st[levels].X, levels);
+
+    int64_t xlen = (int64_t)1 << (levels - 1);
+    int64_t ibegin = 0;
+    int64_t iend = xlen;
+    neighborContentLength(xlen, levels - 1);
+    selfLocalRange(ibegin, iend, levels - 1);
+
+    Vectors Xi(xlen);
+    for (int64_t i = 0; i < xlen; i++) {
+      const Vector& vi = vx[levels - 1].B[i];
+      if (Xi[i].N != vi.N)
+        cVector(Xi[i], vi.N);
+      if (i >= ibegin && i < iend)
+        vaxpby(Xi[i], &vi.X[0], 1., 0.);
+    }
+
+    solveH2(st, vx, sps, ef, root, basis, dim, Xi, levels - 1);
+    h2MatVecLR(vx, ef, root, basis, dim, st[levels - 1].X, levels - 1);
+
+    for (int64_t i = ibegin; i < iend; i++) {
+      Vector& vi = vx[levels - 1].B[i];
+      vaxpby(vi, &Xi[i].X[0], 1., -1.);
+    }
+    permuteAndMerge('B', vx[levels].L, vx[levels - 1].B, levels - 1);
+    interTrans('D', vx[levels], basis[levels].Uo, levels);
+
+    ibegin = 0;
+    iend = (int64_t)1 << levels;
+    selfLocalRange(ibegin, iend, levels);
+    for (int64_t i = ibegin; i < iend; i++) {
+      Vector& vi = vx[levels].B[i];
+      vaxpby(vi, &X[i].X[0], 1., -1.);
+    }
+
+    solveSpDense(st, sps[levels], vx[levels].B);
+  }
 }
 
 void nbd::solveRelErr(double* err_out, const Vectors& X, const Vectors& ref, int64_t level) {

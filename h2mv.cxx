@@ -21,7 +21,7 @@ void nbd::interTrans(char updn, MatVec& vx, const Matrices& basis, int64_t level
       mvec('T', basis[i], X[i], M[i], 1., 0.);
   else if (updn == 'D' || updn == 'd')
     for (int64_t i = lbegin; i < lend; i++)
-      mvec('N', basis[i], L[i], B[i], 1., 1.);
+      mvec('N', basis[i], L[i], B[i], 1., 0.);
 }
 
 

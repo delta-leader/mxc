@@ -58,7 +58,7 @@ namespace nbd {
 
   void traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta);
 
-  void evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, int64_t sp_pts, int64_t rank, int64_t dim);
+  void evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, double epi, int64_t sp_pts, int64_t rank, int64_t dim);
 
   void relationsNear(CSC rels[], const Cells& cells);
 

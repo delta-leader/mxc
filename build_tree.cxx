@@ -304,14 +304,14 @@ void nbd::traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta) {
   }
 }
 
-void nbd::evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, int64_t sp_pts, int64_t rank, int64_t dim) {
+void nbd::evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies, double epi, int64_t sp_pts, int64_t rank, int64_t dim) {
   if (c->NCHILD > 0)
     for (int64_t i = 0; i < c->NCHILD; i++)
-      evaluateBasis(ef, cells, c->CHILD + i, bodies, sp_pts, rank, dim);
+      evaluateBasis(ef, cells, c->CHILD + i, bodies, epi, sp_pts, rank, dim);
 
   Bodies remote;
   remoteBodies(remote, sp_pts, *c, bodies, dim);
-  P2Mmat(ef, c, remote.data(), remote.size(), dim, c->Base, 1.e-12, rank);
+  P2Mmat(ef, c, remote.data(), remote.size(), dim, c->Base, epi, rank);
   invBasis(c->Base, c->Biv);
 }
 
@@ -402,9 +402,8 @@ void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, c
     n = n + cjj->Multipole.size();
   }
 
-  d.A.resize(m * n);
-  d.M = m;
-  d.N = n;
+  cMatrix(d, m, n);
+  zeroMatrix(d);
 
   int64_t y_off = 0;
   for (int64_t i = 0; i < ci->NCHILD; i++) {
