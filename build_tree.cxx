@@ -428,21 +428,21 @@ void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, c
   }
 }
 
-void evaluateIntermediate(EvalFunc ef, const Cell* c, const Cells& cells, int64_t dim, const CSC csc[], Matrices d[]) {
-  if (c->NCHILD > 0) {
+void evaluateIntermediate(EvalFunc ef, const Cell* c, const Cells& cells, int64_t dim, const CSC* csc, Matrices* d, int64_t level) {
+  if (c->LEVEL < level)
     for (int64_t i = 0; i < c->NCHILD; i++)
-      evaluateIntermediate(ef, c->CHILD + i, cells, dim, csc, d);
+      evaluateIntermediate(ef, c->CHILD + i, cells, dim, csc, d, level);
 
+  if (c->LEVEL == level) {
     int64_t zj = c->ZID;
-    int64_t level = c->LEVEL;
     int64_t lnear = c->listNear.size();
     for (int64_t i = 0; i < lnear; i++) {
       const Cell* ci = c->listNear[i];
       int64_t zi = ci->ZID;
       int64_t ij;
-      lookupIJ(ij, csc[level], zi, zj);
+      lookupIJ(ij, *csc, zi, zj);
       if (ij >= 0)
-        writeIntermediate(d[level][ij], ef, ci, c, cells, dim, d[level + 1], csc[level + 1]);
+        writeIntermediate((*d)[ij], ef, ci, c, cells, dim, d[1], csc[1]);
     }
   }
 }
@@ -453,7 +453,11 @@ void nbd::evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t di
   for (int64_t i = 0; i <= levels; i++)
     d[i].resize(rels[i].NNZ);
   evaluateLeafNear(d[levels], ef, &cells[0], dim, cleaf);
-  evaluateIntermediate(ef, &cells[0], cells, dim, &rels[0], &d[0]);
+  for (int64_t i = levels - 1; i >= 0; i--) {
+    evaluateIntermediate(ef, &cells[0], cells, dim, &rels[i], &d[i], i);
+    if (rels[i].N == rels[i + 1].N)
+      butterflySumA(d[i], i);
+  }
 }
 
 void nbd::loadX(Vectors& X, const Cell* cell, int64_t level) {
