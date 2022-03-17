@@ -27,18 +27,19 @@ target_link_libraries(nbd ${MPI_C_LIBRARIES} ${MPI_C_LINK_FLAGS})
 add_executable(h2_example
   h2_example.cxx
 )
-target_link_libraries(h2_example nbd)
+target_compile_options(h2_example PRIVATE ${MPI_C_COMPILE_FLAGS})
+target_link_libraries(h2_example nbd ${MPI_C_LIBRARIES} ${MPI_C_LINK_FLAGS})
 target_include_directories(h2_example PRIVATE "./" )
 
+add_executable(lorasp
+  lorasp.cxx
+)
+target_compile_options(lorasp PRIVATE ${MPI_C_COMPILE_FLAGS})
+target_link_libraries(lorasp nbd ${MPI_C_LIBRARIES} ${MPI_C_LINK_FLAGS})
+target_include_directories(lorasp PRIVATE "./" )
+
 add_executable(lra_example
-  lra_example.cpp
+  lra_example.cxx
 )
 target_link_libraries(lra_example nbd)
 target_include_directories(lra_example PRIVATE "./" )
-
-add_executable(main
-  main.cxx
-)
-target_compile_options(main PRIVATE ${MPI_C_COMPILE_FLAGS})
-target_link_libraries(main nbd ${MPI_C_LIBRARIES} ${MPI_C_LINK_FLAGS})
-

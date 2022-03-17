@@ -5,11 +5,13 @@
 
 namespace nbd {
 
-  void initComm(int* argc, char** argv[], int64_t* mpi_rank, int64_t* mpi_size);
+  void initComm(int* argc, char** argv[]);
 
   void closeComm();
 
-  void configureComm(int64_t mpi_rank, int64_t level, const int64_t ngbs[], int64_t ngs_len);
+  void commRank(int64_t* mpi_rank, int64_t* mpi_size, int64_t* mpi_levels);
+
+  void configureComm(int64_t level, const int64_t ngbs[], int64_t ngs_len);
 
   void selfLocalRange(int64_t& ibegin, int64_t& iend, int64_t level);
 

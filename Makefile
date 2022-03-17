@@ -5,7 +5,7 @@ MPICXX	= mpicxx -O3 -I.
 LC	= -lm
 
 all:
-	make main h2 lra
+	make lorasp h2 lra
 
 minblas: minblas.c minblas.h
 	$(CC) -c minblas.c
@@ -37,9 +37,9 @@ dist: dist.cxx dist.hxx
 lib: minblas linalg kernel build_tree basis umv h2mv solver dist
 	ar rcs libnbd.a minblas.o linalg.o kernel.o build_tree.o basis.o umv.o h2mv.o solver.o dist.o
 
-main: main.cxx lib
-	$(CXX) -c main.cxx
-	$(MPICXX) -o main main.o -L. -lnbd
+lorasp: lorasp.cxx lib
+	$(CXX) -c lorasp.cxx
+	$(MPICXX) -o lorasp lorasp.o -L. -lnbd
 
 h2: h2_example.cxx lib
 	$(CXX) -c h2_example.cxx
@@ -50,4 +50,4 @@ lra: lra_example.cxx lib
 	$(CXX) -o lra_example lra_example.o -L. -lnbd
 
 clean:
-	rm -f *.o *.a a.out main h2_example lra_example
+	rm -f *.o *.a a.out lorasp h2_example lra_example

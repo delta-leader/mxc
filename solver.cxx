@@ -182,9 +182,14 @@ void nbd::factorSpDense(SpDense& sp, const Cell* local, const Matrices& D, doubl
   factorA(&sp.D[0], &sp.Basis[0], sp.Rels, levels, repi, R, lenR);
 }
 
-void nbd::solveSpDense(RHS st[], SpDense& sp, const Vectors& X) {
+void nbd::solveSpDense(RHS st[], const SpDense& sp, const Vectors& X) {
   allocRightHandSides(st, &sp.Basis[0], sp.Levels);
   solveA(st, &sp.D[0], &sp.Basis[0], sp.Rels, X, sp.Levels);
+}
+
+void nbd::solveH2(RHS st[], MatVec vx[], const SpDense sps[], const Vectors& X, int64_t levels) {
+  solveSpDense(st, sps[levels], X);
+  
 }
 
 void nbd::solveRelErr(double* err_out, const Vectors& X, const Vectors& ref, int64_t level) {

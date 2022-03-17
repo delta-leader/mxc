@@ -13,9 +13,7 @@ using namespace nbd;
 
 int main(int argc, char* argv[]) {
 
-  int64_t mpi_rank = 0;
-  int64_t mpi_size = 1;
-  initComm(&argc, &argv, &mpi_rank, &mpi_size);
+  initComm(&argc, &argv);
 
   int64_t Nbody = 40000;
   int64_t Ncrit = 100;
@@ -35,12 +33,12 @@ int main(int argc, char* argv[]) {
   randomBodies(body, Nbody, &my_min[0], &my_max[0], dim, 1234);
   Cells cell;
   int64_t levels = buildTree(cell, body, Ncrit, &my_min[0], &my_max[0], dim);
-  traverse(cell, levels, dim, theta, mpi_rank, mpi_size);
+  traverse(cell, levels, dim, theta);
   const Cell* lcleaf = &cell[0];
-  lcleaf = findLocalAtLevel(lcleaf, levels, mpi_rank, mpi_size);
+  lcleaf = findLocalAtLevel(lcleaf, levels);
 
   std::vector<CSC> rels(levels + 1);
-  relationsNear(&rels[0], cell, mpi_rank, mpi_size);
+  relationsNear(&rels[0], cell);
 
   Matrices A(rels[levels].NNZ);
   evaluateLeafNear(A, ef, &cell[0], dim, rels[levels]);
@@ -56,10 +54,13 @@ int main(int argc, char* argv[]) {
   RHSS rhs(levels + 1);
   solveSpDense(&rhs[0], sp, X);
 
+  DistributeVectorsList(rhs[levels].X, levels);
   for (int64_t i = 0; i < X.size(); i++)
     zeroVector(X[i]);
   closeQuarter(X, rhs[levels].X, ef, lcleaf, dim, levels);
 
+  int64_t mpi_rank;
+  commRank(&mpi_rank, NULL, NULL);
   double err;
   solveRelErr(&err, X, Xref, levels);
   printf("%lld ERR: %e\n", mpi_rank, err);

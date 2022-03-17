@@ -16,17 +16,19 @@ struct Communicator {
   std::vector<int64_t> COMM_RNKS;
 };
 
+int64_t MPI_RANK = 0;
+int64_t MPI_SIZE = 1;
 int64_t MPI_LEVELS = 0;
 std::vector<Communicator> COMMS;
 
-void nbd::initComm(int* argc, char** argv[], int64_t* mpi_rank, int64_t* mpi_size) {
+void nbd::initComm(int* argc, char** argv[]) {
   MPI_Init(argc, argv);
   int rank, size;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  *mpi_rank = (int64_t)rank;
-  *mpi_size = (int64_t)size;
+  MPI_RANK = rank;
+  MPI_SIZE = size;
   MPI_LEVELS = (int64_t)std::log2(size);
   COMMS.resize(MPI_LEVELS + 1);
 }
@@ -40,16 +42,25 @@ void nbd::closeComm() {
   MPI_Finalize();
 }
 
-void nbd::configureComm(int64_t mpi_rank, int64_t level, const int64_t ngbs[], int64_t ngbs_len) {
+void nbd::commRank(int64_t* mpi_rank, int64_t* mpi_size, int64_t* mpi_levels) {
+  if (mpi_rank)
+    *mpi_rank = MPI_RANK;
+  if (mpi_size)
+    *mpi_size = MPI_SIZE;
+  if (mpi_levels)
+    *mpi_levels = MPI_LEVELS;
+}
+
+void nbd::configureComm(int64_t level, const int64_t ngbs[], int64_t ngbs_len) {
   if (level <= MPI_LEVELS && level >= 0) {
     int64_t lvl_diff = MPI_LEVELS - level;
-    int64_t my_rank = mpi_rank >> lvl_diff;
+    int64_t my_rank = MPI_RANK >> lvl_diff;
     Communicator& gi = COMMS[level];
 
     int64_t self = std::distance(ngbs, std::find(ngbs, ngbs + ngbs_len, my_rank));
     if (self < ngbs_len) {
       int64_t my_twin = my_rank ^ (int64_t)1;
-      int64_t mask = mpi_rank - (my_rank << lvl_diff);
+      int64_t mask = MPI_RANK - (my_rank << lvl_diff);
       int64_t twi = std::distance(ngbs, std::find(ngbs, ngbs + ngbs_len, my_twin));
       gi.SELF_I = self;
       gi.TWIN_I = twi == ngbs_len ? -1 : twi;

@@ -229,9 +229,11 @@ void nbd::findCellsAtLevel(const Cell* cells[], int64_t* len, const Cell* cell, 
       findCellsAtLevel(cells, len, cell->CHILD + i, level);
 }
 
-const Cell* nbd::findLocalAtLevel(const Cell* cell, int64_t level, int64_t mpi_rank, int64_t mpi_size) {
+const Cell* nbd::findLocalAtLevel(const Cell* cell, int64_t level) {
   const Cell* iter = cell;
-  int64_t mpi_levels = mpi_size > 1 ? (int64_t)(std::log2(mpi_size)) : 0;
+  int64_t mpi_rank;
+  int64_t mpi_levels;
+  commRank(&mpi_rank, NULL, &mpi_levels);
   int64_t iters = level < mpi_levels ? level : mpi_levels;
 
   for (int64_t i = iter->LEVEL + 1; i <= iters; i++) {
@@ -281,13 +283,14 @@ void nbd::remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bod
   }
 }
 
-void nbd::traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta, int64_t mpi_rank, int64_t mpi_size) {
+void nbd::traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta) {
   getList(&cells[0], &cells[0], dim, theta);
-  int64_t mpi_levels = mpi_size > 1 ? (int64_t)(std::log2(mpi_size)) : 0;
+  int64_t mpi_levels;
+  commRank(NULL, NULL, &mpi_levels);
 
   const Cell* local = &cells[0];
   for (int64_t i = 0; i <= mpi_levels; i++) {
-    local = findLocalAtLevel(local, i, mpi_rank, mpi_size);
+    local = findLocalAtLevel(local, i);
     if (local != nullptr) {
       int64_t nlen = local->listNear.size();
       std::vector<int64_t> ngbs(nlen);
@@ -296,7 +299,7 @@ void nbd::traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta, int
         ngbs[n] = c->ZID;
       }
 
-      configureComm(mpi_rank, i, &ngbs[0], nlen);
+      configureComm(i, &ngbs[0], nlen);
     }
   }
 }
@@ -313,13 +316,16 @@ void nbd::evaluateBasis(EvalFunc ef, Cells& cells, Cell* c, const Bodies& bodies
 }
 
 
-void nbd::relationsNear(CSC rels[], const Cells& cells, int64_t mpi_rank, int64_t mpi_size) {
+void nbd::relationsNear(CSC rels[], const Cells& cells) {
   int64_t levels = 0;
   int64_t len = cells.size();
   for (int64_t i = 0; i < len; i++)
     levels = levels > cells[i].LEVEL ? levels : cells[i].LEVEL;
 
-  int64_t mpi_levels = mpi_size > 1 ? (int64_t)(std::log2(mpi_size)) : 0;
+  int64_t mpi_rank;
+  int64_t mpi_levels;
+  commRank(&mpi_rank, NULL, &mpi_levels);
+
   for (int64_t i = 0; i <= levels; i++) {
     int64_t mpi_boxes = i > mpi_levels ? (int64_t)1 << (i - mpi_levels) : 1;
     int64_t mpi_dups = i < mpi_levels ? (mpi_levels - i) : 0;

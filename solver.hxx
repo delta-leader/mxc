@@ -39,7 +39,9 @@ namespace nbd {
 
   void factorSpDense(SpDense& sp, const Cell* local, const Matrices& D, double repi, const double* R, int64_t lenR);
 
-  void solveSpDense(RHS st[], SpDense& sp, const Vectors& X);
+  void solveSpDense(RHS st[], const SpDense& sp, const Vectors& X);
+
+  void solveH2(RHS st[], MatVec vx[], const SpDense sps[], const Vectors& X, int64_t levels);
 
   void solveRelErr(double* err_out, const Vectors& X, const Vectors& ref, int64_t level);
 

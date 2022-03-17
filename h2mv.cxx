@@ -189,7 +189,7 @@ void nbd::resetMatVec(MatVec vx[], const Vectors& X, int64_t levels) {
     cpyFromVector(X[i], xleaf[i].X.data());
 }
 
-void nbd::h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels, int64_t mpi_rank, int64_t mpi_size) {
+void nbd::h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels) {
   resetMatVec(vx, X, levels);
 
   for (int64_t i = levels; i > 0; i--) {
@@ -203,18 +203,18 @@ void nbd::h2MatVecLR(MatVec vx[], EvalFunc ef, const Cell* root, const Base basi
   for (int64_t i = 1; i <= levels; i++) {
     permuteAndMerge('B', vx[i].L, vx[i - 1].B, i - 1);
     interTrans('D', vx[i], basis[i].Uo, i);
-    local = findLocalAtLevel(local, i, mpi_rank, mpi_size);
+    local = findLocalAtLevel(local, i);
     horizontalPass(vx[i].B, vx[i].X, ef, local, dim, i);
   }
 }
 
-void nbd::h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels, int64_t mpi_rank, int64_t mpi_size) {
-  h2MatVecLR(vx, ef, root, basis, dim, X, levels, mpi_rank, mpi_size);
-  const Cell* local = findLocalAtLevel(root, levels, mpi_rank, mpi_size);
+void nbd::h2MatVecAll(MatVec vx[], EvalFunc ef, const Cell* root, const Base basis[], int64_t dim, const Vectors& X, int64_t levels) {
+  h2MatVecLR(vx, ef, root, basis, dim, X, levels);
+  const Cell* local = findLocalAtLevel(root, levels);
   closeQuarter(vx[levels].B, vx[levels].X, ef, local, dim, levels);
 }
 
-void nbd::h2MatVecReference(Vectors& B, EvalFunc ef, const Cell* root, int64_t dim, int64_t levels, int64_t mpi_rank, int64_t mpi_size) {
+void nbd::h2MatVecReference(Vectors& B, EvalFunc ef, const Cell* root, int64_t dim, int64_t levels) {
   Vector X;
   cVector(X, root->NBODY);
   for (int64_t i = 0; i < root->NBODY; i++)
@@ -222,7 +222,7 @@ void nbd::h2MatVecReference(Vectors& B, EvalFunc ef, const Cell* root, int64_t d
 
   int64_t len = 0;
   std::vector<const Cell*> cells((int64_t)1 << levels);
-  const Cell* local = findLocalAtLevel(root, levels, mpi_rank, mpi_size);
+  const Cell* local = findLocalAtLevel(root, levels);
   findCellsAtLevel(&cells[0], &len, local, levels);
 
   for (int64_t i = 0; i < len; i++) {
