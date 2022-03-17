@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
   initComm(&argc, &argv);
 
   traverse(cell, levels, dim, theta);
-  evaluateBasis(fun, cell, &cell[0], body, 1.e-4, 2000, rank, dim);
+  evaluateBasis(fun, &cell[0], body, 1.e-4, 2000, rank, dim);
 
   const Cell* local = &cell[0];
   Basis basis;
