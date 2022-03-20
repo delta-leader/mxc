@@ -22,6 +22,7 @@ namespace nbd {
 
     std::vector<Cell*> listFar;
     std::vector<Cell*> listNear;
+    std::vector<int64_t> cMultipoles;
     std::vector<int64_t> Multipole;
     Matrix Base;
     Matrix Biv;

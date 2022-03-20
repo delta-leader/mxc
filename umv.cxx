@@ -137,11 +137,7 @@ void nbd::allocSubMatrices(Node& n, const CSC& rels, const int64_t dims[], const
 }
 
 void nbd::factorNode(Node& n, Base& basis, const CSC& rels, double repi, const double* R, int64_t lenR, int64_t level) {
-  double btime, ftime;
-  startTimer(&ftime);
-  startTimer(&btime);
   sampleA(basis, repi, rels, n.A, R, lenR, level);
-  stopTimer(btime, "basis time");
   
   allocSubMatrices(n, rels, &basis.DIMS[0], &basis.DIMO[0], level);
   splitA(n.A_cc, rels, n.A, basis.Uc, basis.Uc, level);
@@ -153,14 +149,10 @@ void nbd::factorNode(Node& n, Base& basis, const CSC& rels, double repi, const d
   schurCmplm(n.S, n.A_oc, rels);
 
   axatLocal(n.S, rels);
-  double ct;
-  startTimer(&ct);
   axatDistribute(n.S, rels, level);
-  stopTimer(ct, "comm3 time");
 
   for (int64_t i = 0; i < n.S.size(); i++)
     madd(n.A_oo[i], n.S[i]);
-  stopTimer(ftime, "factor time");
 }
 
 void nbd::nextNode(Node& Anext, Base& bsnext, const CSC& rels_up, const Node& Aprev, const Base& bsprev, const CSC& rels_low, int64_t nlevel) {

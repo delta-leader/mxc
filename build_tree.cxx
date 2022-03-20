@@ -309,7 +309,7 @@ void nbd::evaluateBasis(EvalFunc ef, Cell* cell, const Bodies& bodies, double ep
   int64_t ci = cell->ZID;
   int64_t li = ci;
   neighborsILocal(li, ci, cell->LEVEL);
-  if (li >= 0) {
+  if (true) {
     if (cell->NCHILD > 0)
       for (int64_t i = 0; i < cell->NCHILD; i++)
         evaluateBasis(ef, cell->CHILD + i, bodies, epi, sp_pts, rank, dim);

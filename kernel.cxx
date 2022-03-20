@@ -146,7 +146,8 @@ void childMultipoles(Bodies& multipole, Cell& cell, int64_t dim) {
     for (int64_t i = 0; i < cell.NCHILD; i++)
       size += cell.CHILD[i].Multipole.size();
     multipole.resize(size);
-    cell.Multipole.resize(size);
+    std::vector<int64_t>& cellm = cell.cMultipoles;
+    cellm.resize(size);
 
     for (int64_t i = 0; i < cell.NCHILD; i++) {
       const Cell& c = cell.CHILD[i];
@@ -157,32 +158,32 @@ void childMultipoles(Bodies& multipole, Cell& cell, int64_t dim) {
         for (int64_t d = 0; d < dim; d++)
           multipole[count].X[d] = cell.BODY[nloc].X[d];
         multipole[count].B = cell.BODY[nloc].B;
-        cell.Multipole[count] = nloc;
+        cellm[count] = nloc;
         count += 1;
       }
     }
   }
   else {
     multipole.resize(cell.NBODY);
-    for (int64_t i = 0; i < cell.NBODY; i++)
+    for (int64_t i = 0; i < cell.NBODY; i++) {
       for (int64_t d = 0; d < dim; d++)
         multipole[i].X[d] = cell.BODY[i].X[d];
+      multipole[i].B = cell.BODY[i].B;
+    }
   }
 }
 
 void selectMultipole(Cell& cell, const int64_t arows[], int64_t rank) {
-  std::vector<int64_t> mc(rank);
+  if (cell.Multipole.size() != rank)
+    cell.Multipole.resize(rank);
   if (cell.NCHILD > 0)
     for (int64_t i = 0; i < rank; i++) {
       int64_t ai = arows[i];
-      mc[i] = cell.Multipole[ai];
+      cell.Multipole[i] = cell.cMultipoles[ai];
     }
   else
     for (int64_t i = 0; i < rank; i++)
-      mc[i] = arows[i];
-  if (cell.Multipole.size() != rank)
-    cell.Multipole.resize(rank);
-  std::copy(mc.begin(), mc.end(), cell.Multipole.begin());
+      cell.Multipole[i] = arows[i];
 }
 
 void nbd::P2Mmat(EvalFunc ef, Cell* ci, const Body rm[], int64_t n, int64_t dim, Matrix& u, double epi, int64_t rank) {
@@ -191,28 +192,29 @@ void nbd::P2Mmat(EvalFunc ef, Cell* ci, const Body rm[], int64_t n, int64_t dim,
 
   int64_t m = src.size();
   if (m > 0 && n > 0) {
-    std::vector<double> a(m * n);
-    std::vector<double> ax(m * rank);
+    Matrix a;
     std::vector<int64_t> pa(rank);
+    cMatrix(a, m, n);
+    cMatrix(u, m, rank);
 
     for (int64_t i = 0; i < m * n; i++) {
       int64_t x = i / m;
       int64_t y = i - x * m;
       double r2;
       eval(ef, &src[y], &rm[x], dim, &r2);
-      a[y + x * m] = r2;
+      a.A[y + x * m] = r2;
     }
 
     int64_t iters;
-    didrow(epi, m, n, rank, &a[0], m, &ax[0], m, &pa[0], &iters);
+    didrow(epi, m, n, rank, &a.A[0], m, &u.A[0], m, &pa[0], &iters);
     selectMultipole(*ci, &pa[0], iters);
 
-    u.A.resize(m * iters);
-    u.M = m;
-    u.N = iters;
-    for (int64_t i = 0; i < m; i++)
-      for (int64_t j = 0; j < iters; j++)
-        u.A[i + j * m] = ax[i + j * m];
+    if (iters != rank)
+      cMatrix(u, m, iters);
+  }
+  else {
+    ci->Multipole.resize(ci->cMultipoles.size());
+    std::copy(ci->cMultipoles.begin(), ci->cMultipoles.end(), ci->Multipole.begin());
   }
 }
 
