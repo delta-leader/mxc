@@ -69,7 +69,7 @@ void nbd::cpyVecToVec(int64_t n, const Vector& v1, Vector& v2, int64_t x1, int64
 void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
   bool prec = repi < 1.;
   Matrix U, V;
-  int64_t rank = prec ? std::min(A.M, A.N) : (int64_t)std::floor(repi);
+  int64_t rank = prec ? std::min(A.M, A.N) : (int64_t)repi;
   cMatrix(U, A.M, rank);
   cMatrix(V, A.N, rank);
 
@@ -79,6 +79,12 @@ void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {
   if (A.N < A.M)
     cMatrix(A, A.M, A.M);
   dorth('F', A.M, rank, U.A.data(), A.M, A.A.data(), A.M);
+}
+
+void nbd::lraID(double repi, Matrix& A, Matrix& U, int64_t arows[], int64_t* rnk_out) {
+  bool prec = repi < 1.;
+  int64_t rank = prec ? std::min(A.M, A.N) : (int64_t)repi;
+  didrow(prec ? repi : 0., A.M, A.N, rank, A.A.data(), A.M, U.A.data(), A.M, arows, rnk_out);
 }
 
 void nbd::zeroMatrix(Matrix& A) {
@@ -132,6 +138,23 @@ void nbd::minvl(const Matrix& A, Matrix& B) {
   dtrsmlt_left(B.M, B.N, work.A.data(), A.M, B.A.data(), B.M);
 }
 
+void nbd::invBasis(const Matrix& u, Matrix& uinv) {
+  int64_t m = u.M;
+  int64_t n = u.N;
+  if (m > 0 && n > 0) {
+    Matrix a;
+    Matrix q;
+    cMatrix(a, n, n);
+    cMatrix(q, n, n);
+    cMatrix(uinv, n, m);
+
+    mmult('T', 'N', u, u, a, 1., 0.);
+    dorth('F', n, n, a.A.data(), n, q.A.data(), n);
+    mmult('T', 'T', q, u, uinv, 1., 0.);
+    dtrsmr_left(n, m, a.A.data(), n, uinv.A.data(), n);
+  }
+}
+
 void nbd::chol_decomp(Matrix& A) {
   dpotrf(A.M, A.A.data(), A.M);
 }
@@ -140,11 +163,17 @@ void nbd::trsm_lowerA(Matrix& A, const Matrix& L) {
   dtrsmlt_right(A.M, A.N, L.A.data(), L.M, A.A.data(), A.M);
 }
 
-void nbd::utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
+void nbd::utav(char tb, const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C) {
   Matrix work;
   cMatrix(work, C.M, A.N);
-  mmult('T', 'N', U, A, work, 1., 0.);
-  mmult('N', 'N', work, VT, C, 1., 0.);
+  if (tb == 'N' || tb == 'n') {
+    mmult('T', 'N', U, A, work, 1., 0.);
+    mmult('N', 'N', work, VT, C, 1., 0.);
+  }
+  else if (tb == 'T' || tb == 't') {
+    mmult('N', 'N', U, A, work, 1., 0.);
+    mmult('N', 'T', work, VT, C, 1., 0.);
+  }
 }
 
 void nbd::axat(Matrix& A, Matrix& AT) {

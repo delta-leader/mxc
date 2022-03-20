@@ -38,6 +38,8 @@ namespace nbd {
 
   void orthoBase(double repi, Matrix& A, int64_t *rnk_out);
 
+  void lraID(double repi, Matrix& A, Matrix& U, int64_t arows[], int64_t* rnk_out);
+
   void zeroMatrix(Matrix& A);
 
   void zeroVector(Vector& A);
@@ -50,11 +52,13 @@ namespace nbd {
 
   void minvl(const Matrix& A, Matrix& B);
 
+  void invBasis(const Matrix& u, Matrix& uinv);
+
   void chol_decomp(Matrix& A);
 
   void trsm_lowerA(Matrix& A, const Matrix& L);
 
-  void utav(const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C);
+  void utav(char tb, const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C);
 
   void axat(Matrix& A, Matrix& AT);
 

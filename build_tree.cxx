@@ -255,6 +255,27 @@ const Cell* nbd::findLocalAtLevel(const Cell* cell, int64_t level) {
 }
 
 
+void nbd::traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta) {
+  getList(&cells[0], &cells[0], dim, theta);
+  int64_t mpi_levels;
+  commRank(NULL, NULL, &mpi_levels);
+
+  const Cell* local = &cells[0];
+  for (int64_t i = 0; i <= mpi_levels; i++) {
+    local = findLocalAtLevel(local, i);
+    if (local != nullptr) {
+      int64_t nlen = local->listNear.size();
+      std::vector<int64_t> ngbs(nlen);
+      for (int64_t n = 0; n < nlen; n++) {
+        Cell* c = (local->listNear)[n];
+        ngbs[n] = c->ZID;
+      }
+
+      configureComm(i, &ngbs[0], nlen);
+    }
+  }
+}
+
 void nbd::remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bodies& bodies, int64_t dim) {
   int64_t avail = bodies.size();
   int64_t len = cell.listNear.size();
@@ -284,41 +305,76 @@ void nbd::remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bod
   }
 }
 
-void nbd::traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta) {
-  getList(&cells[0], &cells[0], dim, theta);
-  int64_t mpi_levels;
-  commRank(NULL, NULL, &mpi_levels);
+void nbd::childMultipoles(Cell& cell) {
+  if (cell.NCHILD > 0) {
+    int64_t size = 0;
+    int64_t count = 0;
+    for (int64_t i = 0; i < cell.NCHILD; i++)
+      size += cell.CHILD[i].Multipole.size();
+    std::vector<int64_t>& cellm = cell.cMultipoles;
+    cellm.resize(size);
 
-  const Cell* local = &cells[0];
-  for (int64_t i = 0; i <= mpi_levels; i++) {
-    local = findLocalAtLevel(local, i);
-    if (local != nullptr) {
-      int64_t nlen = local->listNear.size();
-      std::vector<int64_t> ngbs(nlen);
-      for (int64_t n = 0; n < nlen; n++) {
-        Cell* c = (local->listNear)[n];
-        ngbs[n] = c->ZID;
+    for (int64_t i = 0; i < cell.NCHILD; i++) {
+      const Cell& c = cell.CHILD[i];
+      int64_t loc = c.BODY - cell.BODY;
+      int64_t len = c.Multipole.size();
+      for (int64_t n = 0; n < len; n++) {
+        int64_t nloc = loc + c.Multipole[n];
+        cellm[count] = nloc;
+        count += 1;
       }
+    }
+  }
+  else {
+    cell.cMultipoles.resize(cell.NBODY);
+    std::iota(cell.cMultipoles.begin(), cell.cMultipoles.end(), 0);
+  }
+}
 
-      configureComm(i, &ngbs[0], nlen);
+void nbd::parentMultipoles(const Cell& cell) {
+  if (cell.NCHILD > 0) {
+    std::vector<int64_t> csizes(cell.NCHILD);
+    for (int64_t i = 0; i < cell.NCHILD; i++) {
+      const Cell& c = cell.CHILD[i];
+      csizes[i] = c.NBODY;
+      if (i > 0)
+        csizes[i] = csizes[i] + csizes[i - 1];
+    }
+
+    const std::vector<int64_t>& cellm = cell.cMultipoles;
+    int64_t iter = 0;
+    for (int64_t i = 0; i < cell.NCHILD; i++) {
+      Cell& c = cell.CHILD[i];
+      int64_t loc = c.BODY - cell.BODY;
+      int64_t begin = iter;
+      while (cellm[iter] < csizes[i])
+        iter++;
+      int64_t len = iter - begin;
+      c.Multipole.resize(len);
+      for (int64_t n = 0; n < len; n++)
+        c.Multipole[i] = cellm[n + begin] - loc;
     }
   }
 }
 
-void nbd::evaluateBasis(EvalFunc ef, Cell* cell, const Bodies& bodies, double epi, int64_t sp_pts, int64_t rank, int64_t dim) {
-  int64_t ci = cell->ZID;
-  int64_t li = ci;
-  neighborsILocal(li, ci, cell->LEVEL);
-  if (true) {
-    if (cell->NCHILD > 0)
-      for (int64_t i = 0; i < cell->NCHILD; i++)
-        evaluateBasis(ef, cell->CHILD + i, bodies, epi, sp_pts, rank, dim);
-
-    Bodies remote;
-    remoteBodies(remote, sp_pts, *cell, bodies, dim);
-    P2Mmat(ef, cell, remote.data(), remote.size(), dim, cell->Base, epi, rank);
-    invBasis(cell->Base, cell->Biv);
+void nbd::selectMultipole(Cell& cell, const int64_t arows[], int64_t rank) {
+  if (cell.Multipole.size() != rank)
+    cell.Multipole.resize(rank);
+  for (int64_t i = 0; i < rank; i++) {
+    int64_t ai = arows[i];
+    cell.Multipole[i] = cell.cMultipoles[ai];
   }
+}
+
+void nbd::evaluateBasis(EvalFunc ef, Cell* cell, const Bodies& bodies, double repi, int64_t sp_pts, int64_t dim) {
+  if (cell->NCHILD > 0)
+    for (int64_t i = 0; i < cell->NCHILD; i++)
+      evaluateBasis(ef, cell->CHILD + i, bodies, repi, sp_pts, dim);
+
+  Bodies remote;
+  remoteBodies(remote, sp_pts, *cell, bodies, dim);
+  P2Mmat(ef, cell, remote.data(), remote.size(), dim, cell->Base, repi);
+  invBasis(cell->Base, cell->Biv);
 }
 
 
@@ -397,17 +453,8 @@ void nbd::lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j) {
 
 
 void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const Matrices& d_child, const CSC& csc_child) {
-  int64_t m = 0;
-  int64_t n = 0;
-  for (int64_t i = 0; i < ci->NCHILD; i++) {
-    const Cell* cii = ci->CHILD + i;
-    m = m + cii->Multipole.size();
-  }
-  for (int64_t j = 0; j < cj->NCHILD; j++) {
-    const Cell* cjj = cj->CHILD + j;
-    n = n + cjj->Multipole.size();
-  }
-
+  int64_t m = ci->cMultipoles.size();
+  int64_t n = cj->cMultipoles.size();
   cMatrix(d, m, n);
   zeroMatrix(d);
 
@@ -416,17 +463,32 @@ void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, i
     const Cell* cii = ci->CHILD + i;
     const std::vector<Cell*>& cii_m2l = cii->listFar;
     int64_t x_off = 0;
+    int64_t mi = cii->Multipole.size();
     for (int64_t j = 0; j < cj->NCHILD; j++) {
       const Cell* cjj = cj->CHILD + j;
-      if (std::find(cii_m2l.begin(), cii_m2l.end(), cjj) != cii_m2l.end())
-        L2C(ef, cii, cjj, dim, d, y_off, x_off);
+      int64_t mj = cjj->Multipole.size();
+      Matrix m2l;
+      cMatrix(m2l, mi, mj);
+
+      if (std::find(cii_m2l.begin(), cii_m2l.end(), cjj) != cii_m2l.end()) {
+        M2Lmat(ef, cii, cjj, dim, m2l);
+        cpyMatToMat(mi, mj, m2l, d, 0, 0, y_off, x_off);
+      }
       else {
         int64_t zii = cii->ZID;
         int64_t zjj = cjj->ZID;
         int64_t ij;
         lookupIJ(ij, csc_child, zii, zjj);
-        if (ij >= 0)
-          D2C(d_child[ij], cii->Biv, cjj->Biv, d, y_off, x_off);
+        if (ij >= 0) {
+          const Matrix& u = cii->Biv;
+          const Matrix& vt = cjj->Biv;
+          if (u.M > 0 && vt.M > 0) {
+            utav('T', u, d_child[ij], vt, m2l);
+            cpyMatToMat(mi, mj, m2l, d, 0, 0, y_off, x_off);
+          }
+          else
+            cpyMatToMat(mi, mj, d_child[ij], d, 0, 0, y_off, x_off);
+        }
       }
       x_off = x_off + cjj->Multipole.size();
     }

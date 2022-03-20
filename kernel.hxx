@@ -32,14 +32,10 @@ namespace nbd {
 
   void M2Lc(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const Vector& M, Vector& L);
 
+  void M2Lmat_bodies(EvalFunc ef, int64_t m, int64_t n, const int64_t mi[], const int64_t mj[], const Body* bi, const Body* bj, int64_t dim, Matrix& a);
+
   void M2Lmat(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, Matrix& a);
 
-  void P2Mmat(EvalFunc ef, Cell* ci, const Body rm[], int64_t n, int64_t dim, Matrix& u, double epi, int64_t rank);
-
-  void invBasis(const Matrix& u, Matrix& uinv);
-
-  void D2C(const Matrix& d, const Matrix& u, const Matrix& v, Matrix& c, int64_t y, int64_t x);
-
-  void L2C(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, Matrix& c, int64_t y, int64_t x);
+  void P2Mmat(EvalFunc ef, Cell* ci, const Body rm[], int64_t n, int64_t dim, Matrix& u, double epi);
 
 }

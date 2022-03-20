@@ -14,7 +14,7 @@ void nbd::splitA(Matrices& A_out, const CSC& rels, const Matrices& A, const Matr
       int64_t y = rels.CSC_ROWS[yx];
       int64_t box_y = y;
       neighborsILocal(box_y, y, level);
-      utav(U[box_y], A[yx], vlocal[x], A_out[yx]);
+      utav('N', U[box_y], A[yx], vlocal[x], A_out[yx]);
     }
   }
 }
@@ -151,7 +151,8 @@ void nbd::factorNode(Node& n, Base& basis, const CSC& rels, double repi, const d
   axatLocal(n.S, rels);
   axatDistribute(n.S, rels, level);
 
-  for (int64_t i = 0; i < n.S.size(); i++)
+  int64_t len = n.S.size();
+  for (int64_t i = 0; i < len; i++)
     madd(n.A_oo[i], n.S[i]);
 }
 

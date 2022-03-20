@@ -55,11 +55,17 @@ namespace nbd {
 
   const Cell* findLocalAtLevel(const Cell* cell, int64_t level);
 
-  void remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bodies& bodies, int64_t dim);
-
   void traverse(Cells& cells, int64_t levels, int64_t dim, int64_t theta);
 
-  void evaluateBasis(EvalFunc ef, Cell* cell, const Bodies& bodies, double epi, int64_t sp_pts, int64_t rank, int64_t dim);
+  void remoteBodies(Bodies& remote, int64_t size, const Cell& cell, const Bodies& bodies, int64_t dim);
+
+  void childMultipoles(Cell& cell);
+
+  void parentMultipoles(const Cell& cell);
+
+  void selectMultipole(Cell& cell, const int64_t arows[], int64_t rank);
+
+  void evaluateBasis(EvalFunc ef, Cell* cell, const Bodies& bodies, double repi, int64_t sp_pts, int64_t dim);
 
   void relationsNear(CSC rels[], const Cells& cells);
 
