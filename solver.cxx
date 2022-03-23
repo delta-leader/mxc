@@ -138,7 +138,7 @@ void nbd::solveA(RHS st[], const Node A[], const Base B[], const CSC rels[], con
   selfLocalRange(ibegin, iend, levels);
   int64_t nodes = iend - ibegin;
   for (int64_t i = ibegin; i < iend; i++)
-    vaxpby(st[levels].X[i], &(X[i].X)[0], 1., 0.);
+    cpyVecToVec(X[i].N, X[i], st[levels].X[i], 0, 0);
   DistributeVectorsList(st[levels].X, levels);
 
   for (int64_t i = levels; i > 0; i--) {
@@ -172,14 +172,19 @@ void nbd::factorSpDense(SpDense& sp, const Cell* local, const Matrices& D, doubl
   fillDimsFromCell(sp.Basis[levels], local, levels);
 
   int64_t nnz = sp.Rels[levels].NNZ;
+  bool cless = true;
   for (int64_t i = 0; i < nnz; i++) {
     Matrix& Ai = sp.D[levels].A[i];
     const Matrix& Di = D[i];
     if (Ai.M != Di.M || Ai.N != Di.N)
       cMatrix(Ai, Di.M, Di.N);
-    maxpby(Ai, &Di.A[0], 1., 0.);
+    if (Ai.M > 0 && Ai.N > 0) {
+      cpyMatToMat(Di.M, Di.N, Di, Ai, 0, 0, 0, 0);
+      cless = false;
+    }
   }
-  factorA(&sp.D[0], &sp.Basis[0], sp.Rels, levels, repi, R, lenR);
+  if (!cless)
+    factorA(&sp.D[0], &sp.Basis[0], sp.Rels, levels, repi, R, lenR);
 }
 
 void nbd::solveSpDense(RHS st[], const SpDense& sp, const Vectors& X) {
@@ -205,7 +210,7 @@ void nbd::solveH2(RHS st[], MatVec vx[], const SpDense sps[], EvalFunc ef, const
       if (Xi[i].N != vi.N)
         cVector(Xi[i], vi.N);
       if (i >= ibegin && i < iend)
-        vaxpby(Xi[i], &vi.X[0], 1., 0.);
+        cpyVecToVec(vi.N, vi, Xi[i], 0, 0);
     }
 
     solveH2(st, vx, sps, ef, root, basis, dim, Xi, levels - 1);
@@ -213,7 +218,7 @@ void nbd::solveH2(RHS st[], MatVec vx[], const SpDense sps[], EvalFunc ef, const
 
     for (int64_t i = ibegin; i < iend; i++) {
       Vector& vi = vx[levels - 1].B[i];
-      vaxpby(vi, &Xi[i].X[0], 1., -1.);
+      vaxpby(vi, Xi[i].X.data(), 1., -1.);
     }
     permuteAndMerge('B', vx[levels].L, vx[levels - 1].B, levels - 1);
     interTrans('D', vx[levels], basis[levels].Uo, levels);
@@ -223,7 +228,7 @@ void nbd::solveH2(RHS st[], MatVec vx[], const SpDense sps[], EvalFunc ef, const
     selfLocalRange(ibegin, iend, levels);
     for (int64_t i = ibegin; i < iend; i++) {
       Vector& vi = vx[levels].B[i];
-      vaxpby(vi, &X[i].X[0], 1., -1.);
+      vaxpby(vi, X[i].X.data(), 1., -1.);
     }
 
     solveSpDense(st, sps[levels], vx[levels].B);

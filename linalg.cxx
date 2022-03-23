@@ -55,15 +55,17 @@ void nbd::vaxpby(Vector& A, const double* v, double alpha, double beta) {
 }
 
 void nbd::cpyMatToMat(int64_t m, int64_t n, const Matrix& m1, Matrix& m2, int64_t y1, int64_t x1, int64_t y2, int64_t x2) {
-  for (int64_t j = 0; j < n; j++) {
-    int64_t j1 = y1 + (x1 + j) * m1.M;
-    int64_t j2 = y2 + (x2 + j) * m2.M;
-    std::copy(&m1.A[j1], &m1.A[j1] + m, &m2.A[j2]);
-  }
+  if (m > 0 && n > 0)
+    for (int64_t j = 0; j < n; j++) {
+      int64_t j1 = y1 + (x1 + j) * m1.M;
+      int64_t j2 = y2 + (x2 + j) * m2.M;
+      std::copy(&m1.A[j1], &m1.A[j1] + m, &m2.A[j2]);
+    }
 }
 
 void nbd::cpyVecToVec(int64_t n, const Vector& v1, Vector& v2, int64_t x1, int64_t x2) {
-  std::copy(&v1.X[x1], &v1.X[x1] + n, &v2.X[x2]);
+  if (n > 0)
+    std::copy(&v1.X[x1], &v1.X[x1] + n, &v2.X[x2]);
 }
 
 void nbd::orthoBase(double repi, Matrix& A, int64_t *rnk_out) {

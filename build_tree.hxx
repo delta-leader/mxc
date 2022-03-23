@@ -19,10 +19,9 @@ namespace nbd {
     int64_t ZID;
     int64_t ZX[3];
     int64_t LEVEL;
-
+    
     std::vector<Cell*> listFar;
     std::vector<Cell*> listNear;
-    std::vector<int64_t> cMultipoles;
     std::vector<int64_t> Multipole;
     Matrix Base;
     Matrix Biv;
@@ -38,6 +37,8 @@ namespace nbd {
     std::vector<int64_t> CSC_COLS;
     std::vector<int64_t> CSC_ROWS;
   };
+
+  struct Base;
 
   void randomBodies(Bodies& bodies, int64_t nbody, const double dmin[], const double dmax[], int64_t dim, int seed);
 
@@ -61,7 +62,7 @@ namespace nbd {
 
   void childMultipoles(Cell& cell);
 
-  void parentMultipoles(const Cell& cell);
+  void childMultipoleSize(int64_t* size, const Cell& cell);
 
   void selectMultipole(Cell& cell, const int64_t arows[], int64_t rank);
 
@@ -73,7 +74,7 @@ namespace nbd {
 
   void lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j);
 
-  void evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t dim, const CSC rels[], int64_t levels);
+  void evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t dim, const CSC rels[], const Base base[], int64_t levels);
 
   void loadX(Vectors& X, const Cell* cell, int64_t level);
 

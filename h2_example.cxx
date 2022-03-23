@@ -14,7 +14,7 @@ int main(int argc, char* argv[]) {
 
   using namespace nbd;
 
-  int64_t dim = 2;
+  int64_t dim = 3;
   int64_t m = 16384;
   int64_t leaf = 128;
   int64_t theta = 1;
@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
   std::vector<CSC> cscs(levels + 1);
   relationsNear(&cscs[0], cell);
   std::vector<Matrices> d(levels + 1);
-  evaluateNear(&d[0], fun, cell, dim, &cscs[0], levels);
+  evaluateNear(&d[0], fun, cell, dim, &cscs[0], &basis[0], levels);
 
   std::srand(100);
   std::vector<double> R(1 << 16);
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
   for (int64_t i = 0; i <= levels; i++) {
     local = findLocalAtLevel(local, i);
     allocSpDense(sp[i], &cscs[0], i);
-    factorSpDense(sp[i], local, d[i], 1.e-4, &R[0], R.size());
+    factorSpDense(sp[i], local, d[i], 100, &R[0], R.size());
   }
 
   std::vector<MatVec> vx(levels + 1);

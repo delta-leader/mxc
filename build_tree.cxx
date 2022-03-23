@@ -1,5 +1,6 @@
 
 #include "build_tree.hxx"
+#include "basis.hxx"
 #include "dist.hxx"
 
 #include <cmath>
@@ -311,7 +312,7 @@ void nbd::childMultipoles(Cell& cell) {
     int64_t count = 0;
     for (int64_t i = 0; i < cell.NCHILD; i++)
       size += cell.CHILD[i].Multipole.size();
-    std::vector<int64_t>& cellm = cell.cMultipoles;
+    std::vector<int64_t>& cellm = cell.Multipole;
     cellm.resize(size);
 
     for (int64_t i = 0; i < cell.NCHILD; i++) {
@@ -326,43 +327,33 @@ void nbd::childMultipoles(Cell& cell) {
     }
   }
   else {
-    cell.cMultipoles.resize(cell.NBODY);
-    std::iota(cell.cMultipoles.begin(), cell.cMultipoles.end(), 0);
+    cell.Multipole.resize(cell.NBODY);
+    std::iota(cell.Multipole.begin(), cell.Multipole.end(), 0);
   }
 }
 
-void nbd::parentMultipoles(const Cell& cell) {
+void nbd::childMultipoleSize(int64_t* size, const Cell& cell) {
   if (cell.NCHILD > 0) {
-    std::vector<int64_t> csizes(cell.NCHILD);
-    for (int64_t i = 0; i < cell.NCHILD; i++) {
-      const Cell& c = cell.CHILD[i];
-      csizes[i] = c.NBODY;
-      if (i > 0)
-        csizes[i] = csizes[i] + csizes[i - 1];
-    }
-
-    const std::vector<int64_t>& cellm = cell.cMultipoles;
-    int64_t iter = 0;
-    for (int64_t i = 0; i < cell.NCHILD; i++) {
-      Cell& c = cell.CHILD[i];
-      int64_t loc = c.BODY - cell.BODY;
-      int64_t begin = iter;
-      while (cellm[iter] < csizes[i])
-        iter++;
-      int64_t len = iter - begin;
-      c.Multipole.resize(len);
-      for (int64_t n = 0; n < len; n++)
-        c.Multipole[i] = cellm[n + begin] - loc;
-    }
+    int64_t s = 0;
+    for (int64_t i = 0; i < cell.NCHILD; i++)
+      s += cell.CHILD[i].Multipole.size();
+    *size = s;
   }
+  else
+    *size = 0;
 }
+
 
 void nbd::selectMultipole(Cell& cell, const int64_t arows[], int64_t rank) {
+  std::vector<int64_t> cellm;
+  cellm.resize(cell.Multipole.size());
+  std::copy(cell.Multipole.begin(), cell.Multipole.end(), cellm.begin());
+  
   if (cell.Multipole.size() != rank)
     cell.Multipole.resize(rank);
   for (int64_t i = 0; i < rank; i++) {
     int64_t ai = arows[i];
-    cell.Multipole[i] = cell.cMultipoles[ai];
+    cell.Multipole[i] = cellm[ai];
   }
 }
 
@@ -373,8 +364,10 @@ void nbd::evaluateBasis(EvalFunc ef, Cell* cell, const Bodies& bodies, double re
 
   Bodies remote;
   remoteBodies(remote, sp_pts, *cell, bodies, dim);
-  P2Mmat(ef, cell, remote.data(), remote.size(), dim, cell->Base, repi);
-  invBasis(cell->Base, cell->Biv);
+  if (remote.size() > 0) {
+    P2Mmat(ef, cell, remote.data(), remote.size(), dim, cell->Base, repi);
+    invBasis(cell->Base, cell->Biv);
+  }
 }
 
 
@@ -452,54 +445,59 @@ void nbd::lookupIJ(int64_t& ij, const CSC& rels, int64_t i, int64_t j) {
 }
 
 
-void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const Matrices& d_child, const CSC& csc_child) {
-  int64_t m = ci->cMultipoles.size();
-  int64_t n = cj->cMultipoles.size();
-  cMatrix(d, m, n);
-  zeroMatrix(d);
+void writeIntermediate(Matrix& d, EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, const Matrices& dc, const Matrices& uc, const CSC& cscc) {
+  int64_t m, n;
+  childMultipoleSize(&m, *ci);
+  childMultipoleSize(&n, *cj);
+  if (m > 0 && n > 0) {
+    cMatrix(d, m, n);
+    zeroMatrix(d);
 
-  int64_t y_off = 0;
-  for (int64_t i = 0; i < ci->NCHILD; i++) {
-    const Cell* cii = ci->CHILD + i;
-    const std::vector<Cell*>& cii_m2l = cii->listFar;
-    int64_t x_off = 0;
-    int64_t mi = cii->Multipole.size();
-    for (int64_t j = 0; j < cj->NCHILD; j++) {
-      const Cell* cjj = cj->CHILD + j;
-      int64_t mj = cjj->Multipole.size();
-      Matrix m2l;
-      cMatrix(m2l, mi, mj);
+    int64_t y_off = 0;
+    for (int64_t i = 0; i < ci->NCHILD; i++) {
+      const Cell* cii = ci->CHILD + i;
+      int64_t mi = cii->Multipole.size();
+      const std::vector<Cell*>& cii_m2l = cii->listFar;
+      int64_t box_i = cii->ZID;
+      neighborsILocal(box_i, cii->ZID, cii->LEVEL);
+      const Matrix* u = box_i >= 0 ? &uc[box_i] : nullptr;
 
-      if (std::find(cii_m2l.begin(), cii_m2l.end(), cjj) != cii_m2l.end()) {
-        M2Lmat(ef, cii, cjj, dim, m2l);
-        cpyMatToMat(mi, mj, m2l, d, 0, 0, y_off, x_off);
-      }
-      else {
-        int64_t zii = cii->ZID;
-        int64_t zjj = cjj->ZID;
-        int64_t ij;
-        lookupIJ(ij, csc_child, zii, zjj);
-        if (ij >= 0) {
-          const Matrix& u = cii->Biv;
-          const Matrix& vt = cjj->Biv;
-          if (u.M > 0 && vt.M > 0) {
-            utav('T', u, d_child[ij], vt, m2l);
+      int64_t x_off = 0;
+      for (int64_t j = 0; j < cj->NCHILD; j++) {
+        const Cell* cjj = cj->CHILD + j;
+        int64_t mj = cjj->Multipole.size();
+        int64_t box_j = cjj->ZID;
+        neighborsILocal(box_j, cjj->ZID, cjj->LEVEL);
+        const Matrix* vt = box_j >= 0 ? &uc[box_j] : nullptr;
+
+        Matrix m2l;
+        cMatrix(m2l, mi, mj);
+
+        if (std::find(cii_m2l.begin(), cii_m2l.end(), cjj) != cii_m2l.end()) {
+          M2Lmat(ef, cii, cjj, dim, m2l);
+          cpyMatToMat(mi, mj, m2l, d, 0, 0, y_off, x_off);
+        }
+        else {
+          int64_t zii = cii->ZID;
+          int64_t zjj = cjj->ZID;
+          int64_t ij;
+          lookupIJ(ij, cscc, zii, zjj);
+          if (ij >= 0 && u != nullptr && vt != nullptr) {
+            utav('T', *u, dc[ij], *vt, m2l);
             cpyMatToMat(mi, mj, m2l, d, 0, 0, y_off, x_off);
           }
-          else
-            cpyMatToMat(mi, mj, d_child[ij], d, 0, 0, y_off, x_off);
         }
+        x_off = x_off + mj;
       }
-      x_off = x_off + cjj->Multipole.size();
+      y_off = y_off + mi;
     }
-    y_off = y_off + cii->Multipole.size();
   }
 }
 
-void evaluateIntermediate(EvalFunc ef, const Cell* c, int64_t dim, const CSC* csc, Matrices* d, int64_t level) {
+void evaluateIntermediate(EvalFunc ef, const Cell* c, int64_t dim, const CSC* csc, const Base* base, Matrices* d, int64_t level) {
   if (c->LEVEL < level)
     for (int64_t i = 0; i < c->NCHILD; i++)
-      evaluateIntermediate(ef, c->CHILD + i, dim, csc, d, level);
+      evaluateIntermediate(ef, c->CHILD + i, dim, csc, base, d, level);
 
   if (c->LEVEL == level) {
     int64_t zj = c->ZID;
@@ -510,19 +508,19 @@ void evaluateIntermediate(EvalFunc ef, const Cell* c, int64_t dim, const CSC* cs
       int64_t ij;
       lookupIJ(ij, *csc, zi, zj);
       if (ij >= 0)
-        writeIntermediate((*d)[ij], ef, ci, c, dim, d[1], csc[1]);
+        writeIntermediate((*d)[ij], ef, ci, c, dim, d[1], base[1].Uc, csc[1]);
     }
   }
 }
 
-void nbd::evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t dim, const CSC rels[], int64_t levels) {
+void nbd::evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t dim, const CSC rels[], const Base base[], int64_t levels) {
   Matrices& dleaf = d[levels];
   const CSC& cleaf = rels[levels];
   for (int64_t i = 0; i <= levels; i++)
     d[i].resize(rels[i].NNZ);
   evaluateLeafNear(d[levels], ef, &cells[0], dim, cleaf);
   for (int64_t i = levels - 1; i >= 0; i--) {
-    evaluateIntermediate(ef, &cells[0], dim, &rels[i], &d[i], i);
+    evaluateIntermediate(ef, &cells[0], dim, &rels[i], &base[i], &d[i], i);
     if (rels[i].N == rels[i + 1].N)
       butterflySumA(d[i], i + 1);
   }

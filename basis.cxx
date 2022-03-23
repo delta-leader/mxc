@@ -81,12 +81,8 @@ void nbd::fillDimsFromCell(Base& basis, const Cell* cell, int64_t level) {
     const Cell* ci = leaves[i];
     int64_t ii = ci->ZID;
     int64_t ni = ci->NBODY;
-    if (ci->NCHILD > 0) {
-      ni = 0;
-      const Cell* cc = ci->CHILD;
-      for (int64_t n = 0; n < ci->NCHILD; n++)
-        ni = ni + cc[n].Multipole.size();
-    }
+    if (ci->NCHILD > 0)
+      childMultipoleSize(&ni, *ci);
     int64_t mi = ci->Multipole.size();
     int64_t box_i = ii;
     neighborsILocal(box_i, ii, level);
@@ -95,7 +91,9 @@ void nbd::fillDimsFromCell(Base& basis, const Cell* cell, int64_t level) {
     basis.DIMO[box_i] = mi;
     if (mi > 0) {
       cMatrix(basis.Uo[box_i], ni, mi);
-      cpyFromMatrix('N', ci->Base, basis.Uo[box_i].A.data());
+      cMatrix(basis.Uc[box_i], mi, ni);
+      cpyMatToMat(ci->Base.M, ci->Base.N, ci->Base, basis.Uo[box_i], 0, 0, 0, 0);
+      cpyMatToMat(ci->Biv.M, ci->Biv.N, ci->Biv, basis.Uc[box_i], 0, 0, 0, 0);
     }
   }
 
@@ -104,14 +102,17 @@ void nbd::fillDimsFromCell(Base& basis, const Cell* cell, int64_t level) {
 
   int64_t xlen = basis.DIMS.size();
   for (int64_t i = 0; i < xlen; i++) {
-    Matrix& Ai = basis.Uo[i];
     int64_t m = basis.DIMS[i];
     int64_t n = basis.DIMO[i];
     int64_t msize = m * n;
-    if (Ai.M != m || Ai.N != n)
-      cMatrix(Ai, m, n);
+    if (msize > 0) {
+      cMatrix(basis.Uo[i], m, n);
+      cMatrix(basis.Uc[i], n, m);
+    }
   }
+
   DistributeMatricesList(basis.Uo, level);
+  DistributeMatricesList(basis.Uc, level);
 }
 
 void nbd::allocUcUo(Base& basis, const Matrices& C, int64_t level) {

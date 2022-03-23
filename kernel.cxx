@@ -138,7 +138,7 @@ void nbd::M2Lmat(EvalFunc ef, const Cell* ci, const Cell* cj, int64_t dim, Matri
 
 void nbd::P2Mmat(EvalFunc ef, Cell* ci, const Body rm[], int64_t n, int64_t dim, Matrix& u, double repi) {
   childMultipoles(*ci);
-  int64_t m = ci->cMultipoles.size();
+  int64_t m = ci->Multipole.size();
   if (m > 0 && n > 0) {
     int64_t rank = repi < 1. ? std::min(m, n) : (int64_t)repi;
     Matrix a;
@@ -146,19 +146,14 @@ void nbd::P2Mmat(EvalFunc ef, Cell* ci, const Body rm[], int64_t n, int64_t dim,
     cMatrix(a, m, n);
     cMatrix(u, m, rank);
 
-    M2Lmat_bodies(ef, m, n, &ci->cMultipoles[0], nullptr, ci->BODY, &rm[0], dim, a);
+    M2Lmat_bodies(ef, m, n, ci->Multipole.data(), nullptr, ci->BODY, &rm[0], dim, a);
 
     int64_t iters;
-    //didrow(epi, m, n, rank, &a.A[0], m, &u.A[0], m, &pa[0], &iters);
     lraID(repi, a, u, pa.data(), &iters);
     selectMultipole(*ci, &pa[0], iters);
 
     if (iters != rank)
       cMatrix(u, m, iters);
-  }
-  else {
-    ci->Multipole.resize(ci->cMultipoles.size());
-    std::copy(ci->cMultipoles.begin(), ci->cMultipoles.end(), ci->Multipole.begin());
   }
 }
 
