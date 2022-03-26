@@ -31,6 +31,8 @@ namespace nbd {
 
   void DistributeDims(int64_t dims[], int64_t level);
 
+  void DistributeMultipoles(int64_t multipoles[], const int64_t dims[], int64_t level);
+
   void axatDistribute(Matrices& A, const CSC& rels, int64_t level);
 
   void butterflySumA(Matrices& A, int64_t level);
