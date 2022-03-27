@@ -35,12 +35,7 @@ int main(int argc, char* argv[]) {
 
   Basis basis;
   allocBasis(basis, levels);
-  for (int64_t i = levels; i >= 0; i--) {
-    Cell* vlocal = findLocalAtLevelModify(&cell[0], i);
-    evaluateLocal(fun, basis[i], vlocal, i, body, 100, 2000, dim);
-    if (i != levels)
-      writeRemoteCoupling(basis[i], vlocal, i);
-  }
+  evaluateBaseAll(fun, &basis[0], cell, levels, body, 100, 2000, dim);
 
   std::vector<CSC> cscs(levels + 1);
   relationsNear(&cscs[0], cell);

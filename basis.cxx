@@ -141,6 +141,11 @@ void nbd::writeRemoteCoupling(const Base& basis, Cell* cell, int64_t level) {
       int64_t offset_i = offsets[box_i];
       collectChildMultipoles(*ci, &mps_comm[offset_i]);
 
+      int64_t ni;
+      childMultipoleSize(&ni, *ci);
+      if (ni != basis.DIMS[box_i])
+        butterflyUpdateMultipoles(&mps_comm[offset_i], ni, basis.DIMS[box_i], level);
+
       int64_t nlen = ci->listNear.size();
       for (int64_t n = 0; n < nlen; n++)
         neighbors.insert(ci->listNear[n]);
@@ -160,6 +165,17 @@ void nbd::writeRemoteCoupling(const Base& basis, Cell* cell, int64_t level) {
       writeChildMultipoles(*ci, &mps_comm[offset_i], basis.DIMS[box_i]);
       iter = std::next(iter);
     }
+  }
+}
+
+void nbd::evaluateBaseAll(EvalFunc ef, Base basis[], Cells& cells, int64_t levels, const Bodies& bodies, double repi, int64_t sp_pts, int64_t dim) {
+  for (int64_t i = levels; i >= 0; i--) {
+    Cell* vlocal = findLocalAtLevelModify(&cells[0], i);
+    if (i != levels) {
+      nextBasisDims(basis[i], basis[i + 1], i);
+      writeRemoteCoupling(basis[i], vlocal, i);
+    }
+    evaluateLocal(ef, basis[i], vlocal, i, bodies, repi, sp_pts, dim);
   }
 }
 
