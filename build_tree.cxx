@@ -83,14 +83,16 @@ void nbd::bucketSort(Bodies& bodies, int64_t buckets[], int64_t slices[], const 
   std::vector<int64_t> bodies_i(nbody);
   std::vector<int64_t> offsets(nboxes);
   Bodies bodies_cpy(nbody);
-  std::vector<int64_t> Xi(dim);
 
+#pragma omp parallel for
   for (int64_t i = 0; i < nbody; i++) {
+    std::vector<int64_t> Xi(dim);
     const Body& bi = bodies[i];
     for (int64_t d = 0; d < dim; d++)
       Xi[d] = (int64_t)((bi.X[d] - adj_dmin[d]) / box_dim[d]);
     int64_t ind = getIndex(Xi.data(), dim);
     bodies_i[i] = ind;
+#pragma omp atomic
     buckets[ind] = buckets[ind] + 1;
   }
 
@@ -98,17 +100,20 @@ void nbd::bucketSort(Bodies& bodies, int64_t buckets[], int64_t slices[], const 
   for (int64_t i = 1; i < nboxes; i++)
     offsets[i] = offsets[i - 1] + buckets[i - 1];
 
+#pragma omp parallel for ordered
   for (int64_t i = 0; i < nbody; i++) {
     int64_t bi = bodies_i[i];
+    int64_t offset_bi;
+#pragma omp ordered
+    { offset_bi = offsets[bi]; offsets[bi] = offset_bi + 1; }
     const Body& src = bodies[i];
-    int64_t offset_bi = offsets[bi];
     Body& tar = bodies_cpy[offset_bi];
     for (int64_t d = 0; d < dim; d++)
       tar.X[d] = src.X[d];
     tar.B = src.B;
-    offsets[bi] = offset_bi + 1;
   }
 
+#pragma omp parallel for
   for (int64_t i = 0; i < nbody; i++) {
     for (int64_t d = 0; d < dim; d++)
       bodies[i].X[d] = bodies_cpy[i].X[d];
@@ -208,7 +213,7 @@ void nbd::getList(Cell* Ci, Cell* Cj, int64_t dim, int64_t theta) {
       dX = dX + diff * diff;
     }
 
-    if (dX > theta * theta)
+    if (dX > theta)
       Ci->listFar.push_back(Cj);
     else {
       Ci->listNear.push_back(Cj);
@@ -402,7 +407,7 @@ void nbd::childMultipoleSize(int64_t* size, const Cell& cell) {
 }
 
 
-void nbd::evaluateBasis(EvalFunc ef, Matrix& Base, Matrix& Biv, Cell* cell, const Bodies& bodies, double repi, int64_t sp_pts, int64_t dim) {
+void nbd::evaluateBasis(EvalFunc ef, Matrix& Base, Matrix& Biv, Cell* cell, const Bodies& bodies, double epi, int64_t mrank, int64_t sp_pts, int64_t dim) {
   int64_t m;
   childMultipoleSize(&m, *cell);
 
@@ -414,7 +419,9 @@ void nbd::evaluateBasis(EvalFunc ef, Matrix& Base, Matrix& Biv, Cell* cell, cons
     std::vector<int64_t> cellm(m);
     collectChildMultipoles(*cell, cellm.data());
 
-    int64_t rank = repi < 1. ? std::min(m, n) : (int64_t)repi;
+    int64_t rank = mrank;
+    rank = std::min(m, rank);
+    rank = std::min(n, rank);
     Matrix a;
     std::vector<int64_t> pa(rank);
     cMatrix(a, m, n);
@@ -423,7 +430,7 @@ void nbd::evaluateBasis(EvalFunc ef, Matrix& Base, Matrix& Biv, Cell* cell, cons
     M2Lmat_bodies(ef, m, n, cellm.data(), nullptr, cell->BODY, remote.data(), dim, a);
 
     int64_t iters;
-    lraID(repi, a, Base, pa.data(), &iters);
+    lraID(epi, rank, a, Base, pa.data(), &iters);
 
     if (cell->Multipole.size() != iters)
       cell->Multipole.resize(iters);
@@ -587,7 +594,7 @@ void nbd::evaluateNear(Matrices d[], EvalFunc ef, const Cells& cells, int64_t di
   const CSC& cleaf = rels[levels];
   for (int64_t i = 0; i <= levels; i++)
     d[i].resize(rels[i].NNZ);
-  evaluateLeafNear(d[levels], ef, &cells[0], dim, cleaf);
+  evaluateLeafNear(dleaf, ef, &cells[0], dim, cleaf);
   for (int64_t i = levels - 1; i >= 0; i--) {
     evaluateIntermediate(ef, &cells[0], dim, &rels[i], &base[i], &d[i], i);
     if (rels[i].N == rels[i + 1].N)

@@ -11,6 +11,7 @@ void nbd::sampleC1(Matrices& C1, const CSC& rels, const Matrices& A, const doubl
   int64_t lbegin = rels.CBGN;
   int64_t ibegin = 0, iend;
   selfLocalRange(ibegin, iend, level);
+#pragma omp parallel for
   for (int64_t j = 0; j < rels.N; j++) {
     Matrix& cj = C1[j + ibegin];
 
@@ -34,6 +35,7 @@ void nbd::sampleC2(Matrices& C2, const CSC& rels, const Matrices& A, const Matri
   int64_t lbegin = rels.CBGN;
   int64_t ibegin = 0, iend;
   selfLocalRange(ibegin, iend, level);
+#pragma omp parallel for
   for (int64_t j = 0; j < rels.N; j++) {
     Matrix& cj = C2[j + ibegin];
 
@@ -50,12 +52,14 @@ void nbd::sampleC2(Matrices& C2, const CSC& rels, const Matrices& A, const Matri
   }
 }
 
-void nbd::orthoBasis(double repi, Matrices& C, int64_t dims_o[], int64_t level) {
+void nbd::orthoBasis(double epi, int64_t mrank, Matrices& C, int64_t dims_o[], int64_t level) {
   int64_t ibegin = 0;
   int64_t iend = C.size();
   selfLocalRange(ibegin, iend, level);
-  for (int64_t i = ibegin; i < iend; i++)
-    orthoBase(repi, C[i], &dims_o[i]);
+  int64_t nodes = iend - ibegin;
+#pragma omp parallel for
+  for (int64_t i = 0; i < nodes; i++)
+    orthoBase(epi, mrank, C[i + ibegin], &dims_o[i + ibegin]);
 }
 
 void nbd::allocBasis(Basis& basis, int64_t levels) {
@@ -70,7 +74,7 @@ void nbd::allocBasis(Basis& basis, int64_t levels) {
   }
 }
 
-void nbd::evaluateLocal(EvalFunc ef, Base& basis, Cell* cell, int64_t level, const Bodies& bodies, double repi, int64_t sp_pts, int64_t dim) {
+void nbd::evaluateLocal(EvalFunc ef, Base& basis, Cell* cell, int64_t level, const Bodies& bodies, double epi, int64_t mrank, int64_t sp_pts, int64_t dim) {
   int64_t ibegin = 0;
   int64_t iend = basis.DIMS.size();
   selfLocalRange(ibegin, iend, level);
@@ -80,13 +84,14 @@ void nbd::evaluateLocal(EvalFunc ef, Base& basis, Cell* cell, int64_t level, con
   std::vector<Cell*> leaves(nodes);
   findCellsAtLevelModify(&leaves[0], &len, cell, level);
 
+#pragma omp parallel for
   for (int64_t i = 0; i < len; i++) {
     Cell* ci = leaves[i];
     int64_t ii = ci->ZID;
     int64_t box_i = ii;
     neighborsILocal(box_i, ii, level);
 
-    evaluateBasis(ef, basis.Uo[box_i], basis.Uc[box_i], ci, bodies, repi, sp_pts, dim);
+    evaluateBasis(ef, basis.Uo[box_i], basis.Uc[box_i], ci, bodies, epi, mrank, sp_pts, dim);
     int64_t ni;
     childMultipoleSize(&ni, *ci);
     int64_t mi = ci->Multipole.size();
@@ -144,7 +149,7 @@ void nbd::writeRemoteCoupling(const Base& basis, Cell* cell, int64_t level) {
       int64_t ni;
       childMultipoleSize(&ni, *ci);
       if (ni != basis.DIMS[box_i])
-        butterflyUpdateMultipoles(&mps_comm[offset_i], ni, basis.DIMS[box_i], level);
+        butterflyUpdateMultipoles(&mps_comm[offset_i], ni, basis.DIMS[box_i], level + 1);
 
       int64_t nlen = ci->listNear.size();
       for (int64_t n = 0; n < nlen; n++)
@@ -168,14 +173,14 @@ void nbd::writeRemoteCoupling(const Base& basis, Cell* cell, int64_t level) {
   }
 }
 
-void nbd::evaluateBaseAll(EvalFunc ef, Base basis[], Cells& cells, int64_t levels, const Bodies& bodies, double repi, int64_t sp_pts, int64_t dim) {
+void nbd::evaluateBaseAll(EvalFunc ef, Base basis[], Cells& cells, int64_t levels, const Bodies& bodies, double epi, int64_t mrank, int64_t sp_pts, int64_t dim) {
   for (int64_t i = levels; i >= 0; i--) {
     Cell* vlocal = findLocalAtLevelModify(&cells[0], i);
     if (i != levels) {
       nextBasisDims(basis[i], basis[i + 1], i);
       writeRemoteCoupling(basis[i], vlocal, i);
     }
-    evaluateLocal(ef, basis[i], vlocal, i, bodies, repi, sp_pts, dim);
+    evaluateLocal(ef, basis[i], vlocal, i, bodies, epi, mrank, sp_pts, dim);
   }
 }
 
@@ -209,6 +214,7 @@ void nbd::allocUcUo(Base& basis, const Matrices& C, int64_t level) {
   int64_t lbegin = 0;
   int64_t lend = len;
   selfLocalRange(lbegin, lend, level);
+#pragma omp parallel for
   for (int64_t i = 0; i < len; i++) {
     int64_t dim = basis.DIMS[i];
     int64_t dim_o = basis.DIMO[i];
@@ -227,7 +233,7 @@ void nbd::allocUcUo(Base& basis, const Matrices& C, int64_t level) {
   }
 }
 
-void nbd::sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, const double* R, int64_t lenR, int64_t level) {
+void nbd::sampleA(Base& basis, const CSC& rels, const Matrices& A, double epi, int64_t mrank, const double* R, int64_t lenR, int64_t level) {
   Matrices C1(basis.DIMS.size());
   Matrices C2(basis.DIMS.size());
 
@@ -243,7 +249,7 @@ void nbd::sampleA(Base& basis, double repi, const CSC& rels, const Matrices& A, 
   sampleC1(C1, rels, A, R, lenR, level);
   DistributeMatricesList(C1, level);
   sampleC2(C2, rels, A, C1, level);
-  orthoBasis(repi, C2, &basis.DIMO[0], level);
+  orthoBasis(epi, mrank, C2, &basis.DIMO[0], level);
   DistributeDims(&basis.DIMO[0], level);
   allocUcUo(basis, C2, level);
   
