@@ -60,11 +60,7 @@ namespace nbd {
 
   void utav(char tb, const Matrix& U, const Matrix& A, const Matrix& VT, Matrix& C);
 
-  void chol_solve(Vector& X, const Matrix& A);
-
-  void fw_solve(Vector& X, const Matrix& L);
-
-  void bk_solve(Vector& X, const Matrix& L);
+  void solmv(char fwbk, Vector& X, const Matrix& A);
 
   void mvec(char ta, const Matrix& A, const Vector& X, Vector& B, double alpha, double beta);
 

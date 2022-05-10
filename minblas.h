@@ -5,14 +5,6 @@
 extern "C" {
 #endif
 
-void dlra(double epi, int64_t m, int64_t n, int64_t k, double* a, double* u, int64_t ldu, double* vt, int64_t ldvt, int64_t* rank, int64_t* piv);
-
-void didrow(double epi, int64_t m, int64_t n, int64_t k, double* a, double* u, int64_t ldu, int64_t* arow, int64_t* rank);
-
-void dorth(char ecoq, int64_t m, int64_t n, double* r, int64_t ldr, double* q, int64_t ldq);
-
-void Cdpotrf(int64_t n, double* a, int64_t lda);
-
 void dtrsmlt_right(int64_t m, int64_t n, const double* a, int64_t lda, double* b, int64_t ldb);
 
 void dtrsmr_right(int64_t m, int64_t n, const double* a, int64_t lda, double* b, int64_t ldb);

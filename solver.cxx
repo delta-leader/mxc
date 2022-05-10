@@ -33,7 +33,7 @@ void nbd::svAccFw(Vectors& Xc, const Matrices& A_cc, const CSC& rels, int64_t le
     int64_t ii;
     lookupIJ(ii, rels, i + lbegin, i + lbegin);
     const Matrix& A_ii = A_cc[ii];
-    fw_solve(xlocal[i], A_ii);
+    solmv('F', xlocal[i], A_ii);
 
     for (int64_t yi = rels.CSC_COLS[i]; yi < rels.CSC_COLS[i + 1]; yi++) {
       int64_t y = rels.CSC_ROWS[yi];
@@ -70,7 +70,7 @@ void nbd::svAccBk(Vectors& Xc, const Matrices& A_cc, const CSC& rels, int64_t le
     int64_t ii;
     lookupIJ(ii, rels, i + lbegin, i + lbegin);
     const Matrix& A_ii = A_cc[ii];
-    bk_solve(xlocal[i], A_ii);
+    solmv('B', xlocal[i], A_ii);
   }
   
   sendBkSubstituted(Xc, level);
@@ -147,7 +147,7 @@ void nbd::solveA(RHS st[], const Node A[], const Base B[], const CSC rels[], con
     svAocFw(st[i].Xo, st[i].Xc, A[i].A_oc, rels[i], i);
     permuteAndMerge('F', st[i].Xo, st[i - 1].X, i - 1);
   }
-  chol_solve(st[0].X[0], A[0].A[0]);
+  solmv('A', st[0].X[0], A[0].A[0]);
   
   for (int64_t i = 1; i <= levels; i++) {
     permuteAndMerge('B', st[i].Xo, st[i - 1].X, i - 1);
