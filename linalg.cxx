@@ -68,10 +68,9 @@ void nbd::cpyVecToVec(int64_t n, const Vector& v1, Vector& v2, int64_t x1, int64
     std::copy(&v1.X[x1], &v1.X[x1] + n, &v2.X[x2]);
 }
 
-void nbd::orthoBase(double epi, int64_t mrank, Matrix& A, int64_t *rnk_out) {
+void nbd::orthoBase(double epi, Matrix& A, int64_t *rnk_out) {
   Matrix U, V;
-  int64_t rank = mrank;
-  rank = std::min(A.M, rank);
+  int64_t rank = A.M;
   rank = std::min(A.N, rank);
   cMatrix(U, A.M, rank);
   cMatrix(V, A.N, rank);
