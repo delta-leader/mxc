@@ -3,6 +3,10 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+h2_example
+lorasp
+lra_example
+
 # User-specific files
 *.rsuser
 *.suo
@@ -342,8 +346,10 @@ healthchecksdb
 
 # Linux Build files
 *.o
-*.a 
+*.a
+*.so
 a.out
+*.dat
 
 # CMake files
 CMakeFiles/

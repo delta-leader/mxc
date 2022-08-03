@@ -1,45 +1,37 @@
 ﻿
-cmake_minimum_required (VERSION 3.9)
+cmake_minimum_required (VERSION 3.18)
 
-project ("shimo" LANGUAGES C CXX)
+set(CMAKE_C_COMPILER "gcc")
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_FLAGS "-O3 -m64 -Wall -Wextra")
+
+project ("shimo" LANGUAGES C)
+
+if(DEFINED ENV{MKLROOT})
+set(MKL_ARCH intel64)
+set(MKL_LINK dynamic)
+set(MKL_INTERFACE_FULL intel_lp64)
+set(MKL_THREADING gnu_thread)
+set(MKL_MPI intelmpi)
+find_package(MKL)
+elseif(DEFINED ENV{OPENBLAS_DIR})
+set(BLA_VENDOR OpenBLAS)
+find_package(BLAS)
+find_package(LAPACK)
+endif()
 
 find_package(MPI REQUIRED)
+find_package(OpenMP REQUIRED)
 
-message(STATUS ${MPI_INCLUDE_PATH})
-message(STATUS ${MPI_C_LIBRARIES})
-include_directories(SYSTEM ${MPI_INCLUDE_PATH})
+add_executable(lorasp lorasp.c kernel.c linalg.c basis.c build_tree.c umv.c profile.c)
+target_include_directories(lorasp PRIVATE "./")
+target_link_libraries(lorasp MPI::MPI_C OpenMP::OpenMP_C)
 
-add_library(nbd STATIC 
-  minblas.c minblas.h
-  build_tree.cxx build_tree.hxx
-  kernel.cxx kernel.hxx
-  linalg.cxx linalg.hxx
-  basis.cxx basis.hxx
-  umv.cxx umv.hxx
-  h2mv.cxx h2mv.hxx
-  solver.cxx solver.hxx
-  dist.cxx dist.hxx
-)
-target_include_directories(nbd PRIVATE "./" )
-target_compile_options(nbd PRIVATE ${MPI_C_COMPILE_FLAGS})
-target_link_libraries(nbd ${MPI_C_LIBRARIES} ${MPI_C_LINK_FLAGS})
-
-add_executable(h2_example
-  h2_example.cxx
-)
-target_compile_options(h2_example PRIVATE ${MPI_C_COMPILE_FLAGS})
-target_link_libraries(h2_example nbd ${MPI_C_LIBRARIES} ${MPI_C_LINK_FLAGS})
-target_include_directories(h2_example PRIVATE "./" )
-
-add_executable(lorasp
-  lorasp.cxx
-)
-target_compile_options(lorasp PRIVATE ${MPI_C_COMPILE_FLAGS})
-target_link_libraries(lorasp nbd ${MPI_C_LIBRARIES} ${MPI_C_LINK_FLAGS})
-target_include_directories(lorasp PRIVATE "./" )
-
-add_executable(lra_example
-  lra_example.cxx
-)
-target_link_libraries(lra_example nbd)
-target_include_directories(lra_example PRIVATE "./" )
+if(MKL_FOUND)
+target_compile_options(lorasp PRIVATE -D_PROF -D_MKL)
+target_link_libraries(lorasp MKL::MKL)
+elseif(BLAS_FOUND)
+target_include_directories(lorasp PRIVATE "$ENV{OPENBLAS_DIR}/include")
+target_compile_options(lorasp PRIVATE -D_PROF)
+target_link_libraries(lorasp m dl BLAS::BLAS LAPACK::LAPACK)
+endif()
