@@ -243,8 +243,7 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
   int __mpi_rank = 0, __mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &__mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &__mpi_size);
-  MPI_Group world_group;
-  MPI_Comm_group(MPI_COMM_WORLD, &world_group);
+
   int64_t mpi_rank = __mpi_rank;
   int64_t mpi_size = __mpi_size;
   int* ranks = (int*)malloc(sizeof(int) * mpi_size);
@@ -336,60 +335,39 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
       comms[i].ProcBoxesEnd[j] = jend - ibegin;
     }
 
+    int64_t mbegin = ibegin, mend = iend;
+    get_level(&mbegin, &mend, cells, i, mpi_rank);
+    int64_t p = cells[mbegin].Procs[0];
+    int64_t lenp = cells[mbegin].Procs[1] - p;
+    comms[i].Proc[0] = p;
+    comms[i].Proc[1] = p + lenp;
+    comms[i].Proc[2] = mpi_rank;
+
     comms[i].Comm_box = (MPI_Comm*)malloc(sizeof(MPI_Comm) * mpi_size);
     for (int64_t j = 0; j < mpi_size; j++) {
       int64_t jbegin = rel_arr[j];
       int64_t jlen = rel_arr[j + 1] - jbegin;
-      if (jlen > 0) {
-        const int64_t* row = &rel_rows[jbegin];
-        for (int64_t k = 0; k < jlen; k++)
-          ranks[k] = row[k];
-        MPI_Group group_j;
-        MPI_Group_incl(world_group, jlen, ranks, &group_j);
-        MPI_Comm_create_group(MPI_COMM_WORLD, group_j, j, &comms[i].Comm_box[j]);
-        MPI_Group_free(&group_j);
-      }
-      else
-        comms[i].Comm_box[j] = MPI_COMM_NULL;
+      int color = MPI_UNDEFINED;
+      for (int64_t k = 0; k < jlen; k++)
+        if (rel_rows[jbegin + k] == mpi_rank)
+          color = 1;
+      MPI_Comm_split(MPI_COMM_WORLD, color, mpi_rank, &comms[i].Comm_box[j]);
     }
 
-    int64_t mbegin = ibegin, mend = iend;
-    get_level(&mbegin, &mend, cells, i, mpi_rank);
-    const struct Cell* cm = &cells[mbegin];
-    int64_t p = cm->Procs[0];
-    int64_t lenp = cm->Procs[1] - p;
-    comms[i].Proc[0] = p;
-    comms[i].Proc[1] = p + lenp;
-    comms[i].Proc[2] = mpi_rank;
-    comms[i].Comm_merge = MPI_COMM_NULL;
-    comms[i].Comm_share = MPI_COMM_NULL;
-
-    if (lenp > 1 && cm->Child >= 0) {
-      const int64_t lenc = 2;
-      int incl = 0;
-      for (int64_t j = 0; j < lenc; j++) {
-        ranks[j] = cells[cm->Child + j].Procs[0];
-        incl = incl || (ranks[j] == mpi_rank);
-      }
-      if (incl) {
-        MPI_Group group_merge;
-        MPI_Group_incl(world_group, lenc, ranks, &group_merge);
-        MPI_Comm_create_group(MPI_COMM_WORLD, group_merge, mpi_size, &comms[i].Comm_merge);
-        MPI_Group_free(&group_merge);
-      }
-    }
-
-    if (lenp > 1) {
-      for (int64_t j = 0; j < lenp; j++)
-        ranks[j] = j + p;
-      MPI_Group group_share;
-      MPI_Group_incl(world_group, lenp, ranks, &group_share);
-      MPI_Comm_create_group(MPI_COMM_WORLD, group_share, mpi_size + 1, &comms[i].Comm_share);
-      MPI_Group_free(&group_share);
-    }
+    int color = MPI_UNDEFINED;
+    int64_t cc = cells[mbegin].Child;
+    if (lenp > 1 && cc >= 0)
+      for (int64_t j = 0; j < 2; j++)
+        if (cells[cc + j].Procs[0] == mpi_rank)
+          color = p;
+    MPI_Comm_split(MPI_COMM_WORLD, color, mpi_rank, &comms[i].Comm_merge);
+  
+    color = MPI_UNDEFINED;
+    if (lenp > 1)
+      color = p;
+    MPI_Comm_split(MPI_COMM_WORLD, color, mpi_rank, &comms[i].Comm_share);
   }
 
-  MPI_Group_free(&world_group);
   free(ranks);
 }
 
@@ -562,7 +540,6 @@ void evalD(void(*ef)(double*), struct Matrix* D, int64_t ncells, const struct Ce
   get_level(&ibegin, &iend, cells, level, mpi_rank);
   int64_t nodes = iend - ibegin;
 
-#pragma omp parallel for
   for (int64_t i = 0; i < nodes; i++) {
     int64_t lc = ibegin + i;
     const struct Cell* ci = &cells[lc];

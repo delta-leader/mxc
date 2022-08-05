@@ -50,7 +50,7 @@ void mat_cpy_flush() {
   MKL_Domatcopy_batch('C', trans_array, rows_ui64, cols_ui64, alpha_array,
     copy_batch.A_array, lda_ui64, copy_batch.B_array, ldb_ui64, copy_batch_count, group_size);
 #else
-#pragma omp parallel for
+//#pragma omp parallel for
   for (int32_t i = 0; i < copy_batch_count; i++)
     LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'A', copy_batch.rows_array[i], copy_batch.cols_array[i],
       copy_batch.A_array[i], copy_batch.lda_array[i], copy_batch.B_array[i], copy_batch.ldb_array[i]);
@@ -108,7 +108,7 @@ void mmult_flush() {
     mm_batch.alpha_array, mm_batch.A_array, mm_batch.lda_array, mm_batch.B_array, mm_batch.ldb_array,
     mm_batch.beta_array, mm_batch.C_array, mm_batch.ldc_array, &mm_batch_count, one_array);
 #else
-#pragma omp parallel for
+//#pragma omp parallel for
   for (int32_t i = 0; i < mm_batch_count; i++) {
     CBLAS_TRANSPOSE tac = mm_batch.transa_array[i] == 'N' ? CblasNoTrans : CblasTrans;
     CBLAS_TRANSPOSE tbc = mm_batch.transb_array[i] == 'N' ? CblasNoTrans : CblasTrans;
@@ -183,7 +183,7 @@ void icmp_chol_decomp_flush() {
     (const double**)ichol_batch.B_array, ichol_batch.ldb_array, (const double**)ichol_batch.B_array, ichol_batch.ldb_array, alpha_array,
     ichol_batch.C_array, ichol_batch.ldc_array, &ichol_batch_count, one_array);
 #else
-#pragma omp parallel for
+//#pragma omp parallel for
   for (int32_t i = 0; i < ichol_batch_count; i++) {
     LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', ichol_batch.lc_array[i], ichol_batch.A_array[i], ichol_batch.lda_array[i]);
     cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, ichol_batch.lo_array[i], ichol_batch.lc_array[i], 1.,
@@ -239,7 +239,7 @@ void trsm_lowerA_flush() {
   dtrsm_batch(R_array, L_array, T_array, N_array, trsml_batch.m_array, trsml_batch.n_array, alpha_array,
     trsml_batch.L_array, trsml_batch.ldl_array, trsml_batch.A_array, trsml_batch.lda_array, &trsml_batch_count, one_array);
 #else
-#pragma omp parallel for
+//#pragma omp parallel for
   for (int32_t i = 0; i < trsml_batch_count; i++)
     cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit, trsml_batch.m_array[i], trsml_batch.n_array[i], 1.,
       trsml_batch.L_array[i], trsml_batch.ldl_array[i], trsml_batch.A_array[i], trsml_batch.lda_array[i]);
@@ -317,7 +317,7 @@ void id_row_flush() {
   dtrsm_batch(R_array, L_array, N_array, U_array, idrow_batch.rows_array, idrow_batch.cols_array, alpha_array,
     (const double**)idrow_batch.work_array, idrow_batch.lda_array, idrow_batch.A_array, idrow_batch.lda_array, &idrow_batch_count, one_array);
 #else
-#pragma omp parallel for
+//#pragma omp parallel for
   for (int32_t i = 0; i < idrow_batch_count; i++) {
     LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'A', idrow_batch.rows_array[i], idrow_batch.cols_array[i], 
       idrow_batch.A_array[i], idrow_batch.lda_array[i], idrow_batch.work_array[i], idrow_batch.lda_array[i]);

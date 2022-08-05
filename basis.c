@@ -29,7 +29,7 @@ const struct CSC* rels, const int64_t* lt_child, const struct Base* basis_lo, in
   sample->CloseAvails = &arr_ctrl[nodes * 2];
   sample->CloseBodies = arr_list;
   sample->Skeletons = &arr_list[nodes];
-
+  
   int64_t count_c = 0, count_s = 0;
   for (int64_t i = 0; i < nodes; i++) {
     int64_t li = ibegin + i;
@@ -95,10 +95,12 @@ const struct CSC* rels, const int64_t* lt_child, const struct Base* basis_lo, in
       cpos = cpos + 1;
     
     int64_t box_i = (int64_t)(cpos == 0);
-    int64_t s_lens = 0;
-    int64_t ic = jbegin + ngbs[box_i];
-    int64_t offset_i = cells[ic].Body[0];
-    int64_t len_i = cells[ic].Body[1] - offset_i;
+    int64_t s_lens = 0, ic = 0, offset_i = 0, len_i = 0;
+    if (box_i < nlen) {
+      ic = jbegin + ngbs[box_i];
+      offset_i = cells[ic].Body[0];
+      len_i = cells[ic].Body[1] - offset_i;
+    }
 
     for (int64_t j = 0; j < close_len; j++) {
       int64_t loc = (int64_t)((double)(close_avail * j) / close_len);
@@ -280,7 +282,6 @@ const struct CellComm* comm, const struct Body* bodies, double epi, int64_t mran
       count_m = count_m + ske_len * (ske_len * 2 + len_m);
     }
 
-#pragma omp parallel for
     for (int64_t i = 0; i < nodes; i++) {
       int64_t ske_len = samples.SkeLens[i];
       int64_t len_s = sp_pts + (samples.CloseLens[i] > 0 ? ske_len : 0);
@@ -295,7 +296,7 @@ const struct CellComm* comm, const struct Body* bodies, double epi, int64_t mran
       mmult('N', 'T', &S_dn_work, &S_dn_work, &S_dn, 1., 0.);
       nrm2_A(&S_dn, &nrm_dn);
 
-      struct Body far_bodies[sp_pts];
+      struct Body far_bodies[2000];
       mesh_unit_sphere(far_bodies, sp_pts);
       int64_t gi = i + ibegin;
       i_global(&gi, &comm[l]);
@@ -351,7 +352,6 @@ const struct CellComm* comm, const struct Body* bodies, double epi, int64_t mran
     id_row_flush();
     mat_cpy_flush();
 
-#pragma omp parallel for
     for (int64_t i = 0; i < nodes; i++) {
       int64_t ske_len = samples.SkeLens[i];
       int64_t rank = basis[l].DimsLr[i + ibegin];
@@ -438,7 +438,6 @@ void evalS(void(*ef)(double*), struct Matrix* S, const struct Base* basis, const
   int64_t lbegin = ibegin;
   i_global(&lbegin, comm);
 
-#pragma omp parallel for
   for (int64_t x = 0; x < rels->N; x++) {
     for (int64_t yx = rels->ColIndex[x]; yx < rels->ColIndex[x + 1]; yx++) {
       int64_t y = rels->RowIndex[yx];
