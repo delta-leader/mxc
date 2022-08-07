@@ -134,10 +134,8 @@ void sampleBodies_free(struct SampleBodies* sample) {
 }
 
 void dist_int_64_xlen(int64_t arr_xlen[], const struct CellComm* comm) {
-  int64_t mpi_rank = comm->Proc[2];
-  int64_t pbegin = comm->Comms.ColIndex[mpi_rank];
-  int64_t plen = comm->Comms.ColIndex[mpi_rank + 1] - pbegin;
-  const int64_t* row = &comm->Comms.RowIndex[pbegin];
+  int64_t plen = comm->Proc[0] == comm->worldRank ? comm->lenTargets : 0;
+  const int64_t* row = comm->ProcTargets;
 #ifdef _PROF
   double stime = MPI_Wtime();
 #endif
@@ -160,10 +158,8 @@ void dist_int_64_xlen(int64_t arr_xlen[], const struct CellComm* comm) {
 }
 
 void dist_int_64(int64_t arr[], const int64_t offsets[], const struct CellComm* comm) {
-  int64_t mpi_rank = comm->Proc[2];
-  int64_t pbegin = comm->Comms.ColIndex[mpi_rank];
-  int64_t plen = comm->Comms.ColIndex[mpi_rank + 1] - pbegin;
-  const int64_t* row = &comm->Comms.RowIndex[pbegin];
+  int64_t plen = comm->Proc[0] == comm->worldRank ? comm->lenTargets : 0;
+  const int64_t* row = comm->ProcTargets;
 #ifdef _PROF
   double stime = MPI_Wtime();
 #endif
@@ -189,10 +185,8 @@ void dist_int_64(int64_t arr[], const int64_t offsets[], const struct CellComm* 
 }
 
 void dist_double(double* arr[], const struct CellComm* comm) {
-  int64_t mpi_rank = comm->Proc[2];
-  int64_t pbegin = comm->Comms.ColIndex[mpi_rank];
-  int64_t plen = comm->Comms.ColIndex[mpi_rank + 1] - pbegin;
-  const int64_t* row = &comm->Comms.RowIndex[pbegin];
+  int64_t plen = comm->Proc[0] == comm->worldRank ? comm->lenTargets : 0;
+  const int64_t* row = comm->ProcTargets;
   double* data = arr[0];
 #ifdef _PROF
   double stime = MPI_Wtime();
