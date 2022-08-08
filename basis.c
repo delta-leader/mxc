@@ -213,7 +213,7 @@ void dist_double(double* arr[], const struct CellComm* comm) {
 }
 
 void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, struct Cell* cells, const struct CSC* rel_near, int64_t levels, 
-const struct CellComm* comm, const struct Body* bodies, double epi, int64_t mrank, int64_t sp_pts) {
+const struct CellComm* comm, const double* bodies, double epi, int64_t mrank, int64_t sp_pts) {
 
   for (int64_t l = levels; l >= 0; l--) {
     int64_t xlen = 0;
@@ -278,19 +278,19 @@ const struct CellComm* comm, const struct Body* bodies, double epi, int64_t mran
 
     for (int64_t i = 0; i < nodes; i++) {
       int64_t ske_len = samples.SkeLens[i];
-      int64_t len_s = sp_pts + (samples.CloseLens[i] > 0 ? ske_len : 0);
+      int64_t len_s = sp_pts + ske_len;
       double* mat = matrix_ptrs[i + ibegin];
       struct Matrix S = (struct Matrix){ mat, ske_len, len_s };
 
       struct Matrix S_dn = (struct Matrix){ mat, ske_len, ske_len };
       double nrm_dn = 0., nrm_lr = 0.;
       struct Matrix S_dn_work = (struct Matrix){ &mat[ske_len * ske_len], ske_len, samples.CloseLens[i] };
-
+      
       gen_matrix(ef, ske_len, samples.CloseLens[i], bodies, bodies, S_dn_work.A, samples.Skeletons[i], samples.CloseBodies[i]);
       mmult('N', 'T', &S_dn_work, &S_dn_work, &S_dn, 1., 0.);
       nrm2_A(&S_dn, &nrm_dn);
 
-      struct Body far_bodies[2000];
+      double far_bodies[6000];
       mesh_unit_sphere(far_bodies, sp_pts);
       int64_t gi = i + ibegin;
       i_global(&gi, &comm[l]);
@@ -304,8 +304,7 @@ const struct CellComm* comm, const struct Body* bodies, double epi, int64_t mran
       double scale = (nrm_dn == 0. || nrm_lr == 0.) ? 1. : nrm_lr / nrm_dn;
       scal_A(&S_dn, scale);
 
-      int64_t rank = ske_len < len_s ? ske_len : len_s;
-      rank = mrank > 0 ? (mrank < rank ? mrank : rank) : rank;
+      int64_t rank = mrank > 0 ? (mrank < ske_len ? mrank : ske_len) : ske_len;
       double* Svec = &mat[ske_len * len_s];
       svd_U(&S, Svec);
 
@@ -318,56 +317,24 @@ const struct CellComm* comm, const struct Body* bodies, double epi, int64_t mran
       }
       basis[l].DimsLr[i + ibegin] = rank;
 
-      struct Matrix Rc = (struct Matrix){ &mat[ske_len * ske_len * 2], ske_len, ske_len };
-      memset(Rc.A, 0, sizeof(double) * ske_len * ske_len);
-      for (int64_t j = 0; j < ske_len; j++)
-        Rc.A[j + j * ske_len] = 1.;
-    }
-
-    dist_int_64_xlen(basis[l].Dims, &comm[l]);
-    dist_int_64_xlen(basis[l].DimsLr, &comm[l]);
-
-    for (int64_t i = 0; i < nodes; i++) {
-      int64_t ske_len = samples.SkeLens[i];
-      int64_t rank = basis[l].DimsLr[i + ibegin];
-      double* mat = matrix_ptrs[i + ibegin];
       int32_t* pa = ipiv_ptrs[i];
       struct Matrix Qo = (struct Matrix){ mat, ske_len, rank };
-      id_row_batch(&Qo, pa, &mat[ske_len * rank]);
-
-      struct Matrix Rc = (struct Matrix){ &mat[ske_len * ske_len * 2], ske_len, ske_len };
+      id_row(&Qo, pa, &mat[ske_len * rank]);
       int64_t lc = basis[l].Lchild[i + ibegin];
-      for (int64_t j = 0; lc >= 0 && j < 2; j++) {
-        int64_t diml = basis[l + 1].DimsLr[lc + j];
-        int64_t off = basis[l + 1].Offsets[lc + j] - basis[l + 1].Offsets[lc];
-        mat_cpy_batch(diml, diml, &(basis[l + 1].R)[lc + j], &Rc, 0, 0, off, off);
-      }
-    }
-    id_row_flush();
-    mat_cpy_flush();
-
-    for (int64_t i = 0; i < nodes; i++) {
-      int64_t ske_len = samples.SkeLens[i];
-      int64_t rank = basis[l].DimsLr[i + ibegin];
-      double* mat = matrix_ptrs[i + ibegin];
-      int32_t* pa = ipiv_ptrs[i];
+      basis_reflec(lc >= 0 ? 2 : 0, lc >= 0 ? &basis[l + 1].R[lc] : NULL, &Qo);
 
       for (int64_t j = 0; j < rank; j++) {
         int64_t piv = (int64_t)pa[j] - 1;
-        if (piv != j) { 
+        if (piv != j) {
           int64_t c = samples.Skeletons[i][piv];
           samples.Skeletons[i][piv] = samples.Skeletons[i][j];
           samples.Skeletons[i][j] = c;
         }
       }
-
-      struct Matrix Q = (struct Matrix){ mat, ske_len, ske_len };
-      struct Matrix Qo = (struct Matrix){ mat, ske_len, rank };
-      struct Matrix R = (struct Matrix){ &mat[ske_len * ske_len], rank, rank };
-      struct Matrix Rc = (struct Matrix){ &mat[ske_len * ske_len * 2], ske_len, ske_len };
-      upper_tri_reflec_mult('L', &Rc, &Qo);
-      qr_full(&Q, &R, Rc.A);
     }
+
+    dist_int_64_xlen(basis[l].Dims, &comm[l]);
+    dist_int_64_xlen(basis[l].DimsLr, &comm[l]);
 
     count = 0;
     count_m = 0;
@@ -396,17 +363,26 @@ const struct CellComm* comm, const struct Body* bodies, double epi, int64_t mran
     for (int64_t i = 0; i < xlen; i++) {
       int64_t m = basis[l].Dims[i];
       int64_t n = basis[l].DimsLr[i];
-      int64_t size = m * m + n * n;
+      int64_t size = m * n;
       if (ibegin <= i && i < iend && size > 0)
         memcpy(data_basis, matrix_ptrs[i], sizeof(double) * size);
       basis[l].Uo[i] = (struct Matrix){ data_basis, m, n };
-      basis[l].Uc[i] = (struct Matrix){ &data_basis[m * n], m, m - n };
-      basis[l].R[i] = (struct Matrix){ &data_basis[m * m], n, n };
       matrix_ptrs[i] = data_basis;
       data_basis = &data_basis[size];
     }
     matrix_ptrs[xlen] = data_basis;
     dist_double(matrix_ptrs, &comm[l]);
+
+    for (int64_t i = 0; i < xlen; i++) {
+      int64_t m = basis[l].Dims[i];
+      int64_t n = basis[l].DimsLr[i];
+      int64_t size = m * (m - n) + n * n;
+      basis[l].Uc[i] = (struct Matrix){ data_basis, m, m - n };
+      basis[l].R[i] = (struct Matrix){ &data_basis[m * (m - n)], n, n };
+      data_basis = &data_basis[size];
+      if (m > 0 && n > 0)
+        qr_full(&basis[l].Uo[i], &basis[l].Uc[i], &basis[l].R[i]);
+    }
 
     free(ipiv_data);
     free(ipiv_ptrs);
@@ -426,7 +402,7 @@ void basis_free(struct Base* basis) {
   free(basis->Uo);
 }
 
-void evalS(void(*ef)(double*), struct Matrix* S, const struct Base* basis, const struct Body* bodies, const struct CSC* rels, const struct CellComm* comm) {
+void evalS(void(*ef)(double*), struct Matrix* S, const struct Base* basis, const double* bodies, const struct CSC* rels, const struct CellComm* comm) {
   int64_t ibegin = 0, iend = 0;
   self_local_range(&ibegin, &iend, comm);
   int64_t lbegin = ibegin;

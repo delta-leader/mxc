@@ -26,7 +26,8 @@ int main(int argc, char* argv[]) {
   void(*ef)(double*) = yukawa3d;
   set_kernel_constants(1.e-3 / Nbody, 1.);
   
-  struct Body* body = (struct Body*)malloc(sizeof(struct Body) * Nbody);
+  double* body = (double*)malloc(sizeof(double) * Nbody * 3);
+  double* Xbody = (double*)malloc(sizeof(double) * Nbody);
   struct Cell* cell = (struct Cell*)malloc(sizeof(struct Cell) * ncells);
   struct CSC cellNear, cellFar;
   struct CSC* rels_far = (struct CSC*)malloc(sizeof(struct CSC) * (levels + 1));
@@ -48,7 +49,7 @@ int main(int argc, char* argv[]) {
     buildTreeBuckets(cell, body, buckets, levels);
     free(buckets);
   }
-  body_neutral_charge(body, Nbody, 1., 0);
+  body_neutral_charge(Xbody, Nbody, 1., 0);
 
   int64_t body_local[2];
   local_bodies(body_local, ncells, cell, levels);
@@ -74,14 +75,14 @@ int main(int argc, char* argv[]) {
     evalS(ef, nodes[i].S, &basis[i], body, &rels_far[i], &cell_comm[i]);
 
   if (Nbody > 10000) {
-    loadX(X1, body_local, body);
+    loadX(X1, body_local, Xbody);
     allocRightHandSides('M', rhs, basis, levels);
     matVecA(rhs, nodes, basis, rels_near, rels_far, X1, cell_comm, levels);
     for (int64_t i = 0; i <= levels; i++)
       rightHandSides_free(&rhs[i]);
   }
   else 
-    mat_vec_reference(ef, body_local[0], body_local[1], X1, Nbody, body);
+    mat_vec_reference(ef, body_local[0], body_local[1], X1, Nbody, body, Xbody);
   
   double factor_time, factor_comm_time;
   startTimer(&factor_time, &factor_comm_time);
@@ -95,7 +96,7 @@ int main(int argc, char* argv[]) {
   solveA(rhs, nodes, basis, rels_near, X1, cell_comm, levels);
   stopTimer(&solve_time, &solve_comm_time);
 
-  loadX(X2, body_local, body);
+  loadX(X2, body_local, Xbody);
   double err;
   solveRelErr(&err, X1, X2, lenX);
 
@@ -137,6 +138,7 @@ int main(int argc, char* argv[]) {
   csc_free(&cellNear);
   
   free(body);
+  free(Xbody);
   free(cell);
   free(rels_far);
   free(rels_near);
