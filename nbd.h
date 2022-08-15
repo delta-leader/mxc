@@ -36,7 +36,7 @@ void mat_solve(char type, struct Matrix* X, const struct Matrix* A);
 void nrm2_A(struct Matrix* A, double* nrm);
 void scal_A(struct Matrix* A, double alpha);
 
-struct Cell { int64_t Child, Body[2], Level, Procs[2]; double R[3], C[3]; };
+struct Cell { int64_t Child, Body[2], Level, LID, Procs[2]; double R[3], C[3]; };
 struct CSC { int64_t M, N, *ColIndex, *RowIndex; };
 struct CellComm { int64_t Proc[2], worldRank, worldSize, lenTargets, *ProcTargets, *ProcRootI, *ProcBoxes, *ProcBoxesEnd; MPI_Comm Comm_share, Comm_merge, *Comm_box; };
 struct Base { int64_t Ulen, *Lchild, *Dims, *DimsLr, *Offsets, *Multipoles; struct Matrix *Uo, *Uc, *R; };
@@ -79,7 +79,7 @@ void csc_free(struct CSC* csc);
 
 void get_level(int64_t* begin, int64_t* end, const struct Cell* cells, int64_t level, int64_t mpi_rank);
 
-void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells, const struct CSC* cellFar, const struct CSC* cellNear, int64_t levels);
+void buildComm(struct CellComm* comms, int64_t ncells, struct Cell* cells, const struct CSC* cellFar, const struct CSC* cellNear, int64_t levels);
 
 void cellComm_free(struct CellComm* comm);
 
@@ -101,7 +101,7 @@ void relations(struct CSC rels[], int64_t ncells, const struct Cell* cells, cons
 
 void evalD(void(*ef)(double*), struct Matrix* D, int64_t ncells, const struct Cell* cells, const double* bodies, const struct CSC* csc, int64_t level);
 
-void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, struct Cell* cells, const struct CSC* rel_near, int64_t levels, const struct CellComm* comm, const double* bodies, double epi, int64_t mrank, int64_t sp_pts);
+void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, const struct Cell* cells, const struct CSC* rel_near, int64_t levels, const struct CellComm* comm, const double* bodies, double epi, int64_t mrank, int64_t sp_pts);
 
 void basis_free(struct Base* basis);
 

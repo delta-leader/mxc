@@ -24,6 +24,7 @@ void buildTree(int64_t* ncells, struct Cell* cells, double* bodies, int64_t nbod
   while (i < len) {
     struct Cell* ci = &cells[i];
     ci->Child = -1;
+    ci->LID = -1;
 
     if (ci->Level < levels) {
       int64_t sdim = 0;
@@ -79,6 +80,7 @@ void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t bu
   for (int64_t i = 0; i < nleaf; i++) {
     int64_t ci = i + nleaf - 1;
     cells[ci].Child = -1;
+    cells[ci].LID = -1;
     cells[ci].Body[0] = count;
     cells[ci].Body[1] = count + buckets[i];
     cells[ci].Level = levels;
@@ -92,6 +94,7 @@ void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t bu
     int64_t begin = cells[c0].Body[0];
     int64_t len = cells[c1].Body[1] - begin;
     cells[i].Child = c0;
+    cells[i].LID = -1;
     cells[i].Body[0] = begin;
     cells[i].Body[1] = begin + len;
     cells[i].Level = cells[c0].Level - 1;
@@ -239,7 +242,7 @@ void get_level(int64_t* begin, int64_t* end, const struct Cell* cells, int64_t l
   *end = low;
 }
 
-void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells, const struct CSC* cellFar, const struct CSC* cellNear, int64_t levels) {
+void buildComm(struct CellComm* comms, int64_t ncells, struct Cell* cells, const struct CSC* cellFar, const struct CSC* cellNear, int64_t levels) {
   int __mpi_rank = 0, __mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &__mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &__mpi_size);
@@ -265,14 +268,6 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
     comms[i].Proc[1] = p + lenp;
     comms[i].worldRank = mpi_rank;
     comms[i].worldSize = mpi_size;
-
-    for (int64_t j = 0; j < mpi_size; j++) {
-      int64_t jbegin = ibegin, jend = iend;
-      get_level(&jbegin, &jend, cells, i, j);
-      comms[i].ProcBoxes[j] = jbegin - ibegin;
-      comms[i].ProcBoxesEnd[j] = jend - ibegin;
-    }
-
     comms[i].lenTargets = 0;
     comms[i].Comm_box = (MPI_Comm*)malloc(sizeof(MPI_Comm) * mpi_size);
     for (int64_t j = 0; j < mpi_size; j++) {
@@ -289,6 +284,20 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
         comms[i].ProcTargets[len_t] = j;
         comms[i].lenTargets = len_t + 1;
       }
+
+      int64_t jbegin = ibegin, jend = iend;
+      get_level(&jbegin, &jend, cells, i, j);
+      comms[i].ProcBoxes[j] = jbegin - ibegin;
+      comms[i].ProcBoxesEnd[j] = jend - ibegin;
+    }
+
+    int64_t lid = -1;
+    for (int64_t j = 0; j < comms[i].lenTargets; j++) {
+      int64_t p = comms[i].ProcTargets[j];
+      int64_t jbegin = comms[i].ProcBoxes[p] + ibegin;
+      int64_t jend = comms[i].ProcBoxesEnd[p] + ibegin;
+      for (int64_t k = jbegin; k < jend; k++)
+        cells[k].LID = ++lid;
     }
 
     int root = -1;

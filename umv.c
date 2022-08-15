@@ -339,6 +339,7 @@ void dist_double_svfw(char fwbk, double* arr[], const struct CellComm* comm) {
   const int64_t* row = comm->ProcTargets;
   double* data = arr[0];
   int is_all = fwbk == 'A' || fwbk == 'a';
+  int64_t lbegin = 0;
 #ifdef _PROF
   double stime = MPI_Wtime();
 #endif
@@ -346,14 +347,13 @@ void dist_double_svfw(char fwbk, double* arr[], const struct CellComm* comm) {
     int64_t p = row[i];
     int is_fw = (fwbk == 'F' || fwbk == 'f') && p <= comm->worldRank;
     int is_bk = (fwbk == 'B' || fwbk == 'b') && comm->worldRank < p;
+    int64_t llen = comm->ProcBoxesEnd[p] - comm->ProcBoxes[p];
     if (is_all || is_fw || is_bk) {
-      int64_t lbegin = comm->ProcBoxes[p];
-      int64_t llen = comm->ProcBoxesEnd[p] - lbegin;
-      i_local(&lbegin, comm);
       int64_t offset = arr[lbegin] - data;
       int64_t len = arr[lbegin + llen] - arr[lbegin];
       MPI_Allreduce(MPI_IN_PLACE, &data[offset], len, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p]);
     }
+    lbegin = lbegin + llen;
   }
 
   int64_t xlen = 0;
@@ -372,6 +372,8 @@ void dist_double_svbk(char fwbk, double* arr[], const struct CellComm* comm) {
   const int64_t* row = comm->ProcTargets;
   double* data = arr[0];
   int is_all = fwbk == 'A' || fwbk == 'a';
+  int64_t lend;
+  content_length(&lend, comm);
 #ifdef _PROF
   double stime = MPI_Wtime();
 #endif
@@ -379,14 +381,14 @@ void dist_double_svbk(char fwbk, double* arr[], const struct CellComm* comm) {
     int64_t p = row[i];
     int is_fw = (fwbk == 'F' || fwbk == 'f') && p <= comm->worldRank;
     int is_bk = (fwbk == 'B' || fwbk == 'b') && comm->worldRank < p;
+    int64_t llen = comm->ProcBoxesEnd[p] - comm->ProcBoxes[p];
+    int64_t lbegin = lend - llen;
     if (is_all || is_fw || is_bk) {
-      int64_t lbegin = comm->ProcBoxes[p];
-      int64_t llen = comm->ProcBoxesEnd[p] - lbegin;
-      i_local(&lbegin, comm);
       int64_t offset = arr[lbegin] - data;
       int64_t len = arr[lbegin + llen] - arr[lbegin];
       MPI_Bcast(&data[offset], len, MPI_DOUBLE, comm->ProcRootI[p], comm->Comm_box[p]);
     }
+    lend = lbegin;
   }
 
   int64_t xlen = 0;
