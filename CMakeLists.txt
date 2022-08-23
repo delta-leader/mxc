@@ -18,8 +18,5 @@ find_package(OpenMP REQUIRED)
 
 add_executable(lorasp lorasp.c kernel.c linalg.c basis.c build_tree.c umv.c profile.c)
 target_include_directories(lorasp PRIVATE "./")
-target_link_libraries(lorasp MPI::MPI_C OpenMP::OpenMP_C)
-
+target_link_libraries(lorasp MPI::MPI_C OpenMP::OpenMP_C MKL::MKL)
 target_compile_options(lorasp PRIVATE -D_PROF -D_MKL)
-target_link_libraries(lorasp MKL::MKL)
-
