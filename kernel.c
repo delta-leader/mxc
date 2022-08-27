@@ -124,60 +124,77 @@ void mesh_unit_cube(double* bodies, int64_t nbodies) {
   double seg_sv = 1. / (m + 1);
   double seg_su = 1. / (n + 1);
 
-  for (int64_t i = 0; i < nbodies; i++) {
-    int64_t face = i / mlen;
-    int64_t ii = i - face * mlen;
-    int64_t x = ii / m;
-    int64_t y = ii - x * m;
+  for (int64_t i = 0; i < mlen; i++) {
+    int64_t x = i / m;
+    int64_t y = i - x * m;
     int64_t x2 = y & 1;
-
-    double u, v;
     double* x_bi = &bodies[i * 3];
+    double v = y * seg_fv;
+    double u = (0.5 * x2 + x) * seg_fu;
+    x_bi[0] = 1.;
+    x_bi[1] = 2. * v - 1.;
+    x_bi[2] = -2. * u + 1.;
+  }
 
-    switch (face) {
-      case 0: // POSITIVE X
-        v = y * seg_fv;
-        u = (0.5 * x2 + x) * seg_fu;
-        x_bi[0] = 1.;
-        x_bi[1] = 2. * v - 1.;
-        x_bi[2] = -2. * u + 1.;
-        break;
-      case 1: // NEGATIVE X
-        v = y * seg_fv;
-        u = (0.5 * x2 + x) * seg_fu;
-        x_bi[0] = -1.;
-        x_bi[1] = 2. * v - 1.;
-        x_bi[2] = 2. * u - 1.;
-        break;
-      case 2: // POSITIVE Y
-        v = (y + 1) * seg_sv;
-        u = (0.5 * x2 + x + 1) * seg_su;
-        x_bi[0] = 2. * u - 1.;
-        x_bi[1] = 1.;
-        x_bi[2] = -2. * v + 1.;
-        break;
-      case 3: // NEGATIVE Y
-        v = (y + 1) * seg_sv;
-        u = (0.5 * x2 + x + 1) * seg_su;
-        x_bi[0] = 2. * u - 1.;
-        x_bi[1] = -1.;
-        x_bi[2] = 2. * v - 1.;
-        break;
-      case 4: // POSITIVE Z
-        v = y * seg_fv;
-        u = (0.5 * x2 + x) * seg_fu;
-        x_bi[0] = 2. * u - 1.;
-        x_bi[1] = 2. * v - 1.;
-        x_bi[2] = 1.;
-        break;
-      case 5: // NEGATIVE Z
-        v = y * seg_fv;
-        u = (0.5 * x2 + x) * seg_fu;
-        x_bi[0] = -2. * u + 1.;
-        x_bi[1] = 2. * v - 1.;
-        x_bi[2] = -1.;
-        break;
-    }
+  for (int64_t i = 0; i < mlen; i++) {
+    int64_t x = i / m;
+    int64_t y = i - x * m;
+    int64_t x2 = y & 1;
+    double* x_bi = &bodies[(i + mlen) * 3];
+    double v = y * seg_fv;
+    double u = (0.5 * x2 + x) * seg_fu;
+    x_bi[0] = -1.;
+    x_bi[1] = 2. * v - 1.;
+    x_bi[2] = 2. * u - 1.;
+  }
+
+  for (int64_t i = 0; i < mlen; i++) {
+    int64_t x = i / m;
+    int64_t y = i - x * m;
+    int64_t x2 = y & 1;
+    double* x_bi = &bodies[(i + mlen * 2) * 3];
+    double v = (y + 1) * seg_sv;
+    double u = (0.5 * x2 + x + 1) * seg_su;
+    x_bi[0] = 2. * u - 1.;
+    x_bi[1] = 1.;
+    x_bi[2] = -2. * v + 1.;
+  }
+
+  for (int64_t i = 0; i < mlen; i++) {
+    int64_t x = i / m;
+    int64_t y = i - x * m;
+    int64_t x2 = y & 1;
+    double* x_bi = &bodies[(i + mlen * 3) * 3];
+    double v = (y + 1) * seg_sv;
+    double u = (0.5 * x2 + x + 1) * seg_su;
+    x_bi[0] = 2. * u - 1.;
+    x_bi[1] = -1.;
+    x_bi[2] = 2. * v - 1.;
+  }
+
+  for (int64_t i = 0; i < mlen; i++) {
+    int64_t x = i / m;
+    int64_t y = i - x * m;
+    int64_t x2 = y & 1;
+    double* x_bi = &bodies[(i + mlen * 4) * 3];
+    double v = y * seg_fv;
+    double u = (0.5 * x2 + x) * seg_fu;
+    x_bi[0] = 2. * u - 1.;
+    x_bi[1] = 2. * v - 1.;
+    x_bi[2] = 1.;
+  }
+
+  int64_t last = nbodies - mlen * 5;
+  for (int64_t i = 0; i < last; i++) {
+    int64_t x = i / m;
+    int64_t y = i - x * m;
+    int64_t x2 = y & 1;
+    double* x_bi = &bodies[(i + mlen * 5) * 3];
+    double v = y * seg_fv;
+    double u = (0.5 * x2 + x) * seg_fu;
+    x_bi[0] = -2. * u + 1.;
+    x_bi[1] = 2. * v - 1.;
+    x_bi[2] = -1.;
   }
 }
 

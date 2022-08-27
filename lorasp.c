@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
   for (int64_t i = 0; i <= levels; i++)
     evalS(ef, nodes[i].S, &basis[i], body, &rels_far[i], &cell_comm[i]);
 
-  if (Nbody > 10000) {
+  if (Nbody > 20000) {
     loadX(X1, body_local, Xbody);
     allocRightHandSides('M', rhs, basis, levels);
     matVecA(rhs, nodes, basis, rels_near, rels_far, X1, cell_comm, levels);

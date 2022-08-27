@@ -37,15 +37,7 @@ const struct CSC* rels, const int64_t* lt_child, const struct Base* basis_lo, in
     int64_t nlen = rels->ColIndex[i + 1] - nbegin;
     const int64_t* ngbs = &rels->RowIndex[nbegin];
 
-    int64_t close_avail = 0;
-    for (int64_t j = 0; j < nlen; j++) {
-      int64_t lj = ngbs[j] + jbegin;
-      const struct Cell* cj = &cells[lj];
-      int64_t len = cj->Body[1] - cj->Body[0];
-      if (lj != li)
-        close_avail = close_avail + len;
-    }
-
+    int64_t close_avail = cells[0].Body[1] + cells[li].Body[0] - cells[li].Body[1];
     int64_t lc = lt_child[i];
     int64_t ske_len = 0;
     if (basis_lo != NULL && lc >= 0)
@@ -89,30 +81,11 @@ const struct CSC* rels, const int64_t* lt_child, const struct Base* basis_lo, in
     int64_t ske_len = arr_ctrl[i + nodes];
     int64_t close_avail = arr_ctrl[i + nodes * 2];
 
-    int64_t li = i + ibegin - jbegin;
-    int64_t cpos = 0;
-    while (cpos < nlen && ngbs[cpos] != li)
-      cpos = cpos + 1;
-    
-    int64_t box_i = (int64_t)(cpos == 0);
-    int64_t s_lens = 0, ic = 0, offset_i = 0, len_i = 0;
-    if (box_i < nlen) {
-      ic = jbegin + ngbs[box_i];
-      offset_i = cells[ic].Body[0];
-      len_i = cells[ic].Body[1] - offset_i;
-    }
-
+    int64_t bbegin = cells[i + ibegin].Body[0];
+    int64_t blen = cells[i + ibegin].Body[1] - bbegin;
     for (int64_t j = 0; j < close_len; j++) {
       int64_t loc = (int64_t)((double)(close_avail * j) / close_len);
-      while (loc - s_lens >= len_i) {
-        s_lens = s_lens + len_i;
-        box_i = box_i + 1;
-        box_i = box_i + (int64_t)(box_i == cpos);
-        ic = jbegin + ngbs[box_i];
-        offset_i = cells[ic].Body[0];
-        len_i = cells[ic].Body[1] - offset_i;
-      }
-      close[j] = loc + offset_i - s_lens;
+      close[j] = loc + (loc >= bbegin ? blen : 0);
     }
 
     int64_t lc = lt_child[i];
