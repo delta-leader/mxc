@@ -170,14 +170,14 @@ void nextNode(struct Matrix* Mup, const struct Matrix* Mlow, const struct Base* 
       int64_t ci_gl = ci;
       i_global(&ci_gl, comm_low);
 
+      double off_y[2] = { 0., basis_low->DimsLr[ci] };
+      double off_x[2] = { 0., basis_low->DimsLr[cj] };
       for (int64_t x = 0; x < 2; x++)
         for (int64_t y = 0; y < 2; y++) {
           int64_t yx;
           lookupIJ(&yx, rels_low, ci_gl + y, cj_let + x);
-          int64_t off_y = basis_low->Offsets[ci + y] - basis_low->Offsets[ci];
-          int64_t off_x = basis_low->Offsets[cj + x] - basis_low->Offsets[cj];
           if (yx >= 0)
-            mat_cpy_batch(Mlow[yx].M, Mlow[yx].N, &Mlow[yx], &Mup[ij], 0, 0, off_y, off_x);
+            mat_cpy_batch(Mlow[yx].M, Mlow[yx].N, &Mlow[yx], &Mup[ij], 0, 0, off_y[y], off_x[x]);
         }
     }
   mat_cpy_flush();

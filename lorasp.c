@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
     buildTreeBuckets(cell, body, buckets, levels);
     free(buckets);
   }
-  body_neutral_charge(Xbody, Nbody, 1., 0);
+  body_neutral_charge(Xbody, Nbody, 1., 999);
 
   int64_t body_local[2];
   local_bodies(body_local, ncells, cell, levels);
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
 
   double construct_time, construct_comm_time;
   startTimer(&construct_time, &construct_comm_time);
-  buildBasis(ef, basis, ncells, cell, rels_near, levels, cell_comm, body, epi, rank_max, sp_pts);
+  buildBasis(ef, basis, ncells, cell, levels, cell_comm, body, epi, rank_max, sp_pts);
   stopTimer(&construct_time, &construct_comm_time);
   
   allocNodes(nodes, basis, rels_near, rels_far, cell_comm, levels);

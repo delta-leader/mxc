@@ -101,7 +101,7 @@ void relations(struct CSC rels[], int64_t ncells, const struct Cell* cells, cons
 
 void evalD(void(*ef)(double*), struct Matrix* D, int64_t ncells, const struct Cell* cells, const double* bodies, const struct CSC* csc, int64_t level);
 
-void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, const struct Cell* cells, const struct CSC* rel_near, int64_t levels, const struct CellComm* comm, const double* bodies, double epi, int64_t mrank, int64_t sp_pts);
+void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, const struct Cell* cells, int64_t levels, const struct CellComm* comm, const double* bodies, double epi, int64_t mrank, int64_t sp_pts);
 
 void basis_free(struct Base* basis);
 
