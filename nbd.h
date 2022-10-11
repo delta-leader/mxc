@@ -29,17 +29,14 @@ void svd_U(struct Matrix* A, double* S);
 void id_row(struct Matrix* A, int32_t arows[], double* work);
 void upper_tri_reflec_mult(char side, const struct Matrix* R, struct Matrix* A);
 void basis_reflec(int64_t lenRR, const struct Matrix* RR, struct Matrix* Qo);
-void qr_full(struct Matrix* Qo, struct Matrix* Qc, struct Matrix* R);
+void qr_full(struct Matrix* Q, struct Matrix* R);
 
 void mat_solve(char type, struct Matrix* X, const struct Matrix* A);
-
-void nrm2_A(struct Matrix* A, double* nrm);
-void scal_A(struct Matrix* A, double alpha);
 
 struct Cell { int64_t Child, Body[2], Level, LID, Procs[2]; double R[3], C[3]; };
 struct CSC { int64_t M, N, *ColIndex, *RowIndex; };
 struct CellComm { int64_t Proc[2], worldRank, worldSize, lenTargets, *ProcTargets, *ProcRootI, *ProcBoxes, *ProcBoxesEnd; MPI_Comm Comm_share, Comm_merge, *Comm_box; };
-struct Base { int64_t Ulen, *Lchild, *Dims, *DimsLr, *Offsets, *Multipoles; struct Matrix *Uo, *Uc, *R; };
+struct Base { int64_t Ulen, *Lchild, *Dims, *DimsLr, *Offsets, *Multipoles; struct Matrix *U, *R; };
 struct Node { int64_t lenA, lenS; struct Matrix *A, *S, *A_cc, *A_oc, *A_oo; };
 struct RightHandSides { int64_t Xlen; struct Matrix *X, *XcM, *XoL, *B; };
 

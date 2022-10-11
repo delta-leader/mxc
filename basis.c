@@ -97,10 +97,9 @@ void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, const s
     basis[l].DimsLr = &arr_i[xlen * 2];
     basis[l].Offsets = &arr_i[xlen * 3];
 
-    struct Matrix* arr_m = (struct Matrix*)calloc(xlen * 3, sizeof(struct Matrix));
-    basis[l].Uo = arr_m;
-    basis[l].Uc = &arr_m[xlen];
-    basis[l].R = &arr_m[xlen * 2];
+    struct Matrix* arr_m = (struct Matrix*)calloc(xlen * 2, sizeof(struct Matrix));
+    basis[l].U = arr_m;
+    basis[l].R = &arr_m[xlen];
 
     int64_t jbegin = 0, jend = ncells;
     get_level(&jbegin, &jend, cells, l, -1);
@@ -210,15 +209,15 @@ void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, const s
       basis[l].DimsLr[i + ibegin] = rank;
 
       int32_t* pa = (int32_t*)malloc(sizeof(int32_t) * ske_len);
-      basis[l].Uo[i + ibegin] = (struct Matrix){ mat, ske_len, rank };
-      basis[l].Uc[i + ibegin] = (struct Matrix){ &mat[ske_len * rank], ske_len, ske_len - rank };
+      basis[l].U[i + ibegin] = (struct Matrix){ mat, ske_len, ske_len };
       basis[l].R[i + ibegin] = (struct Matrix){ &mat[ske_len * ske_len], rank, rank };
 
-      id_row(&basis[l].Uo[i + ibegin], pa, &mat[ske_len * rank]);
+      struct Matrix Uo = (struct Matrix){ mat, ske_len, rank };
+      id_row(&Uo, pa, &mat[ske_len * rank]);
       int64_t lc = basis[l].Lchild[i + ibegin];
-      basis_reflec(lc >= 0 ? 2 : 0, lc >= 0 ? &basis[l + 1].R[lc] : NULL, &basis[l].Uo[i + ibegin]);
+      basis_reflec(lc >= 0 ? 2 : 0, lc >= 0 ? &basis[l + 1].R[lc] : NULL, &Uo);
       if (ske_len > 0 && rank > 0)
-        qr_full(&basis[l].Uo[i + ibegin], &basis[l].Uc[i + ibegin], &basis[l].R[i + ibegin]);
+        qr_full(&basis[l].U[i + ibegin], &basis[l].R[i + ibegin]);
 
       for (int64_t j = 0; j < rank; j++) {
         int64_t piv = (int64_t)pa[j] - 1;
@@ -240,8 +239,7 @@ void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, const s
       int64_t ske_len = basis[l].Dims[i];
       int64_t rank = basis[l].DimsLr[i];
       double* mat = matrix_ptrs[i];
-      basis[l].Uo[i] = (struct Matrix){ mat, ske_len, rank };
-      basis[l].Uc[i] = (struct Matrix){ &mat[ske_len * rank], ske_len, ske_len - rank };
+      basis[l].U[i] = (struct Matrix){ mat, ske_len, ske_len };
       basis[l].R[i] = (struct Matrix){ &mat[ske_len * ske_len], rank, rank };
     }
     free(matrix_ptrs);
@@ -249,13 +247,13 @@ void buildBasis(void(*ef)(double*), struct Base basis[], int64_t ncells, const s
 }
 
 void basis_free(struct Base* basis) {
-  double* data = basis->Uo[0].A;
+  double* data = basis->U[0].A;
   if (data)
     free(data);
   if (basis->Multipoles)
     free(basis->Multipoles);
   free(basis->Lchild);
-  free(basis->Uo);
+  free(basis->U);
 }
 
 void evalS(void(*ef)(double*), struct Matrix* S, const struct Base* basis, const double* bodies, const struct CSC* rels, const struct CellComm* comm) {

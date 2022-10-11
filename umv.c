@@ -91,7 +91,7 @@ void node_free(struct Node* node) {
   free(node->A);
 }
 
-void factorNode(struct Matrix* A_cc, struct Matrix* A_oc, struct Matrix* A_oo, struct Matrix* A, const struct Matrix* Uc, const struct Matrix* Uo, const struct CSC* rels, const struct CellComm* comm) {
+void factorNode(struct Matrix* A_cc, struct Matrix* A_oc, struct Matrix* A_oo, struct Matrix* A, const struct Matrix* U, const struct CSC* rels, const struct CellComm* comm) {
   int64_t nnz = rels->ColIndex[rels->N];
   int64_t alen = (int64_t)(A[nnz - 1].A - A[0].A) + A[nnz - 1].M * A[nnz - 1].N;
   double* data = (double*)malloc(sizeof(double) * alen);
@@ -113,8 +113,11 @@ void factorNode(struct Matrix* A_cc, struct Matrix* A_oc, struct Matrix* A_oo, s
       AV_o[yx] = (struct Matrix){ &data[dim_y * dimc_x], dim_y, diml_x };
       data = data + dim_y * dim_x;
 
-      mmult_batch('N', 'N', &A[yx], &Uc[x + ibegin], &AV_c[yx], 1., 0.);
-      mmult_batch('N', 'N', &A[yx], &Uo[x + ibegin], &AV_o[yx], 1., 0.);
+      const struct Matrix Uo = (struct Matrix) { U[x + ibegin].A, dim_x, diml_x };
+      const struct Matrix Uc = (struct Matrix) { &Uo.A[dim_x * diml_x], dim_x, dimc_x };
+
+      mmult_batch('N', 'N', &A[yx], &Uc, &AV_c[yx], 1., 0.);
+      mmult_batch('N', 'N', &A[yx], &Uo, &AV_o[yx], 1., 0.);
     }
   mmult_flush();
 
@@ -122,9 +125,15 @@ void factorNode(struct Matrix* A_cc, struct Matrix* A_oc, struct Matrix* A_oo, s
     for (int64_t yx = rels->ColIndex[x]; yx < rels->ColIndex[x + 1]; yx++) {
       int64_t y = rels->RowIndex[yx];
       i_local(&y, comm);
-      mmult_batch('T', 'N', &Uc[y], &AV_c[yx], &A_cc[yx], 1., 0.);
-      mmult_batch('T', 'N', &Uo[y], &AV_c[yx], &A_oc[yx], 1., 0.);
-      mmult_batch('T', 'N', &Uo[y], &AV_o[yx], &A_oo[yx], 1., 0.);
+
+      int64_t dim_y = A[yx].M;
+      int64_t dimc_y = A_cc[yx].M;
+      int64_t diml_y = dim_y - dimc_y;
+      const struct Matrix Uo = (struct Matrix) { U[y].A, dim_y, diml_y };
+      const struct Matrix Uc = (struct Matrix) { &Uo.A[dim_y * diml_y], dim_y, dimc_y };
+      mmult_batch('T', 'N', &Uc, &AV_c[yx], &A_cc[yx], 1., 0.);
+      mmult_batch('T', 'N', &Uo, &AV_c[yx], &A_oc[yx], 1., 0.);
+      mmult_batch('T', 'N', &Uo, &AV_o[yx], &A_oo[yx], 1., 0.);
     }
   mmult_flush();
 
@@ -202,7 +211,7 @@ void factorA(struct Node A[], const struct Base basis[], const struct CSC rels_n
     nextNode(A[i - 1].A, A[i].S, &basis[i - 1], &rels_near[i - 1], &rels_far[i], &comm[i - 1]);
 
   for (int64_t i = levels; i > 0; i--) {
-    factorNode(A[i].A_cc, A[i].A_oc, A[i].A_oo, A[i].A, basis[i].Uc, basis[i].Uo, &rels_near[i], &comm[i]);
+    factorNode(A[i].A_cc, A[i].A_oc, A[i].A_oo, A[i].A, basis[i].U, &rels_near[i], &comm[i]);
     int64_t inxt = i - 1;
     nextNode(A[inxt].A,A[i].A_oo, &basis[inxt], &rels_near[inxt], &rels_near[i], &comm[inxt]);
 
@@ -262,15 +271,21 @@ void rightHandSides_free(struct RightHandSides* rhs) {
   free(rhs->X);
 }
 
-void svAccFw(struct Matrix* Xc, struct Matrix* Xo, const struct Matrix* X, const struct Matrix* Uc, const struct Matrix* Uo, const struct Matrix* A_cc, const struct Matrix* A_oc, const struct CSC* rels, const struct CellComm* comm) {
+void svAccFw(struct Matrix* Xc, struct Matrix* Xo, const struct Matrix* X, const struct Matrix* U, const struct Matrix* A_cc, const struct Matrix* A_oc, const struct CSC* rels, const struct CellComm* comm) {
   int64_t ibegin = 0, iend = 0;
   self_local_range(&ibegin, &iend, comm);
   int64_t lbegin = ibegin;
   i_global(&lbegin, comm);
 
   for (int64_t x = 0; x < rels->N; x++) {
-    mmult('T', 'N', &Uc[x + ibegin], &X[x + ibegin], &Xc[x + ibegin], 1., 1.);
-    mmult('T', 'N', &Uo[x + ibegin], &X[x + ibegin], &Xo[x + ibegin], 1., 1.);
+    int64_t dim = X[x + ibegin].M;
+    int64_t dimc = Xc[x + ibegin].M;
+    int64_t diml = dim - dimc;
+    const struct Matrix Uo = (struct Matrix) { U[x + ibegin].A, dim, diml };
+    const struct Matrix Uc = (struct Matrix) { &Uo.A[dim * diml], dim, dimc };
+
+    mmult('T', 'N', &Uc, &X[x + ibegin], &Xc[x + ibegin], 1., 1.);
+    mmult('T', 'N', &Uo, &X[x + ibegin], &Xo[x + ibegin], 1., 1.);
     int64_t xx;
     lookupIJ(&xx, rels, x + lbegin, x);
     mat_solve('F', &Xc[x + ibegin], &A_cc[xx]);
@@ -286,7 +301,7 @@ void svAccFw(struct Matrix* Xc, struct Matrix* Xo, const struct Matrix* X, const
   }
 }
 
-void svAccBk(struct Matrix* Xc, const struct Matrix* Xo, struct Matrix* X, const struct Matrix* Uc, const struct Matrix* Uo, const struct Matrix* A_cc, const struct Matrix* A_oc, const struct CSC* rels, const struct CellComm* comm) {
+void svAccBk(struct Matrix* Xc, const struct Matrix* Xo, struct Matrix* X, const struct Matrix* U, const struct Matrix* A_cc, const struct Matrix* A_oc, const struct CSC* rels, const struct CellComm* comm) {
   int64_t ibegin = 0, iend = 0;
   self_local_range(&ibegin, &iend, comm);
   int64_t lbegin = ibegin;
@@ -305,8 +320,15 @@ void svAccBk(struct Matrix* Xc, const struct Matrix* Xo, struct Matrix* X, const
     int64_t xx;
     lookupIJ(&xx, rels, x + lbegin, x);
     mat_solve('B', &Xc[x + ibegin], &A_cc[xx]);
-    mmult('N', 'N', &Uc[x + ibegin], &Xc[x + ibegin], &X[x + ibegin], 1., 0.);
-    mmult('N', 'N', &Uo[x + ibegin], &Xo[x + ibegin], &X[x + ibegin], 1., 1.);
+
+    int64_t dim = X[x + ibegin].M;
+    int64_t dimc = Xc[x + ibegin].M;
+    int64_t diml = dim - dimc;
+    const struct Matrix Uo = (struct Matrix) { U[x + ibegin].A, dim, diml };
+    const struct Matrix Uc = (struct Matrix) { &Uo.A[dim * diml], dim, dimc };
+
+    mmult('N', 'N', &Uc, &Xc[x + ibegin], &X[x + ibegin], 1., 0.);
+    mmult('N', 'N', &Uo, &Xo[x + ibegin], &X[x + ibegin], 1., 1.);
   }
 }
 
@@ -416,7 +438,7 @@ void solveA(struct RightHandSides rhs[], const struct Node A[], const struct Bas
     arr_comm[xlen] = arr_comm[xlen - 1] + rhs[i].XcM[xlen - 1].M;
     dist_double_svfw('F', arr_comm, &comm[i]);
 
-    svAccFw(rhs[i].XcM, rhs[i].XoL, rhs[i].X, basis[i].Uc, basis[i].Uo, A[i].A_cc, A[i].A_oc, &rels[i], &comm[i]);
+    svAccFw(rhs[i].XcM, rhs[i].XoL, rhs[i].X, basis[i].U, A[i].A_cc, A[i].A_oc, &rels[i], &comm[i]);
     dist_double_svfw('B', arr_comm, &comm[i]);
 
     for (int64_t j = 0; j < xlen; j++)
@@ -443,7 +465,7 @@ void solveA(struct RightHandSides rhs[], const struct Node A[], const struct Bas
     arr_comm[xlen] = arr_comm[xlen - 1] + rhs[i].XcM[xlen - 1].M;
     dist_double_svbk('B', arr_comm, &comm[i]);
     
-    svAccBk(rhs[i].XcM, rhs[i].XoL, rhs[i].X, basis[i].Uc, basis[i].Uo, A[i].A_cc, A[i].A_oc, &rels[i], &comm[i]);
+    svAccBk(rhs[i].XcM, rhs[i].XoL, rhs[i].X, basis[i].U, A[i].A_cc, A[i].A_oc, &rels[i], &comm[i]);
     dist_double_svbk('F', arr_comm, &comm[i]);
     free(arr_comm);
   }
@@ -478,8 +500,10 @@ void matVecA(struct RightHandSides rhs[], const struct Node A[], const struct Ba
   for (int64_t i = levels; i > 0; i--) {
     self_local_range(&ibegin, &iend, &comm[i]);
     int64_t iboxes = iend - ibegin;
-    for (int64_t j = 0; j < iboxes; j++)
-      mmult('T', 'N', &basis[i].Uo[j + ibegin], &rhs[i].X[j + ibegin], &rhs[i].XcM[j + ibegin], 1., 0.);
+    for (int64_t j = 0; j < iboxes; j++) {
+      const struct Matrix Uo = (struct Matrix) { basis[i].U[j + ibegin].A, rhs[i].X[j + ibegin].M, rhs[i].XcM[j + ibegin].M };
+      mmult('T', 'N', &Uo, &rhs[i].X[j + ibegin], &rhs[i].XcM[j + ibegin], 1., 0.);
+    }
     xlen = rhs[i].Xlen;
     arr_comm = (double**)malloc(sizeof(double*) * (xlen + 1));
     for (int64_t j = 0; j < xlen; j++)
@@ -495,8 +519,10 @@ void matVecA(struct RightHandSides rhs[], const struct Node A[], const struct Ba
     horizontalPass(rhs[i].XoL, rhs[i].XcM, A[i].S, &rels_far[i], &comm[i]);
     self_local_range(&ibegin, &iend, &comm[i]);
     int64_t iboxes = iend - ibegin;
-    for (int64_t j = 0; j < iboxes; j++)
-      mmult('N', 'N', &basis[i].Uo[j + ibegin], &rhs[i].XoL[j + ibegin], &rhs[i].B[j + ibegin], 1., 0.);
+    for (int64_t j = 0; j < iboxes; j++) {
+      const struct Matrix Uo = (struct Matrix) { basis[i].U[j + ibegin].A, rhs[i].B[j + ibegin].M, rhs[i].XoL[j + ibegin].M };
+      mmult('N', 'N', &Uo, &rhs[i].XoL[j + ibegin], &rhs[i].B[j + ibegin], 1., 0.);
+    }
   }
   horizontalPass(rhs[levels].B, rhs[levels].X, A[levels].A, &rels_near[levels], &comm[levels]);
   memcpy(X, rhs[levels].B[ibegin].A, lenX * sizeof(double));

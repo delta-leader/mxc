@@ -284,17 +284,14 @@ void basis_reflec(int64_t lenRR, const struct Matrix* RR, struct Matrix* Qo) {
   }
 }
 
-void qr_full(struct Matrix* Qo, struct Matrix* Qc, struct Matrix* R) {
-  int64_t ldq = 1 < Qo->M ? Qo->M : 1;
+void qr_full(struct Matrix* Q, struct Matrix* R) {
+  int64_t ldq = 1 < Q->M ? Q->M : 1;
+  int64_t k = R->N;
   int64_t ldr = 1 < R->M ? R->M : 1;
-  LAPACKE_dgeqrf(LAPACK_COL_MAJOR, Qo->M, Qo->N, Qo->A, ldq, R->A);
-  LAPACKE_dlaset(LAPACK_COL_MAJOR, 'A', Qc->M, Qc->N, 0., 1., Qc->A, ldq);
-  if (Qc->M != Qc->N)
-    cblas_dswap(Qc->N, Qc->A, ldq + 1, &Qc->A[Qc->M - Qc->N], ldq + 1);
-  LAPACKE_dormqr(LAPACK_COL_MAJOR, 'L', 'N', Qc->M, Qc->N, Qo->N, Qo->A, ldq, R->A, Qc->A, ldq);
-  double a0 = Qo->N > 0 ? Qo->A[0] : 0.;
-  LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'A', R->M, R->N - 1, &Qo->A[ldq], ldq, &R->A[ldr], ldr);
-  LAPACKE_dorgqr(LAPACK_COL_MAJOR, Qo->M, Qo->N, Qo->N, Qo->A, ldq, R->A);
+  LAPACKE_dgeqrf(LAPACK_COL_MAJOR, Q->M, k, Q->A, ldq, R->A);
+  double a0 = Q->N > 0 ? Q->A[0] : 0.;
+  LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'A', R->M, R->N - 1, &Q->A[ldq], ldq, &R->A[ldr], ldr);
+  LAPACKE_dorgqr(LAPACK_COL_MAJOR, Q->M, Q->N, k, Q->A, ldq, R->A);
   R->A[0] = a0;
 }
 
@@ -307,13 +304,3 @@ void mat_solve(char type, struct Matrix* X, const struct Matrix* A) {
     cblas_dtrsm(CblasColMajor, CblasLeft, CblasLower, CblasTrans, CblasNonUnit, X->M, X->N, 1., A->A, lda, X->A, ldx);
 }
 
-void nrm2_A(struct Matrix* A, double* nrm) {
-  int64_t len_A = A->M * A->N;
-  double nrm_A = cblas_dnrm2(len_A, A->A, 1);
-  *nrm = nrm_A;
-}
-
-void scal_A(struct Matrix* A, double alpha) {
-  int64_t len_A = A->M * A->N;
-  cblas_dscal(len_A, alpha, A->A, 1);
-}
