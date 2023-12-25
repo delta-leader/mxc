@@ -1,6 +1,6 @@
 
-#include "comm.hpp"
-#include "nbd.hpp"
+#include <comm.hpp>
+#include <nbd.hpp>
 
 #include <algorithm>
 #include <numeric>
@@ -109,7 +109,7 @@ void get_level_procs(std::vector<std::pair<int64_t, int64_t>>& Procs, std::vecto
   }
 }
 
-void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells, const struct CSC* cellFar, const struct CSC* cellNear, int64_t levels) {
+void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells, const CSR* cellFar, const CSR* cellNear, int64_t levels) {
   int __mpi_rank = 0, __mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &__mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &__mpi_size);
@@ -132,11 +132,11 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
     std::vector<int64_t> ProcTargets;
     for (int64_t j = 0; j < mpi_size; j++) {
       int is_ngb = 0;
-      for (int64_t k = cellNear->ColIndex[mbegin]; k < cellNear->ColIndex[mend]; k++)
-        if (std::get<0>(Procs[cellNear->RowIndex[k]]) == j)
+      for (int64_t k = cellNear->RowIndex[mbegin]; k < cellNear->RowIndex[mend]; k++)
+        if (std::get<0>(Procs[cellNear->ColIndex[k]]) == j)
           is_ngb = 1;
-      for (int64_t k = cellFar->ColIndex[mbegin]; k < cellFar->ColIndex[mend]; k++)
-        if (std::get<0>(Procs[cellFar->RowIndex[k]]) == j)
+      for (int64_t k = cellFar->RowIndex[mbegin]; k < cellFar->RowIndex[mend]; k++)
+        if (std::get<0>(Procs[cellFar->ColIndex[k]]) == j)
           is_ngb = 1;
       
       int color = (is_ngb && p == mpi_rank) ? 1 : MPI_UNDEFINED;
@@ -266,49 +266,44 @@ void cellComm_free(struct CellComm* comms, int64_t levels) {
     ncclCommDestroy(nccl_comms[i]);
 }
 
-void relations(struct CSC rels[], const struct CSC* cellRel, int64_t levels, const struct CellComm* comm) {
+void relations(CSR rels[], const CSR* cellRel, int64_t levels, const struct CellComm* comm) {
  
   for (int64_t i = 0; i <= levels; i++) {
     int64_t nodes, neighbors, ibegin;
     content_length(&nodes, &neighbors, &ibegin, &comm[i]);
-    i_global(&ibegin, &comm[i]);
-    struct CSC* csc = &rels[i];
+    ibegin = comm[i].iGlobal(ibegin);
+    CSR* csc = &rels[i];
 
     csc->M = neighbors;
     csc->N = nodes;
     int64_t ent_max = nodes * csc->M;
-    int64_t* cols = (int64_t*)malloc(sizeof(int64_t) * (nodes + 1 + ent_max));
-    int64_t* rows = &cols[nodes + 1];
+    csc->RowIndex.resize(nodes + 1);
+    csc->ColIndex.resize(ent_max);
 
     int64_t count = 0;
     for (int64_t j = 0; j < nodes; j++) {
       int64_t lc = ibegin + j;
-      cols[j] = count;
-      int64_t cbegin = cellRel->ColIndex[lc];
-      int64_t ent = cellRel->ColIndex[lc + 1] - cbegin;
+      csc->RowIndex[j] = count;
+      int64_t cbegin = cellRel->RowIndex[lc];
+      int64_t ent = cellRel->RowIndex[lc + 1] - cbegin;
       for (int64_t k = 0; k < ent; k++) {
-        rows[count + k] = cellRel->RowIndex[cbegin + k];
-        i_local(&rows[count + k], &comm[i]);
+        csc->ColIndex[count + k] = comm[i].iLocal(cellRel->ColIndex[cbegin + k]);
       }
       count = count + ent;
     }
 
     if (count < ent_max)
-      cols = (int64_t*)realloc(cols, sizeof(int64_t) * (nodes + 1 + count));
-    cols[nodes] = count;
-    csc->ColIndex = cols;
-    csc->RowIndex = &cols[nodes + 1];
+      csc->ColIndex.resize(count);
+    csc->RowIndex[nodes] = count;
   }
 }
 
-void i_local(int64_t* ilocal, const struct CellComm* comm) {
-  int64_t iglobal = *ilocal;
-  *ilocal = pnx_to_local(global_to_pnx(iglobal, comm->ProcBoxes), comm->ProcBoxes);
+int64_t CellComm::iLocal(int64_t iglobal) const {
+  return pnx_to_local(global_to_pnx(iglobal, ProcBoxes), ProcBoxes);
 }
 
-void i_global(int64_t* iglobal, const struct CellComm* comm) {
-  int64_t ilocal = *iglobal;
-  *iglobal = pnx_to_global(local_to_pnx(ilocal, comm->ProcBoxes), comm->ProcBoxes);
+int64_t CellComm::iGlobal(int64_t ilocal) const {
+  return pnx_to_global(local_to_pnx(ilocal, ProcBoxes), ProcBoxes);
 }
 
 void content_length(int64_t* local, int64_t* neighbors, int64_t* local_off, const struct CellComm* comm) {

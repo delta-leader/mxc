@@ -1,6 +1,6 @@
 
-#include "nbd.hpp"
-#include "kernel.hpp"
+#include <nbd.hpp>
+#include <kernel.hpp>
 
 #include "cuda_runtime_api.h"
 #include "cublas_v2.h"
