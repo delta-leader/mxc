@@ -9,8 +9,6 @@
 #include <algorithm>
 
 void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[], const CSR rels_far[], const struct CellComm comm[], int64_t levels) {
-  int64_t work_size = 0;
-
   for (int64_t i = levels; i >= 0; i--) {
     int64_t n_i = 0, ulen = 0, nloc = 0;
     content_length(&n_i, &ulen, &nloc, &comm[i]);
@@ -29,12 +27,6 @@ void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[
     int64_t stride = dimn * dimn;
     A[i].A_ptr = (double*)calloc(stride * nnz, sizeof(double));
     A[i].X_ptr = (double*)calloc(dimn * ulen, sizeof(double));
-
-    int64_t k1, k2;
-    countMaxIJ(&k1, &k2, &rels_near[i]);
-    int64_t acc_required = std::max(k1 * ulen, k2 * n_i);
-    int64_t work_required = std::max(n_i * stride, (acc_required + n_i) * dimn);
-    work_size = std::max(work_size, work_required);
 
     for (int64_t x = 0; x < n_i; x++) {
       for (int64_t yx = rels_near[i].RowIndex[x]; yx < rels_near[i].RowIndex[x + 1]; yx++)

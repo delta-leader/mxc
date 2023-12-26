@@ -78,50 +78,42 @@ void buildTree(int64_t* ncells, struct Cell* cells, double* bodies, int64_t nbod
   struct Cell* root = &cells[0];
   root->Body[0] = 0;
   root->Body[1] = nbodies;
-  root->Level = 0;
   get_bounds(bodies, nbodies, root->R, root->C);
 
+  int64_t nleaf = (int64_t)1 << levels;
   int64_t len = 1;
-  int64_t i = 0;
-  while (i < len) {
+  for (int64_t i = 0; i < nleaf - 1; i++) {
     struct Cell* ci = &cells[i];
     ci->Child[0] = -1;
     ci->Child[1] = -1;
 
-    if (ci->Level < levels) {
-      int64_t sdim = 0;
-      double maxR = ci->R[0];
-      if (ci->R[1] > maxR)
-      { sdim = 1; maxR = ci->R[1]; }
-      if (ci->R[2] > maxR)
-      { sdim = 2; maxR = ci->R[2]; }
+    int64_t sdim = 0;
+    double maxR = ci->R[0];
+    if (ci->R[1] > maxR)
+    { sdim = 1; maxR = ci->R[1]; }
+    if (ci->R[2] > maxR)
+    { sdim = 2; maxR = ci->R[2]; }
 
-      int64_t i_begin = ci->Body[0];
-      int64_t i_end = ci->Body[1];
-      int64_t nbody_i = i_end - i_begin;
-      sort_bodies(&bodies[i_begin * 3], nbody_i, sdim);
-      int64_t loc = i_begin + nbody_i / 2;
+    int64_t i_begin = ci->Body[0];
+    int64_t i_end = ci->Body[1];
+    int64_t nbody_i = i_end - i_begin;
+    sort_bodies(&bodies[i_begin * 3], nbody_i, sdim);
+    int64_t loc = i_begin + nbody_i / 2;
 
-      struct Cell* c0 = &cells[len];
-      struct Cell* c1 = &cells[len + 1];
-      ci->Child[0] = len;
-      ci->Child[1] = len + 2;
-      len = len + 2;
+    struct Cell* c0 = &cells[len];
+    struct Cell* c1 = &cells[len + 1];
+    ci->Child[0] = len;
+    ci->Child[1] = len + 2;
+    len = len + 2;
 
-      c0->Body[0] = i_begin;
-      c0->Body[1] = loc;
-      c1->Body[0] = loc;
-      c1->Body[1] = i_end;
-      
-      c0->Level = ci->Level + 1;
-      c1->Level = ci->Level + 1;
+    c0->Body[0] = i_begin;
+    c0->Body[1] = loc;
+    c1->Body[0] = loc;
+    c1->Body[1] = i_end;
 
-      get_bounds(&bodies[i_begin * 3], loc - i_begin, c0->R, c0->C);
-      get_bounds(&bodies[loc * 3], i_end - loc, c1->R, c1->C);
-    }
-    i++;
+    get_bounds(&bodies[i_begin * 3], loc - i_begin, c0->R, c0->C);
+    get_bounds(&bodies[loc * 3], i_end - loc, c1->R, c1->C);
   }
-  *ncells = len;
 }
 
 void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t buckets[], int64_t levels) {
@@ -133,7 +125,6 @@ void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t bu
     cells[ci].Child[1] = -1;
     cells[ci].Body[0] = count;
     cells[ci].Body[1] = count + buckets[i];
-    cells[ci].Level = levels;
     get_bounds(&bodies[count * 3], buckets[i], cells[ci].R, cells[ci].C);
     count = count + buckets[i];
   }
@@ -147,33 +138,27 @@ void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t bu
     cells[i].Child[1] = c0 + 2;
     cells[i].Body[0] = begin;
     cells[i].Body[1] = begin + len;
-    cells[i].Level = cells[c0].Level - 1;
     get_bounds(&bodies[begin * 3], len, cells[i].R, cells[i].C);
   }
 }
+
 void getList(char NoF, int64_t* len, int64_t rels[], int64_t ncells, const struct Cell cells[], int64_t i, int64_t j, double theta) {
   const struct Cell* Ci = &cells[i];
   const struct Cell* Cj = &cells[j];
-  int64_t ilevel = Ci->Level;
-  int64_t jlevel = Cj->Level; 
-  if (ilevel == jlevel) {
-    int admis = admis_check(theta, Ci->C, Cj->C, Ci->R, Cj->R);
-    int write_far = NoF == 'F' || NoF == 'f';
-    int write_near = NoF == 'N' || NoF == 'n';
-    if (admis ? write_far : write_near) {
-      int64_t n = *len;
-      rels[n] = i + j * ncells;
-      *len = n + 1;
-    }
-    if (admis)
-      return;
+
+  int admis = admis_check(theta, Ci->C, Cj->C, Ci->R, Cj->R);
+  int write_far = NoF == 'F' || NoF == 'f';
+  int write_near = NoF == 'N' || NoF == 'n';
+  if (admis ? write_far : write_near) {
+    int64_t n = *len;
+    rels[n] = i + j * ncells;
+    *len = n + 1;
   }
-  if (ilevel <= jlevel && Ci->Child[0] >= 0)
+  
+  if (!admis && Ci->Child[0] >= 0 && Cj->Child[0] >= 0)
     for (int64_t k = Ci->Child[0]; k < Ci->Child[1]; k++)
-      getList(NoF, len, rels, ncells, cells, k, j, theta);
-  else if (jlevel <= ilevel && Cj->Child[0] >= 0)
-    for (int64_t k = Cj->Child[0]; k < Cj->Child[1]; k++)
-      getList(NoF, len, rels, ncells, cells, i, k, theta);
+      for (int64_t l = Cj->Child[0]; l < Cj->Child[1]; l++)
+        getList(NoF, len, rels, ncells, cells, k, l, theta);
 }
 
 void traverse(char NoF, CSR* rels, int64_t ncells, const struct Cell* cells, double theta) {
@@ -200,20 +185,6 @@ void traverse(char NoF, CSR* rels, int64_t ncells, const struct Cell* cells, dou
     rels->RowIndex[i] = len;
 }
 
-void countMaxIJ(int64_t* max_i, int64_t* max_j, const CSR* rels) {
-  std::vector<int64_t> countx(rels->N, 0), county(rels->M, 0);
-  for (int64_t x = 0; x < rels->N; x++)
-    for (int64_t yx = rels->RowIndex[x]; yx < rels->RowIndex[x + 1]; yx++) {
-      int64_t y = rels->ColIndex[yx];
-      countx[x] = countx[x] + 1;
-      county[y] = county[y] + 1;
-    }
-  if (max_i)
-    *max_i = *std::max_element(county.begin(), county.end());
-  if (max_j)
-    *max_j = *std::max_element(countx.begin(), countx.end());
-}
-
 void loadX(double* X, int64_t seg, const double Xbodies[], int64_t Xbegin, int64_t ncells, const struct Cell cells[]) {
   for (int64_t i = 0; i < ncells; i++) {
     int64_t b0 = cells[i].Body[0] - Xbegin;
@@ -228,7 +199,6 @@ void evalD(const EvalDouble& eval, struct Matrix* D, const CSR* rels, const stru
   content_length(&nodes, NULL, &ibegin, comm);
   ibegin = comm->iGlobal(ibegin);
 
-#pragma omp parallel for
   for (int64_t i = 0; i < nodes; i++) {
     int64_t lc = ibegin + i;
     const struct Cell* ci = &cells[lc];
@@ -254,7 +224,6 @@ void evalS(const EvalDouble& eval, struct Matrix* S, const struct Base* basis, c
   content_length(NULL, NULL, &ibegin, comm);
   int64_t seg = basis->dimS * 3;
 
-#pragma omp parallel for
   for (int64_t x = 0; x < rels->N; x++) {
     int64_t n = basis->DimsLr[x + ibegin];
 
