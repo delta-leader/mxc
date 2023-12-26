@@ -2,7 +2,6 @@
 #pragma once
 
 #include "mpi.h"
-#include "cuda_runtime_api.h"
 
 #include <vector>
 #include <utility>
@@ -36,8 +35,7 @@ struct BatchedFactorParams {
 struct Node {
   int64_t lenA, lenS;
   struct Matrix *A, *S;
-  double* A_ptr, *A_buf, *X_ptr, *X_buf;
-  struct BatchedFactorParams params; 
+  double* A_ptr, *X_ptr;
 };
 
 struct EvalDouble;
@@ -51,7 +49,6 @@ void mul_AS(const struct Matrix* RU, const struct Matrix* RV, struct Matrix* A);
 int64_t compute_basis(const EvalDouble& eval, double epi, int64_t rank_min, int64_t rank_max, 
   int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Nclose, const double Cbodies[], int64_t Nfar, const double Fbodies[]);
 
-cudaStream_t init_libs(int* argc, char*** argv);
 void fin_libs();
 void set_work_size(int64_t Lwork, double** D_DATA, int64_t* D_DATA_SIZE);
 
@@ -87,7 +84,7 @@ void evalD(const EvalDouble& eval, struct Matrix* D, const CSR* rels, const stru
 
 void evalS(const EvalDouble& eval, struct Matrix* S, const struct Base* basis, const CSR* rels, const struct CellComm* comm);
 
-void allocNodes(struct Node A[], double** Workspace, int64_t* Lwork, const struct Base basis[], const CSR rels_near[], const CSR rels_far[], const struct CellComm comm[], int64_t levels);
+void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[], const CSR rels_far[], const struct CellComm comm[], int64_t levels);
 
 void node_free(struct Node* node);
 

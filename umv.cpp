@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <algorithm>
 
-void allocNodes(struct Node A[], double** Workspace, int64_t* Lwork, const struct Base basis[], const CSR rels_near[], const CSR rels_far[], const struct CellComm comm[], int64_t levels) {
+void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[], const CSR rels_far[], const struct CellComm comm[], int64_t levels) {
   int64_t work_size = 0;
 
   for (int64_t i = levels; i >= 0; i--) {
@@ -27,8 +27,8 @@ void allocNodes(struct Node A[], double** Workspace, int64_t* Lwork, const struc
     int64_t dimn_up = i > 0 ? basis[i - 1].dimN : 0;
 
     int64_t stride = dimn * dimn;
-    allocBufferedList((void**)&A[i].A_ptr, (void**)&A[i].A_buf, sizeof(double), stride * nnz);
-    allocBufferedList((void**)&A[i].X_ptr, (void**)&A[i].X_buf, sizeof(double), dimn * ulen);
+    A[i].A_ptr = (double*)calloc(stride * nnz, sizeof(double));
+    A[i].X_ptr = (double*)calloc(dimn * ulen, sizeof(double));
 
     int64_t k1, k2;
     countMaxIJ(&k1, &k2, &rels_near[i]);
@@ -38,7 +38,7 @@ void allocNodes(struct Node A[], double** Workspace, int64_t* Lwork, const struc
 
     for (int64_t x = 0; x < n_i; x++) {
       for (int64_t yx = rels_near[i].RowIndex[x]; yx < rels_near[i].RowIndex[x + 1]; yx++)
-        arr_m[yx] = (struct Matrix) { &A[i].A_buf[yx * stride], dimn, dimn, dimn }; // A
+        arr_m[yx] = (struct Matrix) { &A[i].A_ptr[yx * stride], dimn, dimn, dimn }; // A
 
       for (int64_t yx = rels_far[i].RowIndex[x]; yx < rels_far[i].RowIndex[x + 1]; yx++)
         arr_m[yx + nnz] = (struct Matrix) { NULL, basis[i].dimS, basis[i].dimS, dimn_up }; // S
@@ -69,13 +69,10 @@ void allocNodes(struct Node A[], double** Workspace, int64_t* Lwork, const struc
     }
   }
   
-  set_work_size(work_size, Workspace, Lwork);
   for (int64_t i = levels; i > 0; i--) {
     int64_t ibegin = 0, N_rows = 0, N_cols = 0;
     content_length(&N_cols, &N_rows, &ibegin, &comm[i]);
     int64_t nnz = A[i].lenA;
-    int64_t dimc = basis[i].dimR;
-    int64_t dimr = basis[i].dimS;
 
     int64_t n_next = basis[i - 1].dimR + basis[i - 1].dimS;
     int64_t ibegin_next = 0;
@@ -96,35 +93,13 @@ void allocNodes(struct Node A[], double** Workspace, int64_t* Lwork, const struc
       std::pair<int64_t, int64_t> p = comm[i].LocalParent[x];
       X_next[x] = &A[i - 1].X_ptr[std::get<1>(p) * basis[i].dimS + std::get<0>(p) * n_next];
     }
-
-    batchParamsCreate(&A[i].params, dimc, dimr, basis[i].U_gpu, A[i].A_ptr, A[i].X_ptr, n_next, &A_next[0], &X_next[0],
-      *Workspace, work_size, N_rows, N_cols, ibegin, &rels_near[i].ColIndex[0], &rels_near[i].RowIndex[0]);
   }
-
-  int64_t child = std::get<0>(comm[0].LocalChild[0]);
-  int64_t clen = std::get<1>(comm[0].LocalChild[0]);
-  std::vector<int64_t> cdims(clen);
-  if (child >= 0)
-    for (int64_t i = 0; i < clen; i++)
-      cdims[i] = basis[1].DimsLr[child + i];
-  else
-    cdims.emplace_back(basis[0].Dims[0]);
-  int64_t low_s = clen > 0 ? basis[1].dimS : 0;
-  lastParamsCreate(&A[0].params, A[0].A_ptr, A[0].X_ptr, basis[0].dimN, low_s, cdims.size(), &cdims[0]);
 }
 
 void node_free(struct Node* node) {
-  freeBufferedList(node->A_ptr, node->A_buf);
-  freeBufferedList(node->X_ptr, node->X_buf);
+  free(node->A_ptr);
+  free(node->X_ptr);
   free(node->A);
-  batchParamsDestory(&node->params);
-}
-
-void factorA_mov_mem(char dir, struct Node A[], const struct Base basis[], int64_t levels) {
-  for (int64_t i = 0; i <= levels; i++) {
-    int64_t stride = basis[i].dimN * basis[i].dimN;
-    flushBuffer(dir, A[i].A_ptr, A[i].A_buf, sizeof(double), stride * A[i].lenA);
-  }
 }
 
 struct RightHandSides { struct Matrix *X, *Xc, *Xo, *B; };
