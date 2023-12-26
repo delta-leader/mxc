@@ -160,11 +160,11 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
     basis[l].M_cpu = (double*)calloc(basis[l].dimS * xlen * 3, sizeof(double));
     basis[l].U_cpu = (double*)calloc(stride * xlen + nodes * basis[l].dimR, sizeof(double));
     basis[l].R_cpu = (double*)calloc(stride_r * xlen, sizeof(double));
-    if (cudaMalloc(&basis[l].M_gpu, sizeof(double) * basis[l].dimS * xlen * 3) != cudaSuccess)
+    if (cudaMalloc((void**)&basis[l].M_gpu, sizeof(double) * basis[l].dimS * xlen * 3) != cudaSuccess)
       basis[l].M_gpu = NULL;
-    if (cudaMalloc(&basis[l].U_gpu, sizeof(double) * (stride * xlen + nodes * basis[l].dimR)) != cudaSuccess)
+    if (cudaMalloc((void**)&basis[l].U_gpu, sizeof(double) * (stride * xlen + nodes * basis[l].dimR)) != cudaSuccess)
       basis[l].U_gpu = NULL;
-    if (cudaMalloc(&basis[l].R_gpu, sizeof(double) * stride_r * xlen) != cudaSuccess)
+    if (cudaMalloc((void**)&basis[l].R_gpu, sizeof(double) * stride_r * xlen) != cudaSuccess)
       basis[l].R_gpu = NULL;
 
     for (int64_t i = 0; i < xlen; i++) {

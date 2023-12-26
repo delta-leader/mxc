@@ -1,10 +1,10 @@
 
-#include "geometry.hpp"
-#include "kernel.hpp"
-#include "nbd.hpp"
-#include "profile.hpp"
+#include <geometry.hpp>
+#include <kernel.hpp>
+#include <nbd.hpp>
+#include <profile.hpp>
 
-#include "omp.h"
+#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -33,10 +33,10 @@ int main(int argc, char* argv[]) {
   
   double* body = (double*)malloc(sizeof(double) * Nbody * 3);
   double* Xbody = (double*)malloc(sizeof(double) * Nbody);
-  struct Cell* cell = (struct Cell*)malloc(sizeof(struct Cell) * ncells);
-  struct CSC cellNear, cellFar;
-  struct CSC* rels_far = (struct CSC*)malloc(sizeof(struct CSC) * (levels + 1));
-  struct CSC* rels_near = (struct CSC*)malloc(sizeof(struct CSC) * (levels + 1));
+  struct Cell* cell = (struct Cell*)calloc(ncells, sizeof(struct Cell));
+  struct CSR cellNear, cellFar;
+  struct CSR* rels_far = (struct CSR*)calloc(levels + 1, sizeof(CSR));
+  struct CSR* rels_near = (struct CSR*)calloc(levels + 1, sizeof(CSR));
   struct CellComm* cell_comm = (struct CellComm*)calloc(levels + 1, sizeof(struct CellComm));
   struct Base* basis = (struct Base*)calloc(levels + 1, sizeof(struct Base));
   struct Node* nodes = (struct Node*)malloc(sizeof(struct Node) * (levels + 1));
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
   struct CommTimer timer;
   buildComm(cell_comm, ncells, cell, &cellFar, &cellNear, levels);
   for (int64_t i = 0; i <= levels; i++) {
-    cell_comm[i].stream = stream;
+    //cell_comm[i].stream = stream;
     cell_comm[i].timer = &timer;
   }
   relations(rels_near, &cellNear, levels, cell_comm);
@@ -73,8 +73,7 @@ int main(int argc, char* argv[]) {
 
   int64_t lbegin = 0, llen = 0;
   content_length(&llen, NULL, &lbegin, &cell_comm[levels]);
-  int64_t gbegin = lbegin;
-  i_global(&gbegin, &cell_comm[levels]);
+  int64_t gbegin = cell_comm[levels].iGlobal(lbegin);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double construct_time = MPI_Wtime(), construct_comm_time;
@@ -113,8 +112,10 @@ int main(int argc, char* argv[]) {
     solveRelErr(&cerr, X1, X2, lenX);
     std::iter_swap(&X1, &X2);
   }
+
+  std::cout << cerr << std::endl;
   
-  factorA_mov_mem('S', nodes, basis, levels);
+  /*factorA_mov_mem('S', nodes, basis, levels);
   MPI_Barrier(MPI_COMM_WORLD);
   double factor_time = MPI_Wtime(), factor_comm_time;
 
@@ -192,14 +193,10 @@ int main(int argc, char* argv[]) {
       (double)mem_A[0] * 1.e-9, (double)mem_A[1] * 1.e-9, (double)mem_A[2] * 1.e-9, cerr, err, prog_time);
 
   for (int64_t i = 0; i <= levels; i++) {
-    csc_free(&rels_far[i]);
-    csc_free(&rels_near[i]);
     basis_free(&basis[i]);
     node_free(&nodes[i]);
   }
   cellComm_free(cell_comm, levels);
-  csc_free(&cellFar);
-  csc_free(&cellNear);
   
   free(body);
   free(Xbody);
@@ -211,7 +208,7 @@ int main(int argc, char* argv[]) {
   free(nodes);
   free(X1);
   free(X2);
-  set_work_size(0, &Workspace, &Lwork);
+  set_work_size(0, &Workspace, &Lwork);*/
 
   fin_libs();
   return 0;

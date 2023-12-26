@@ -3,7 +3,7 @@
 
 #include "mpi.h"
 #include "cuda_runtime_api.h"
-#include "nccl.h"
+//#include "nccl.h"
 
 #include <vector>
 #include <utility>
@@ -44,9 +44,9 @@ struct CellComm {
   std::vector<std::pair<int, MPI_Comm>> Comm_box;
   MPI_Comm Comm_share, Comm_merge;
 
-  cudaStream_t stream;
+  /*cudaStream_t stream;
   std::vector<std::pair<int, ncclComm_t>> NCCL_box;
-  ncclComm_t NCCL_merge, NCCL_share;
+  ncclComm_t NCCL_merge, NCCL_share;*/
   
   CommTimer* timer;
 
@@ -74,11 +74,11 @@ void level_merge_cpu(double* data, int64_t len, const struct CellComm* comm);
 
 void dup_bcast_cpu(double* data, int64_t len, const struct CellComm* comm);
 
-void neighbor_bcast_gpu(double* data, int64_t seg, const struct CellComm* comm);
+/*void neighbor_bcast_gpu(double* data, int64_t seg, const struct CellComm* comm);
 
 void neighbor_reduce_gpu(double* data, int64_t seg, const struct CellComm* comm);
 
 void level_merge_gpu(double* data, int64_t len, const struct CellComm* comm);
 
-void dup_bcast_gpu(double* data, int64_t len, const struct CellComm* comm);
+void dup_bcast_gpu(double* data, int64_t len, const struct CellComm* comm);*/
 

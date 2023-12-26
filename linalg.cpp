@@ -5,7 +5,9 @@
 #include "cuda_runtime_api.h"
 #include "cublas_v2.h"
 #include "cusolverDn.h"
-#include "mkl.h"
+#include "lapacke.h"
+#include "cblas.h"
+//#include "mkl.h"
 
 #include <vector>
 #include <algorithm>
@@ -135,7 +137,8 @@ int64_t compute_basis(const EvalDouble& eval, double epi, int64_t rank_min, int6
       LAPACKE_dgesvd(LAPACK_COL_MAJOR, 'A', 'O', M, rank, &U[0], M, &S[0], A, LDA, &U[0], M, &S[M]);
 
       for (int64_t i = 0; i < rank; i++)
-        vdMul(rank, &S[0], &U[i * M], &A[(M + i) * LDA]);
+        for (int64_t j = 0; j < rank; j++)
+          A[(M + i) * LDA + j] = U[i * M + j] * S[j];
     }
     
     return rank;
@@ -255,7 +258,7 @@ void batchParamsCreate(struct BatchedFactorParams* params, int64_t R_dim, int64_
 
   std::vector<double> one_data(N_rows, 1.);
   double* one_data_dev;
-  cudaMalloc(&one_data_dev, sizeof(double) * N_rows);
+  cudaMalloc((void**)&one_data_dev, sizeof(double) * N_rows);
   cudaMemcpy(one_data_dev, &one_data[0], sizeof(double) * N_rows, cudaMemcpyHostToDevice);
 
   const int64_t NZ = 13, ND = 6;
@@ -367,6 +370,27 @@ void batchParamsCreate(struct BatchedFactorParams* params, int64_t R_dim, int64_
   cudaMemcpy(ptrs_diag, ptrs_diag_cpu.data(), sizeof(double*) * N_rows_aligned * ND, cudaMemcpyHostToDevice);
 }
 
+void lastParamsCreate(struct BatchedFactorParams* params, double* A, double* X, int64_t N, int64_t S, int64_t clen, const int64_t cdims[]) {
+  memset((void*)params, 0, sizeof(struct BatchedFactorParams));
+
+  params->A_data = A;
+  params->X_data = X;
+  params->N_r = N;
+
+  int Lwork;
+  cusolverDnDgetrf_bufferSize(cusolverH, N, N, A, N, &Lwork);
+  Lwork = std::max((int64_t)Lwork, N);
+  cudaMalloc((void**)&params->ONE_DATA, sizeof(double) * Lwork);
+  params->L_tmp = Lwork;
+
+  std::vector<double> I(N, 1.);
+  for (int64_t i = 0; i < clen; i++)
+    std::fill(I.begin() + i * S, I.begin() + i * S + cdims[i], 0.);
+  cudaMemcpy(params->ONE_DATA, &I[0], sizeof(double) * N, cudaMemcpyHostToDevice);
+  cudaMalloc((void**)&params->ipiv, sizeof(int) * N);
+  cudaMalloc((void**)&params->info, sizeof(int));
+}
+
 void batchParamsDestory(struct BatchedFactorParams* params) {
   if (params->X_d)
     cudaFree(params->X_d);
@@ -380,7 +404,7 @@ void batchParamsDestory(struct BatchedFactorParams* params) {
     cudaFree(params->ipiv);  
 }
 
-void batchCholeskyFactor(struct BatchedFactorParams* params, const struct CellComm* comm) {
+/*void batchCholeskyFactor(struct BatchedFactorParams* params, const struct CellComm* comm) {
   int64_t U = params->N_upper, R = params->N_r, S = params->N_s, N = R + S, D = params->L_diag;
   double one = 1., zero = 0., minus_one = -1.;
   int info_host = 0;
@@ -485,27 +509,6 @@ void batchBackwardULV(struct BatchedFactorParams* params, const struct CellComm*
   dup_bcast_gpu(params->X_data, params->L_rows * N, comm);
 }
 
-void lastParamsCreate(struct BatchedFactorParams* params, double* A, double* X, int64_t N, int64_t S, int64_t clen, const int64_t cdims[]) {
-  memset((void*)params, 0, sizeof(struct BatchedFactorParams));
-
-  params->A_data = A;
-  params->X_data = X;
-  params->N_r = N;
-
-  int Lwork;
-  cusolverDnDgetrf_bufferSize(cusolverH, N, N, A, N, &Lwork);
-  Lwork = std::max((int64_t)Lwork, N);
-  cudaMalloc((void**)&params->ONE_DATA, sizeof(double) * Lwork);
-  params->L_tmp = Lwork;
-
-  std::vector<double> I(N, 1.);
-  for (int64_t i = 0; i < clen; i++)
-    std::fill(I.begin() + i * S, I.begin() + i * S + cdims[i], 0.);
-  cudaMemcpy(params->ONE_DATA, &I[0], sizeof(double) * N, cudaMemcpyHostToDevice);
-  cudaMalloc((void**)&params->ipiv, sizeof(int) * N);
-  cudaMalloc((void**)&params->info, sizeof(int));
-}
-
 void chol_decomp(struct BatchedFactorParams* params, const struct CellComm* comm) {
   double* A = params->A_data;
   int64_t N = params->N_r;
@@ -524,6 +527,6 @@ void chol_solve(struct BatchedFactorParams* params, const struct CellComm* comm)
 
   level_merge_gpu(X, N, comm);
   cusolverDnDgetrs(cusolverH, CUBLAS_OP_N, N, 1, A, N, params->ipiv, X, N, params->info);
-}
+}*/
 
 

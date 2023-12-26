@@ -194,7 +194,7 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
     comms[i].LocalParent = std::vector<std::pair<int64_t, int64_t>>(comms[i].LocalChild.size(), std::make_pair(-1, -1));
   }
 
-  std::vector<ncclUniqueId> nccl_ids(unique_comms.size());
+  /*std::vector<ncclUniqueId> nccl_ids(unique_comms.size());
   std::vector<ncclComm_t> nccl_comms(unique_comms.size());
   ncclGroupStart();
   for (int64_t i = 0; i < (int64_t)unique_comms.size(); i++) {
@@ -225,12 +225,12 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
       int64_t k = std::distance(unique_comms.begin(), std::find(unique_comms.begin(), unique_comms.end(), comms[i].Comm_share));
       comms[i].NCCL_share = nccl_comms[k];
     }
-  }
+  }*/
 }
 
 void cellComm_free(struct CellComm* comms, int64_t levels) {
   std::vector<MPI_Comm> mpi_comms;
-  std::vector<ncclComm_t> nccl_comms;
+  //std::vector<ncclComm_t> nccl_comms;
 
   for (int64_t i = 0; i <= levels; i++) {
     for (int64_t j = 0; j < (int64_t)comms[i].Comm_box.size(); j++)
@@ -240,30 +240,30 @@ void cellComm_free(struct CellComm* comms, int64_t levels) {
     if (comms[i].Comm_share != MPI_COMM_NULL)
       mpi_comms.emplace_back(comms[i].Comm_share);
 
-    for (int64_t j = 0; j < (int64_t)comms[i].NCCL_box.size(); j++)
+    /*for (int64_t j = 0; j < (int64_t)comms[i].NCCL_box.size(); j++)
       nccl_comms.emplace_back(std::get<1>(comms[i].NCCL_box[j]));
     if (comms[i].NCCL_merge != NULL)
       nccl_comms.emplace_back(comms[i].NCCL_merge);
     if (comms[i].NCCL_share != NULL)
-      nccl_comms.emplace_back(comms[i].NCCL_share);
+      nccl_comms.emplace_back(comms[i].NCCL_share);*/
     
     comms[i].Comm_box.clear();
     comms[i].Comm_merge = MPI_COMM_NULL;
     comms[i].Comm_share = MPI_COMM_NULL;
-    comms[i].NCCL_box.clear();
+    /*comms[i].NCCL_box.clear();
     comms[i].NCCL_merge = NULL;
-    comms[i].NCCL_share = NULL;
+    comms[i].NCCL_share = NULL;*/
   }
 
   std::sort(mpi_comms.begin(), mpi_comms.end());
-  std::sort(nccl_comms.begin(), nccl_comms.end());
+  //std::sort(nccl_comms.begin(), nccl_comms.end());
   mpi_comms.erase(std::unique(mpi_comms.begin(), mpi_comms.end()), mpi_comms.end());
-  nccl_comms.erase(std::unique(nccl_comms.begin(), nccl_comms.end()), nccl_comms.end());
+  //nccl_comms.erase(std::unique(nccl_comms.begin(), nccl_comms.end()), nccl_comms.end());
 
   for (int64_t i = 0; i < (int64_t)mpi_comms.size(); i++)
     MPI_Comm_free(&mpi_comms[i]);
-  for (int64_t i = 0; i < (int64_t)nccl_comms.size(); i++)
-    ncclCommDestroy(nccl_comms[i]);
+  //for (int64_t i = 0; i < (int64_t)nccl_comms.size(); i++)
+    //ncclCommDestroy(nccl_comms[i]);
 }
 
 void relations(CSR rels[], const CSR* cellRel, int64_t levels, const struct CellComm* comm) {
@@ -396,7 +396,7 @@ void dup_bcast_cpu(double* data, int64_t len, const struct CellComm* comm) {
   }
 }
 
-void neighbor_bcast_gpu(double* data, int64_t seg, const struct CellComm* comm) {
+/*void neighbor_bcast_gpu(double* data, int64_t seg, const struct CellComm* comm) {
   if (comm->NCCL_box.size() > 0) {
     cudaEvent_t e1, e2;
     if (comm->timer) {
@@ -474,5 +474,5 @@ void dup_bcast_gpu(double* data, int64_t len, const struct CellComm* comm) {
       comm->timer->record_cuda(e1, e2);
     }
   }
-}
+}*/
 
