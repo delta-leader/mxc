@@ -51,48 +51,20 @@ void gen_matrix(const EvalDouble& Eval, int64_t m, int64_t n, const double* bi, 
   });
 }
 
-int64_t gen_matrix_lr(const EvalDouble& Eval, double epi, int64_t m, int64_t n, const double* bi, const double* bj, double U[], int64_t ldu, double V[], int64_t ldv) {
-  int64_t k = std::min(m, n);
-  std::vector<double> A(m * n), S(k + k);
-  gen_matrix(Eval, m, n, bi, bj, &A[0], m);
-  LAPACKE_dgesvd(LAPACK_COL_MAJOR, 'S', 'O', m, n, &A[0], m, &S[0], U, ldu, &A[0], m, &S[k]);
+int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Nfar, const double Fbodies[]) {
 
-  double s0 = S[0] * epi;
-  int64_t rank = std::distance(S.begin(), std::find_if(S.begin(), S.begin() + k, [=](double& s) { return s < s0; }));
-
-  for (int64_t i = 0; i < rank; i++)
-    for (int64_t j = 0; j < n; j++)
-      V[i * ldv + j] = A[j * m + i] * S[i];
-
-  return rank;
-}
-
-int64_t compute_basis(const EvalDouble& eval, double epi, int64_t rank_min, int64_t rank_max, 
-  int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Nclose, const double Cbodies[], int64_t Nfar, const double Fbodies[]) {
-
-  if (M > 0 && (Nclose > 0 || Nfar > 0)) {
-    int64_t ldm = std::max(M, Nclose + Nfar);
+  if (M > 0 && Nfar > 0) {
+    int64_t ldm = std::max(M, Nfar);
     std::vector<double> Aall(M * ldm, 0.), U(M * M), S(M * 2);
-    std::vector<int32_t> ipiv(M);
-    gen_matrix(eval, Nclose, M, Cbodies, Xbodies, &Aall[0], ldm);
-    gen_matrix(eval, Nfar, M, Fbodies, Xbodies, &Aall[Nclose], ldm);
+    std::vector<int32_t> ipiv(M, 0);
+    gen_matrix(eval, Nfar, M, Fbodies, Xbodies, &Aall[0], ldm);
 
-    for (int64_t i = 0; i < Nclose; i += M) {
-      int64_t len = std::min(M, Nclose - i);
-      gen_matrix(eval, len, len, &Cbodies[i * 3], &Cbodies[i * 3], &U[0], M);
-      LAPACKE_dgesv(LAPACK_COL_MAJOR, len, M, &U[0], M, &ipiv[0], &Aall[i], ldm);
-    }
-
-    std::fill(ipiv.begin(), ipiv.end(), 0);
-    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, Nclose + Nfar, M, &Aall[0], ldm, &ipiv[0], &S[0]);
+    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, Nfar, M, &Aall[0], ldm, &ipiv[0], &S[0]);
     LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &Aall[1], ldm);
 
     LAPACKE_dgesvd(LAPACK_COL_MAJOR, 'N', 'A', M, M, &Aall[0], ldm, &S[0], NULL, M, &U[0], M, &S[M]);
     double s0 = S[0] * epi;
-    rank_max = rank_max <= 0 ? M : std::min(rank_max, M);
-    rank_min = rank_min <= 0 ? 0 : std::min(rank_min, M);
-    int64_t rank = epi > 0. ?
-      std::distance(S.begin(), std::find_if(S.begin() + rank_min, S.begin() + rank_max, [s0](double& s) { return s < s0; })) : rank_max;
+    int64_t rank = std::distance(S.begin(), std::find_if(S.begin(), S.begin() + M, [=](double& s) { return s < s0; }));
     
     if (rank > 0) {
       if (rank < M)
@@ -108,6 +80,10 @@ int64_t compute_basis(const EvalDouble& eval, double epi, int64_t rank_min, int6
       std::copy(&Xbodies[piv * 3], &Xbodies[piv * 3 + 3], &Xpiv[i * 3]);
     }
     std::copy(Xpiv.begin(), Xpiv.end(), Xbodies);
+    
+    /*for (int64_t j = 0; j < rank; j++)
+      for (int64_t i = 0; i < M; i++)
+        A[i + LDA * j] = Aall[i * M + j];*/
 
     if (rank > 0) {
       cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans, M, rank, M, 1., A, LDA, &Aall[0], M, 0., &U[0], M);

@@ -74,7 +74,7 @@ int admis_check(double theta, const double C1[], const double C2[], const double
   return (int)(dC > dR);
 }
 
-void buildTree(int64_t* ncells, struct Cell* cells, double* bodies, int64_t nbodies, int64_t levels) {
+void buildTree(struct Cell* cells, double* bodies, int64_t nbodies, int64_t levels) {
   struct Cell* root = &cells[0];
   root->Body[0] = 0;
   root->Body[1] = nbodies;

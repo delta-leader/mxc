@@ -15,18 +15,17 @@ int main(int argc, char* argv[]) {
   double theta = argc > 2 ? atof(argv[2]) : 1e0;
   int64_t leaf_size = argc > 3 ? atol(argv[3]) : 256;
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
-  int64_t rank_max = argc > 5 ? atol(argv[5]) : 100;
-  int64_t sp_pts = argc > 6 ? atol(argv[6]) : 2000;
-  const char* fname = argc > 7 ? argv[7] : NULL;
+  double oversampling = argc > 5 ? atof(argv[5]) : 5.0;
+  const char* fname = argc > 6 ? argv[6] : NULL;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   int64_t levels = (int64_t)log2((double)Nbody / leaf_size);
   int64_t Nleaf = (int64_t)1 << levels;
   int64_t ncells = Nleaf + Nleaf - 1;
   
-  //Laplace3D eval(1.e-6);
-  //Yukawa3D eval(1.e-6, 1.);
-  Gaussian eval(0.2);
+  Laplace3D eval(1);
+  //Yukawa3D eval(1, 1.);
+  //Gaussian eval(0.2);
   
   std::vector<double> body(Nbody * 3);
   std::vector<double> Xbody(Nbody);
@@ -39,18 +38,18 @@ int main(int argc, char* argv[]) {
   std::vector<Node> nodes(levels + 1);
 
   if (fname == NULL) {
-    mesh_unit_sphere(&body[0], Nbody);
+    mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
     //mesh_unit_cube(&body[0], Nbody);
     //uniform_unit_cube(&body[0], Nbody, 3);
-    buildTree(&ncells, &cell[0], &body[0], Nbody, levels);
+    buildTree(&cell[0], &body[0], Nbody, levels);
   }
   else {
     std::vector<int64_t> buckets(Nleaf);
     read_sorted_bodies(&Nbody, Nleaf, &body[0], &buckets[0], fname);
     //buildTreeBuckets(cell, body, buckets, levels);
-    buildTree(&ncells, &cell[0], &body[0], Nbody, levels);
+    buildTree(&cell[0], &body[0], Nbody, levels);
   }
-  body_neutral_charge(&Xbody[0], Nbody, 1., 999);
+  body_neutral_charge(&Xbody[0], Nbody, 999);
 
   traverse('N', &cellNear, ncells, &cell[0], theta);
   traverse('F', &cellFar, ncells, &cell[0], theta);
@@ -69,7 +68,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double construct_time = MPI_Wtime(), construct_comm_time;
-  buildBasis(eval, &basis[0], &cell[0], &cellNear, levels, &cell_comm[0], &body[0], Nbody, epi, rank_max, sp_pts, 4);
+  buildBasis(eval, &basis[0], &cell[0], &cellNear, levels, &cell_comm[0], &body[0], Nbody, epi, oversampling, 4);
 
   MPI_Barrier(MPI_COMM_WORLD);
   construct_time = MPI_Wtime() - construct_time;

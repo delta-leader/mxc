@@ -16,4 +16,3 @@ add_executable(main main.cpp linalg.cpp basis.cpp comm.cpp build_tree.cpp umv.cp
 target_include_directories(main PRIVATE ./)
 target_link_directories(main PRIVATE)
 target_link_libraries(main MPI::MPI_CXX OpenMP::OpenMP_CXX BLAS::BLAS LAPACK::LAPACK -llapacke)
-set_target_properties(main PROPERTIES CUDA_ARCHITECTURES "80")

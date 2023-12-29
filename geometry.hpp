@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
+#include <random>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -128,13 +129,16 @@ void mesh_unit_cube(double* bodies, int64_t nbodies) {
   }
 }
 
-void mesh_unit_sphere(double* bodies, int64_t nbodies) {
+void mesh_unit_sphere(double* bodies, int64_t nbodies, double r) {
   const double phi = M_PI * (3. - std::sqrt(5.));  // golden angle in radians
-  for (int64_t i = 0; i < nbodies; i++) {
-    const double y = 1. - ((double)i / ((double)nbodies - 1)) * 2.;  // y goes from 1 to -1
+  const double d = r + r;
+  const double r2 = r * r;
+
+  for (int64_t i = 0; i < nbodies; ++i) {
+    const double y = r - ((double)i / (double)(nbodies - 1)) * d;  // y goes from r to -r
 
     // Note: setting constant radius = 1 will produce a cylindrical shape
-    const double radius = std::sqrt(1. - y * y);  // radius at y
+    const double radius = std::sqrt(r2 - y * y);  // radius at y
     const double theta = (double)i * phi;
 
     const double x = radius * std::cos(theta);
@@ -157,13 +161,11 @@ void magnify_reloc(double* bodies, int64_t nbodies, const double Ccur[], const d
   }
 }
 
-void body_neutral_charge(double X[], int64_t nbodies, double cmax, unsigned int seed) {
-  if (seed > 0)
-    srand(seed);
-
-  double cmax2 = cmax * 2;
-  for (int64_t i = 0; i < nbodies; i++)
-    X[i] = ((double)rand() / RAND_MAX) * cmax2 - cmax;
+void body_neutral_charge(double X[], int64_t nbodies, unsigned int seed) {
+  std::mt19937 gen(seed);
+  std::uniform_real_distribution<> dis(0., 1.);
+  for (int64_t n = 0; n < nbodies; ++n)
+    X[n] = dis(gen);
 }
 
 void read_sorted_bodies(int64_t* nbodies, int64_t lbuckets, double* bodies, int64_t buckets[], const char* fname) {

@@ -41,7 +41,7 @@ int64_t generate_far(int64_t flen, int64_t far[], int64_t ngbs, const int64_t ng
 }
 
 void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells, const CSR* rel_near, int64_t levels,
-  const struct CellComm* comm, const double* bodies, int64_t nbodies, double epi, int64_t mrank, int64_t sp_pts, int64_t alignment) {
+  const struct CellComm* comm, const double* bodies, int64_t nbodies, double epi, double oversampling, int64_t alignment) {
 
   for (int64_t l = levels; l >= 0; l--) {
     int64_t xlen = 0, ibegin = 0, nodes = 0;
@@ -110,18 +110,13 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
       int64_t nbegin = rel_near->RowIndex[ci];
       int64_t nlen = rel_near->RowIndex[ci + 1] - nbegin;
       const int64_t* ngbs = &rel_near->ColIndex[nbegin];
-      std::vector<double> Cbodies;
+      int64_t sp_pts = (int64_t)std::ceil(oversampling * ske_len);
       std::vector<int64_t> remote(sp_pts), body(nlen), lens(nlen);
 
       for (int64_t j = 0; j < nlen; j++) {
         int64_t cj = ngbs[j];
         body[j] = cells[cj].Body[0];
         lens[j] = cells[cj].Body[1] - cells[cj].Body[0];
-        if (cj != ci) {
-          int64_t lj = comm[l].iLocal(cj);
-          int64_t len = 3 * basis[l].Dims[lj];
-          Cbodies.insert(Cbodies.end(), &Skeletons[lj * seg_skeletons], &Skeletons[lj * seg_skeletons + len]);
-        }
       }
       int64_t len_f = generate_far(sp_pts, &remote[0], nlen, &body[0], &lens[0], nbodies);
 
@@ -130,7 +125,7 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
         for (int64_t k = 0; k < 3; k++)
           Fbodies[j * 3 + k] = bodies[remote[j] * 3 + k];
       
-      int64_t rank = compute_basis(eval, epi, 1, mrank, ske_len, mat, seg_dim, &Xbodies[0], Cbodies.size() / 3, &Cbodies[0], Fbodies.size() / 3, &Fbodies[0]);
+      int64_t rank = compute_basis(eval, epi, ske_len, mat, seg_dim, &Xbodies[0], len_f, &Fbodies[0]);
       basis[l].DimsLr[i + ibegin] = rank;
     }
     neighbor_bcast_sizes_cpu(basis[l].DimsLr.data(), &comm[l]);
