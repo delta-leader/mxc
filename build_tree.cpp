@@ -142,41 +142,34 @@ void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t bu
   }
 }
 
-void getList(char NoF, int64_t* len, int64_t rels[], int64_t ncells, const struct Cell cells[], int64_t i, int64_t j, double theta) {
-  const struct Cell* Ci = &cells[i];
-  const struct Cell* Cj = &cells[j];
-
-  int admis = admis_check(theta, Ci->C, Cj->C, Ci->R, Cj->R);
+void getList(char NoF, std::vector<std::pair<int64_t, int64_t>>& rels, const struct Cell cells[], int64_t i, int64_t j, double theta) {
+  int admis = admis_check(theta, cells[i].C, cells[j].C, cells[i].R, cells[j].R);
   int write_far = NoF == 'F' || NoF == 'f';
   int write_near = NoF == 'N' || NoF == 'n';
-  if (admis ? write_far : write_near) {
-    int64_t n = *len;
-    rels[n] = i + j * ncells;
-    *len = n + 1;
-  }
+  if (admis ? write_far : write_near)
+    rels.emplace_back(i, j);
   
-  if (!admis && Ci->Child[0] >= 0 && Cj->Child[0] >= 0)
-    for (int64_t k = Ci->Child[0]; k < Ci->Child[1]; k++)
-      for (int64_t l = Cj->Child[0]; l < Cj->Child[1]; l++)
-        getList(NoF, len, rels, ncells, cells, k, l, theta);
+  if (!admis && cells[i].Child[0] >= 0 && cells[j].Child[0] >= 0)
+    for (int64_t k = cells[i].Child[0]; k < cells[i].Child[1]; k++)
+      for (int64_t l = cells[j].Child[0]; l < cells[j].Child[1]; l++)
+        getList(NoF, rels, cells, k, l, theta);
 }
 
 void traverse(char NoF, CSR* rels, int64_t ncells, const struct Cell* cells, double theta) {
-  rels->M = ncells;
-  rels->N = ncells;
-  std::vector<int64_t> rel_arr(ncells * ncells);
-  int64_t len = 0;
-  getList(NoF, &len, &rel_arr[0], ncells, cells, 0, 0, theta);
-  std::sort(rel_arr.begin(), rel_arr.begin() + len);
+  std::vector<std::pair<int64_t, int64_t>> rel_arr;
+  getList(NoF, rel_arr, cells, 0, 0, theta);
+  std::sort(rel_arr.begin(), rel_arr.end(), 
+    [](const std::pair<int64_t, int64_t>& a, const std::pair<int64_t, int64_t>& b) -> bool 
+      { return ((std::get<1>(a) == std::get<1>(b)) && (std::get<0>(a) < std::get<0>(b))) || (std::get<1>(a) < std::get<1>(b)); });
 
+  int64_t len = rel_arr.size();
   rels->RowIndex.resize(ncells + 1);
   rels->ColIndex.resize(len);
 
   int64_t loc = -1;
   for (int64_t i = 0; i < len; i++) {
-    int64_t r = rel_arr[i];
-    int64_t x = r / ncells;
-    int64_t y = r - x * ncells;
+    int64_t x = std::get<1>(rel_arr[i]);
+    int64_t y = std::get<0>(rel_arr[i]);
     rels->ColIndex[i] = y;
     while (x > loc)
       rels->RowIndex[++loc] = i;
@@ -220,11 +213,11 @@ void evalD(const EvalDouble& eval, struct Matrix* D, const CSR* rels, const stru
 }
 
 void evalS(const EvalDouble& eval, struct Matrix* S, const struct Base* basis, const CSR* rels, const struct CellComm* comm) {
-  int64_t ibegin = 0;
-  content_length(NULL, NULL, &ibegin, comm);
+  int64_t ibegin = 0, nodes = 0;
+  content_length(&nodes, NULL, &ibegin, comm);
   int64_t seg = basis->dimS * 3;
 
-  for (int64_t x = 0; x < rels->N; x++) {
+  for (int64_t x = 0; x < nodes; x++) {
     int64_t n = basis->DimsLr[x + ibegin];
 
     for (int64_t yx = rels->RowIndex[x]; yx < rels->RowIndex[x + 1]; yx++) {

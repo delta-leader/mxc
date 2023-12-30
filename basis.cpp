@@ -15,33 +15,8 @@ void memcpy2d(T* dst, const T* src, int64_t rows, int64_t cols, int64_t ld_dst, 
       std::copy(&src[i * ld_src], &src[i * ld_src + rows], &dst[i * ld_dst]);
 }
 
-int64_t generate_far(int64_t flen, int64_t far[], int64_t ngbs, const int64_t ngbs_body[], const int64_t ngbs_len[], int64_t nbody) {
-  int64_t near = 0;
-  for (int64_t i = 0; i < ngbs; i++)
-    near = near + ngbs_len[i];
-  int64_t avail = nbody - near;
-  flen = avail < flen ? avail : flen;
-  for (int64_t i = 0; i < flen; i++)
-    far[i] = (double)(i * avail) / flen;
-  int64_t* begin = far;
-  int64_t slen = 0;
-  for (int64_t i = 0; i < ngbs; i++) {
-    int64_t bound = ngbs_body[i] - slen;
-    int64_t* next = begin;
-    while (next != far + flen && *next < bound)
-      next = next + 1;
-    for (int64_t* p = begin; p != next; p++)
-      *p = *p + slen;
-    begin = next;
-    slen = slen + ngbs_len[i];
-  }
-  for (int64_t* p = begin; p != far + flen; p++)
-    *p = *p + near;
-  return flen;
-}
-
 void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells, const CSR* rel_near, int64_t levels,
-  const struct CellComm* comm, const double* bodies, int64_t nbodies, double epi, double oversampling, int64_t alignment) {
+  const struct CellComm* comm, const double* bodies, int64_t nbodies, double epi, int64_t oversampling, int64_t alignment) {
 
   for (int64_t l = levels; l >= 0; l--) {
     int64_t xlen = 0, ibegin = 0, nodes = 0;
@@ -110,23 +85,29 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
       int64_t nbegin = rel_near->RowIndex[ci];
       int64_t nlen = rel_near->RowIndex[ci + 1] - nbegin;
       const int64_t* ngbs = &rel_near->ColIndex[nbegin];
-      int64_t sp_pts = (int64_t)std::ceil(oversampling * ske_len);
-      std::vector<int64_t> remote(sp_pts), body(nlen), lens(nlen);
+      std::vector<const double*> remote;
+      std::vector<int64_t> lens;
 
+      int64_t loc = 0, len_f = 0;
       for (int64_t j = 0; j < nlen; j++) {
         int64_t cj = ngbs[j];
-        body[j] = cells[cj].Body[0];
-        lens[j] = cells[cj].Body[1] - cells[cj].Body[0];
+        int64_t len = cells[cj].Body[0] - loc;
+        if (len > 0) {
+          remote.emplace_back(&bodies[loc * 3]);
+          lens.emplace_back(len);
+          len_f = len_f + len;
+        }
+        loc = cells[cj].Body[1];
       }
-      int64_t len_f = generate_far(sp_pts, &remote[0], nlen, &body[0], &lens[0], nbodies);
-
-      std::vector<double> Fbodies(len_f * 3);
-      for (int64_t j = 0; j < len_f; j++)
-        for (int64_t k = 0; k < 3; k++)
-          Fbodies[j * 3 + k] = bodies[remote[j] * 3 + k];
+      if (loc < nbodies) {
+        remote.emplace_back(&bodies[loc * 3]);
+        lens.emplace_back(nbodies - loc);
+        len_f = len_f + nbodies - loc;
+      }
       
-      int64_t rank = compute_basis(eval, epi, ske_len, mat, seg_dim, &Xbodies[0], len_f, &Fbodies[0]);
+      int64_t rank = compute_basis(eval, epi, ske_len, mat, seg_dim, &Xbodies[0], remote.size(), &lens[0], &remote[0]);
       basis[l].DimsLr[i + ibegin] = rank;
+      printf("%d %d\n", ske_len, rank);
     }
     neighbor_bcast_sizes_cpu(basis[l].DimsLr.data(), &comm[l]);
 

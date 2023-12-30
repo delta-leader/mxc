@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
   double theta = argc > 2 ? atof(argv[2]) : 1e0;
   int64_t leaf_size = argc > 3 ? atol(argv[3]) : 256;
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
-  double oversampling = argc > 5 ? atof(argv[5]) : 5.0;
+  int64_t oversampling = argc > 5 ? atol(argv[5]) : 10;
   const char* fname = argc > 6 ? argv[6] : NULL;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
   for (int64_t i = 0; i <= levels; i++)
     evalS(eval, nodes[i].S, &basis[i], &rels_far[i], &cell_comm[i]);
 
-  int64_t lenX = rels_near[levels].N * basis[levels].dimN;
+  int64_t lenX = llen * basis[levels].dimN;
   std::vector<double> X1(lenX, 0);
   std::vector<double> X2(lenX, 0);
 

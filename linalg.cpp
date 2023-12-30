@@ -51,28 +51,32 @@ void gen_matrix(const EvalDouble& Eval, int64_t m, int64_t n, const double* bi, 
   });
 }
 
-int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Nfar, const double Fbodies[]) {
+int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Lfar, int64_t Nfar[], const double* Fbodies[]) {
 
-  if (M > 0 && Nfar > 0) {
-    std::vector<double> Aall(M * std::max(M, Nfar)), U(M * M), S(M * 3);
+  if (M > 0 && Lfar > 0) {
+    int64_t N = std::accumulate(Nfar, &Nfar[Lfar], 0), loc = 0;
+    std::vector<double> Aall(M * std::max(M, N)), U(M * M), S(M * 3);
     std::vector<int32_t> ipiv(M, 0);
-    gen_matrix(eval, Nfar, M, Fbodies, Xbodies, &Aall[0], Nfar);
+    for (int64_t i = 0; i < Lfar; i++) {
+      gen_matrix(eval, Nfar[i], M, Fbodies[i], Xbodies, &Aall[loc], N);
+      loc = loc + Nfar[i];
+    }
 
-    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, Nfar, M, &Aall[0], Nfar, &ipiv[0], &S[0]);
-    LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &Aall[1], Nfar);
+    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, N, M, &Aall[0], N, &ipiv[0], &S[0]);
+    LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &Aall[1], N);
     int64_t rank = 0;
     double s0 = std::abs(epi * Aall[0]);
-    while (rank < M && rank < Nfar && s0 <= std::abs(Aall[rank * (Nfar + 1)]))
+    while (rank < M && rank < N && s0 <= std::abs(Aall[rank * (N + 1)]))
       ++rank;
     
     if (rank > 0) {
       if (rank < M)
-        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, 1., &Aall[0], Nfar, &Aall[rank * Nfar], Nfar);
-      LAPACKE_dlaset(LAPACK_COL_MAJOR, 'F', rank, rank, 0., 1., &Aall[0], Nfar);
+        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, 1., &Aall[0], N, &Aall[rank * N], N);
+      LAPACKE_dlaset(LAPACK_COL_MAJOR, 'F', rank, rank, 0., 1., &Aall[0], N);
 
       for (int64_t i = 0; i < M; i++) {
         int64_t piv = (int64_t)ipiv[i] - 1;
-        std::copy(&Aall[i * Nfar], &Aall[i * Nfar + rank], &U[piv * M]);
+        std::copy(&Aall[i * N], &Aall[i * N + rank], &U[piv * M]);
         std::copy(&Xbodies[piv * 3], &Xbodies[piv * 3 + 3], &S[i * 3]);
       }
       std::copy(&S[0], &S[M * 3], Xbodies);

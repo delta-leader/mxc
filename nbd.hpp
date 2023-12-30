@@ -34,7 +34,7 @@ void mmult(char ta, char tb, const struct Matrix* A, const struct Matrix* B, str
 
 void mul_AS(const struct Matrix* RU, const struct Matrix* RV, struct Matrix* A);
 
-int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Nfar, const double Fbodies[]);
+int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Lfar, int64_t Nfar[], const double* Fbodies[]);
 
 void mat_vec_reference(const EvalDouble& eval, int64_t begin, int64_t end, double B[], int64_t nbodies, const double* bodies, const double Xbodies[]);
 

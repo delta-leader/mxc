@@ -37,11 +37,11 @@ void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[
     }
 
     if (i < levels) {
-      int64_t ploc = 0;
-      content_length(NULL, NULL, &ploc, &comm[i + 1]);
+      int64_t ploc = 0, p_i = 0;
+      content_length(&p_i, NULL, &ploc, &comm[i + 1]);
       int64_t seg = basis[i + 1].dimS;
 
-      for (int64_t j = 0; j < rels_near[i].N; j++) {
+      for (int64_t j = 0; j < n_i; j++) {
         int64_t x0 = std::get<0>(comm[i].LocalChild[j + nloc]) - ploc;
         int64_t lenx = std::get<1>(comm[i].LocalChild[j + nloc]);
 
@@ -51,7 +51,7 @@ void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[
           int64_t leny = std::get<1>(comm[i].LocalChild[li]);
           
           for (int64_t x = 0; x < lenx; x++)
-            if ((x + x0) >= 0 && (x + x0) < rels_far[i + 1].N)
+            if ((x + x0) >= 0 && (x + x0) < p_i)
               for (int64_t yx = rels_far[i + 1].RowIndex[x + x0]; yx < rels_far[i + 1].RowIndex[x + x0 + 1]; yx++)
                 for (int64_t y = 0; y < leny; y++)
                   if (rels_far[i + 1].ColIndex[yx] == (y + y0))

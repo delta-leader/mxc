@@ -226,9 +226,7 @@ void relations(CSR rels[], const CSR* cellRel, int64_t levels, const struct Cell
     ibegin = comm[i].iGlobal(ibegin);
     CSR* csc = &rels[i];
 
-    csc->M = neighbors;
-    csc->N = nodes;
-    int64_t ent_max = nodes * csc->M;
+    int64_t ent_max = nodes * neighbors;
     csc->RowIndex.resize(nodes + 1);
     csc->ColIndex.resize(ent_max);
 
