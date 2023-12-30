@@ -51,6 +51,11 @@ int main(int argc, char* argv[]) {
   }
   body_neutral_charge(&Xbody[0], Nbody, 999);
 
+  /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
+  cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
+  ncells = Nleaf + 1;
+  levels = 1;*/
+
   traverse('N', &cellNear, ncells, &cell[0], theta);
   traverse('F', &cellFar, ncells, &cell[0], theta);
 

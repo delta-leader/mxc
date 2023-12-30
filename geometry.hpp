@@ -149,18 +149,6 @@ void mesh_unit_sphere(double* bodies, int64_t nbodies, double r) {
   }
 }
 
-void magnify_reloc(double* bodies, int64_t nbodies, const double Ccur[], const double Cnew[], const double R[], double alpha) {
-  double Ra[3];
-  for (int64_t i = 0; i < 3; i++)
-    Ra[i] = R[i] * alpha;
-  for (int64_t i = 0; i < nbodies; i++) {
-    double* x_bi = &bodies[i * 3];
-    x_bi[0] = Cnew[0] + Ra[0] * (x_bi[0] - Ccur[0]);
-    x_bi[1] = Cnew[1] + Ra[1] * (x_bi[1] - Ccur[1]);
-    x_bi[2] = Cnew[2] + Ra[2] * (x_bi[2] - Ccur[2]);
-  }
-}
-
 void body_neutral_charge(double X[], int64_t nbodies, unsigned int seed) {
   std::mt19937 gen(seed);
   std::uniform_real_distribution<> dis(0., 1.);
