@@ -160,7 +160,7 @@ void traverse(char NoF, CSR* rels, int64_t ncells, const struct Cell* cells, dou
   getList(NoF, rel_arr, cells, 0, 0, theta);
   std::sort(rel_arr.begin(), rel_arr.end(), 
     [](const std::pair<int64_t, int64_t>& a, const std::pair<int64_t, int64_t>& b) -> bool 
-      { return ((std::get<1>(a) == std::get<1>(b)) && (std::get<0>(a) < std::get<0>(b))) || (std::get<1>(a) < std::get<1>(b)); });
+      { return ((a.second == b.second) && (a.first < b.first)) || (a.second < b.second); });
 
   int64_t len = rel_arr.size();
   rels->RowIndex.resize(ncells + 1);
@@ -168,8 +168,8 @@ void traverse(char NoF, CSR* rels, int64_t ncells, const struct Cell* cells, dou
 
   int64_t loc = -1;
   for (int64_t i = 0; i < len; i++) {
-    int64_t x = std::get<1>(rel_arr[i]);
-    int64_t y = std::get<0>(rel_arr[i]);
+    int64_t x = rel_arr[i].second;
+    int64_t y = rel_arr[i].first;
     rels->ColIndex[i] = y;
     while (x > loc)
       rels->RowIndex[++loc] = i;

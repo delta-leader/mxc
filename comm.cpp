@@ -25,8 +25,8 @@ MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& unique_comms, int color, i
 
 std::pair<int64_t, int64_t> local_to_pnx(int64_t ilocal, const std::vector<std::pair<int64_t, int64_t>>& ProcBoxes) {
   int64_t iter = 0;
-  while (iter < (int64_t)ProcBoxes.size() && std::get<1>(ProcBoxes[iter]) <= ilocal) {
-    ilocal = ilocal - std::get<1>(ProcBoxes[iter]);
+  while (iter < (int64_t)ProcBoxes.size() && ProcBoxes[iter].second <= ilocal) {
+    ilocal = ilocal - ProcBoxes[iter].second;
     iter = iter + 1;
   }
   if (0 <= ilocal && iter < (int64_t)ProcBoxes.size())
@@ -37,30 +37,30 @@ std::pair<int64_t, int64_t> local_to_pnx(int64_t ilocal, const std::vector<std::
 
 std::pair<int64_t, int64_t> global_to_pnx(int64_t iglobal, const std::vector<std::pair<int64_t, int64_t>>& ProcBoxes) {
   int64_t iter = 0;
-  while (iter < (int64_t)ProcBoxes.size() && (std::get<0>(ProcBoxes[iter]) + std::get<1>(ProcBoxes[iter])) <= iglobal)
+  while (iter < (int64_t)ProcBoxes.size() && (ProcBoxes[iter].first + ProcBoxes[iter].second) <= iglobal)
     iter = iter + 1;
-  if (iter < (int64_t)ProcBoxes.size() && std::get<0>(ProcBoxes[iter]) <= iglobal)
-    return std::make_pair(iter, iglobal - std::get<0>(ProcBoxes[iter]));
+  if (iter < (int64_t)ProcBoxes.size() && ProcBoxes[iter].first <= iglobal)
+    return std::make_pair(iter, iglobal - ProcBoxes[iter].first);
   else
     return std::make_pair(-1, -1);
 }
 
 int64_t pnx_to_local(std::pair<int64_t, int64_t> pnx, const std::vector<std::pair<int64_t, int64_t>>& ProcBoxes) {
-  if (std::get<0>(pnx) >= 0 && std::get<0>(pnx) < (int64_t)ProcBoxes.size() && std::get<1>(pnx) >= 0) {
+  if (pnx.first >= 0 && pnx.first < (int64_t)ProcBoxes.size() && pnx.second >= 0) {
     int64_t iter = 0, slen = 0;
-    while (iter < std::get<0>(pnx)) {
-      slen = slen + std::get<1>(ProcBoxes[iter]);
+    while (iter < pnx.first) {
+      slen = slen + ProcBoxes[iter].second;
       iter = iter + 1;
     }
-    return std::get<1>(pnx) + slen;
+    return pnx.second + slen;
   }
   else
     return -1;
 }
 
 int64_t pnx_to_global(std::pair<int64_t, int64_t> pnx, const std::vector<std::pair<int64_t, int64_t>>& ProcBoxes) {
-  if (std::get<0>(pnx) >= 0 && std::get<0>(pnx) < (int64_t)ProcBoxes.size() && std::get<1>(pnx) >= 0)
-    return std::get<1>(pnx) + std::get<0>(ProcBoxes[std::get<0>(pnx)]);
+  if (pnx.first >= 0 && pnx.first < (int64_t)ProcBoxes.size() && pnx.second >= 0)
+    return pnx.second + ProcBoxes[pnx.first].first;
   else
     return -1;
 }
@@ -73,10 +73,10 @@ void get_level_procs(std::vector<std::pair<int64_t, int64_t>>& Procs, std::vecto
   levels_cell[0] = 0;
 
   for (int64_t i = 0; i < ncells; i++) {
-    int64_t child = std::get<0>(Child[i]);
-    int64_t lenC = std::get<1>(Child[i]);
-    int64_t lenP = std::get<1>(Procs[i]) - std::get<0>(Procs[i]);
-    int64_t p = std::get<0>(Procs[i]);
+    int64_t child = Child[i].first;
+    int64_t lenC = Child[i].second;
+    int64_t lenP = Procs[i].second - Procs[i].first;
+    int64_t p = Procs[i].first;
     
     if (child >= 0 && lenC > 0) {
       double divP = (double)lenP / (double)lenC;
@@ -98,11 +98,11 @@ void get_level_procs(std::vector<std::pair<int64_t, int64_t>>& Procs, std::vecto
       std::find(levels_cell.begin() + begin, levels_cell.end(), i + 1));
     int64_t pbegin = std::distance(Procs.begin(), 
       std::find_if(Procs.begin() + ibegin, Procs.begin() + iend, [=](std::pair<int64_t, int64_t>& p) -> bool {
-        return std::get<0>(p) <= mpi_rank && mpi_rank < std::get<1>(p);
+        return p.first <= mpi_rank && mpi_rank < p.second;
       }));
     int64_t pend = std::distance(Procs.begin(), 
       std::find_if_not(Procs.begin() + pbegin, Procs.begin() + iend, [=](std::pair<int64_t, int64_t>& p) -> bool {
-        return std::get<0>(p) <= mpi_rank && mpi_rank < std::get<1>(p);
+        return p.first <= mpi_rank && mpi_rank < p.second;
       }));
     Levels[i] = std::make_pair(pbegin, pend);
     begin = iend;
@@ -124,19 +124,19 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
   get_level_procs(Procs, Levels, mpi_rank, mpi_size, Child, levels);
 
   for (int64_t i = levels; i >= 0; i--) {
-    int64_t mbegin = std::get<0>(Levels[i]);
-    int64_t mend = std::get<1>(Levels[i]);
-    int64_t p = std::get<0>(Procs[mbegin]);
-    int64_t lenp = std::get<1>(Procs[mbegin]) - p;
+    int64_t mbegin = Levels[i].first;
+    int64_t mend = Levels[i].second;
+    int64_t p = Procs[mbegin].first;
+    int64_t lenp = Procs[mbegin].second - p;
 
     std::vector<int64_t> ProcTargets;
     for (int64_t j = 0; j < mpi_size; j++) {
       int is_ngb = 0;
       for (int64_t k = cellNear->RowIndex[mbegin]; k < cellNear->RowIndex[mend]; k++)
-        if (std::get<0>(Procs[cellNear->ColIndex[k]]) == j)
+        if (Procs[cellNear->ColIndex[k]].first == j)
           is_ngb = 1;
       for (int64_t k = cellFar->RowIndex[mbegin]; k < cellFar->RowIndex[mend]; k++)
-        if (std::get<0>(Procs[cellFar->ColIndex[k]]) == j)
+        if (Procs[cellFar->ColIndex[k]].first == j)
           is_ngb = 1;
       
       int color = (is_ngb && p == mpi_rank) ? 1 : MPI_UNDEFINED;
@@ -155,11 +155,11 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
     comms[i].Proc = std::distance(ProcTargets.begin(), std::find(ProcTargets.begin(), ProcTargets.end(), p));
 
     int color = MPI_UNDEFINED;
-    int64_t cc = std::get<0>(Child[mbegin]);
-    int64_t clen = std::get<1>(Child[mbegin]);
+    int64_t cc = Child[mbegin].first;
+    int64_t clen = Child[mbegin].second;
     if (lenp > 1 && cc >= 0)
       for (int64_t j = 0; j < clen; j++)
-        if (std::get<0>(Procs[cc + j]) == mpi_rank)
+        if (Procs[cc + j].first == mpi_rank)
           color = p;
     comms[i].Comm_merge = MPI_Comm_split_unique(unique_comms, color, mpi_rank);
   
@@ -170,22 +170,22 @@ void buildComm(struct CellComm* comms, int64_t ncells, const struct Cell* cells,
     comms[i].ProcBoxes = std::vector<std::pair<int64_t, int64_t>>(ProcTargets.size(), local);
 
     for (int64_t j = 0; j < (int64_t)comms[i].Comm_box.size(); j++)
-      MPI_Bcast(&comms[i].ProcBoxes[j], sizeof(std::pair<int64_t, int64_t>), MPI_BYTE, std::get<0>(comms[i].Comm_box[j]), std::get<1>(comms[i].Comm_box[j]));
+      MPI_Bcast(&comms[i].ProcBoxes[j], sizeof(std::pair<int64_t, int64_t>), MPI_BYTE, comms[i].Comm_box[j].first, comms[i].Comm_box[j].second);
     if (comms[i].Comm_share != MPI_COMM_NULL)
       MPI_Bcast(&comms[i].ProcBoxes[0], sizeof(std::pair<int64_t, int64_t>) * comms[i].ProcBoxes.size(), MPI_BYTE, 0, comms[i].Comm_share);
 
     for (int64_t j = 0; j < (int64_t)comms[i].ProcBoxes.size(); j++)
-      for (int64_t k = 0; k < std::get<1>(comms[i].ProcBoxes[j]); k++) {
-        int64_t ki = k + std::get<0>(comms[i].ProcBoxes[j]);
+      for (int64_t k = 0; k < comms[i].ProcBoxes[j].second; k++) {
+        int64_t ki = k + comms[i].ProcBoxes[j].first;
         int64_t li = pnx_to_local(std::make_pair(j, k), comms[i].ProcBoxes);
-        int64_t lc = std::get<0>(Child[ki]);
-        int64_t lclen = std::get<1>(Child[ki]);
+        int64_t lc = Child[ki].first;
+        int64_t lclen = Child[ki].second;
         if (i < levels) {
           std::pair<int64_t, int64_t> pnx = global_to_pnx(lc, comms[i + 1].ProcBoxes);
           lc = pnx_to_local(pnx, comms[i + 1].ProcBoxes);
           if (lc >= 0)
             std::for_each(comms[i + 1].LocalParent.begin() + lc, comms[i + 1].LocalParent.begin() + (lc + lclen), 
-              [&](std::pair<int64_t, int64_t>& x) { std::get<0>(x) = li; std::get<1>(x) = std::distance(&comms[i + 1].LocalParent[lc], &x); });
+              [&](std::pair<int64_t, int64_t>& x) { x.first = li; x.second = std::distance(&comms[i + 1].LocalParent[lc], &x); });
           else
             lclen = 0;
         }
@@ -200,7 +200,7 @@ void cellComm_free(struct CellComm* comms, int64_t levels) {
 
   for (int64_t i = 0; i <= levels; i++) {
     for (int64_t j = 0; j < (int64_t)comms[i].Comm_box.size(); j++)
-      mpi_comms.emplace_back(std::get<1>(comms[i].Comm_box[j]));
+      mpi_comms.emplace_back(comms[i].Comm_box[j].second);
     if (comms[i].Comm_merge != MPI_COMM_NULL)
       mpi_comms.emplace_back(comms[i].Comm_merge);
     if (comms[i].Comm_share != MPI_COMM_NULL)
@@ -260,8 +260,8 @@ void content_length(int64_t* local, int64_t* neighbors, int64_t* local_off, cons
   int64_t slen = 0, offset = -1, len_self = -1;
   for (int64_t i = 0; i < (int64_t)comm->ProcBoxes.size(); i++) {
     if (i == comm->Proc)
-    { offset = slen; len_self = std::get<1>(comm->ProcBoxes[i]); }
-    slen = slen + std::get<1>(comm->ProcBoxes[i]);
+    { offset = slen; len_self = comm->ProcBoxes[i].second; }
+    slen = slen + comm->ProcBoxes[i].second;
   }
   if (local)
     *local = len_self;
@@ -276,9 +276,9 @@ void neighbor_bcast_sizes_cpu(int64_t* data, const struct CellComm* comm) {
     comm->record_mpi();
     int64_t y = 0;
     for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
-      int64_t llen = std::get<1>(comm->ProcBoxes[p]);
+      int64_t llen = comm->ProcBoxes[p].second;
       int64_t* loc = &data[y];
-      MPI_Bcast(loc, llen, MPI_INT64_T, std::get<0>(comm->Comm_box[p]), std::get<1>(comm->Comm_box[p]));
+      MPI_Bcast(loc, llen, MPI_INT64_T, comm->Comm_box[p].first, comm->Comm_box[p].second);
       y = y + llen;
     }
     content_length(NULL, &y, NULL, comm);
@@ -293,9 +293,9 @@ void neighbor_bcast_cpu(double* data, int64_t seg, const struct CellComm* comm) 
     comm->record_mpi();
     int64_t y = 0;
     for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
-      int64_t llen = std::get<1>(comm->ProcBoxes[p]) * seg;
+      int64_t llen = comm->ProcBoxes[p].second * seg;
       double* loc = &data[y];
-      MPI_Bcast(loc, llen, MPI_DOUBLE, std::get<0>(comm->Comm_box[p]), std::get<1>(comm->Comm_box[p]));
+      MPI_Bcast(loc, llen, MPI_DOUBLE, comm->Comm_box[p].first, comm->Comm_box[p].second);
       y = y + llen;
     }
     comm->record_mpi();
@@ -307,12 +307,12 @@ void neighbor_reduce_cpu(double* data, int64_t seg, const struct CellComm* comm)
     comm->record_mpi();
     int64_t y = 0;
     for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
-      int64_t llen = std::get<1>(comm->ProcBoxes[p]) * seg;
+      int64_t llen = comm->ProcBoxes[p].second * seg;
       double* loc = &data[y];
       if (p == comm->Proc)
-        MPI_Reduce(MPI_IN_PLACE, loc, llen, MPI_DOUBLE, MPI_SUM, std::get<0>(comm->Comm_box[p]), std::get<1>(comm->Comm_box[p]));
+        MPI_Reduce(MPI_IN_PLACE, loc, llen, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p].first, comm->Comm_box[p].second);
       else
-        MPI_Reduce(loc, loc, llen, MPI_DOUBLE, MPI_SUM, std::get<0>(comm->Comm_box[p]), std::get<1>(comm->Comm_box[p]));
+        MPI_Reduce(loc, loc, llen, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p].first, comm->Comm_box[p].second);
       y = y + llen;
     }
     comm->record_mpi();

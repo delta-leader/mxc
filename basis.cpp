@@ -33,8 +33,8 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
     std::vector<int64_t> celli(xlen, 0);
 
     for (int64_t i = 0; i < xlen; i++) {
-      int64_t childi = std::get<0>(comm[l].LocalChild[i]);
-      int64_t clen = std::get<1>(comm[l].LocalChild[i]);
+      int64_t childi = comm[l].LocalChild[i].first;
+      int64_t clen = comm[l].LocalChild[i].second;
       int64_t gi = comm[l].iGlobal(i);
       celli[i] = gi;
 
@@ -59,8 +59,8 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
       int64_t seg = basis[l + 1].dimS;
       for (int64_t i = 0; i < nodes; i++) {
         int64_t dim = basis[l].Dims[i + ibegin];
-        int64_t childi = std::get<0>(comm[l].LocalChild[i + ibegin]);
-        int64_t clen = std::get<1>(comm[l].LocalChild[i + ibegin]);
+        int64_t childi = comm[l].LocalChild[i + ibegin].first;
+        int64_t clen = comm[l].LocalChild[i + ibegin].second;
 
         int64_t y = 0;
         for (int64_t j = 0; j < clen; j++) {
@@ -130,7 +130,7 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
       i2 = std::max(alignment, i2 - rem2 + (rem2 ? alignment : 0));
       max[0] = std::max(max[0], i1);
       max[1] = std::max(max[1], i2);
-      max[2] = std::max(max[2], std::get<1>(comm[l].LocalChild[i]));
+      max[2] = std::max(max[2], comm[l].LocalChild[i].second);
     }
     MPI_Allreduce(MPI_IN_PLACE, max, 3, MPI_INT64_T, MPI_MAX, MPI_COMM_WORLD);
 
@@ -156,8 +156,8 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
       int64_t M = basis[l].Dims[i];
 
       if (ibegin <= i && i < iend) {
-        int64_t child = std::get<0>(comm[l].LocalChild[i]);
-        int64_t clen = std::get<1>(comm[l].LocalChild[i]);
+        int64_t child = comm[l].LocalChild[i].first;
+        int64_t clen = comm[l].LocalChild[i].second;
         if (child >= 0 && l < levels) {
           int64_t row = 0;
           for (int64_t j = 0; j < clen; j++) {
