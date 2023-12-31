@@ -1,5 +1,5 @@
 
-#include <nbd.hpp>
+#include <linalg.hpp>
 #include <kernel.hpp>
 
 #include "lapacke.h"
@@ -8,13 +8,9 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
-#include <cstdio>
-#include <cstdlib>
 #include <array>
-#include <tuple>
 
-
-void mmult(char ta, char tb, const struct Matrix* A, const struct Matrix* B, struct Matrix* C, double alpha, double beta) {
+void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, double alpha, double beta) {
   int64_t k = ta == 'N' ? A->N : A->M;
   CBLAS_TRANSPOSE tac = ta == 'N' ? CblasNoTrans : CblasTrans;
   CBLAS_TRANSPOSE tbc = tb == 'N' ? CblasNoTrans : CblasTrans;
@@ -24,7 +20,7 @@ void mmult(char ta, char tb, const struct Matrix* A, const struct Matrix* B, str
   cblas_dgemm(CblasColMajor, tac, tbc, C->M, C->N, k, alpha, A->A, lda, B->A, ldb, beta, C->A, ldc);
 }
 
-void mul_AS(const struct Matrix* RU, const struct Matrix* RV, struct Matrix* A) {
+void mul_AS(const Matrix* RU, const Matrix* RV, Matrix* A) {
   if (A->M > 0 && A->N > 0) {
     std::vector<double> tmp(A->M * A->N);
     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, A->M, A->N, A->M, 1., RU->A, RU->LDA, A->A, A->LDA, 0., &tmp[0], A->M);

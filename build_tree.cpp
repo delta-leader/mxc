@@ -1,10 +1,11 @@
-#include <nbd.hpp>
 
-#include <cstdio>
-#include <cstdlib>
+#include <build_tree.hpp>
+#include <sparse_row.hpp>
+#include <basis.hpp>
+#include <comm.hpp>
+#include <linalg.hpp>
+
 #include <cmath>
-#include <cstring>
-
 #include <algorithm>
 #include <array>
 
@@ -74,8 +75,8 @@ int admis_check(double theta, const double C1[], const double C2[], const double
   return (int)(dC > dR);
 }
 
-void buildTree(struct Cell* cells, double* bodies, int64_t nbodies, int64_t levels) {
-  struct Cell* root = &cells[0];
+void buildTree(Cell* cells, double* bodies, int64_t nbodies, int64_t levels) {
+  Cell* root = &cells[0];
   root->Body[0] = 0;
   root->Body[1] = nbodies;
   get_bounds(bodies, nbodies, root->R, root->C);
@@ -83,7 +84,7 @@ void buildTree(struct Cell* cells, double* bodies, int64_t nbodies, int64_t leve
   int64_t nleaf = (int64_t)1 << levels;
   int64_t len = 1;
   for (int64_t i = 0; i < nleaf - 1; i++) {
-    struct Cell* ci = &cells[i];
+    Cell* ci = &cells[i];
     ci->Child[0] = -1;
     ci->Child[1] = -1;
 
@@ -100,8 +101,8 @@ void buildTree(struct Cell* cells, double* bodies, int64_t nbodies, int64_t leve
     sort_bodies(&bodies[i_begin * 3], nbody_i, sdim);
     int64_t loc = i_begin + nbody_i / 2;
 
-    struct Cell* c0 = &cells[len];
-    struct Cell* c1 = &cells[len + 1];
+    Cell* c0 = &cells[len];
+    Cell* c1 = &cells[len + 1];
     ci->Child[0] = len;
     ci->Child[1] = len + 2;
     len = len + 2;
@@ -116,7 +117,7 @@ void buildTree(struct Cell* cells, double* bodies, int64_t nbodies, int64_t leve
   }
 }
 
-void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t buckets[], int64_t levels) {
+void buildTreeBuckets(Cell* cells, const double* bodies, const int64_t buckets[], int64_t levels) {
   int64_t nleaf = (int64_t)1 << levels;
   int64_t count = 0;
   for (int64_t i = 0; i < nleaf; i++) {
@@ -142,7 +143,7 @@ void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t bu
   }
 }
 
-void getList(char NoF, std::vector<std::pair<int64_t, int64_t>>& rels, const struct Cell cells[], int64_t i, int64_t j, double theta) {
+void getList(char NoF, std::vector<std::pair<int64_t, int64_t>>& rels, const Cell cells[], int64_t i, int64_t j, double theta) {
   int admis = admis_check(theta, cells[i].C, cells[j].C, cells[i].R, cells[j].R);
   int write_far = NoF == 'F' || NoF == 'f';
   int write_near = NoF == 'N' || NoF == 'n';
@@ -155,7 +156,7 @@ void getList(char NoF, std::vector<std::pair<int64_t, int64_t>>& rels, const str
         getList(NoF, rels, cells, k, l, theta);
 }
 
-void traverse(char NoF, CSR* rels, int64_t ncells, const struct Cell* cells, double theta) {
+void traverse(char NoF, CSR* rels, int64_t ncells, const Cell* cells, double theta) {
   std::vector<std::pair<int64_t, int64_t>> rel_arr;
   getList(NoF, rel_arr, cells, 0, 0, theta);
   std::sort(rel_arr.begin(), rel_arr.end(), 
@@ -178,7 +179,7 @@ void traverse(char NoF, CSR* rels, int64_t ncells, const struct Cell* cells, dou
     rels->RowIndex[i] = len;
 }
 
-void loadX(double* X, int64_t seg, const double Xbodies[], int64_t Xbegin, int64_t ncells, const struct Cell cells[]) {
+void loadX(double* X, int64_t seg, const double Xbodies[], int64_t Xbegin, int64_t ncells, const Cell cells[]) {
   for (int64_t i = 0; i < ncells; i++) {
     int64_t b0 = cells[i].Body[0] - Xbegin;
     int64_t lenB = cells[i].Body[1] - cells[i].Body[0];
@@ -187,14 +188,14 @@ void loadX(double* X, int64_t seg, const double Xbodies[], int64_t Xbegin, int64
   }
 }
 
-void evalD(const EvalDouble& eval, struct Matrix* D, const CSR* rels, const struct Cell* cells, const double* bodies, const struct CellComm* comm) {
+void evalD(const EvalDouble& eval, Matrix* D, const CSR* rels, const Cell* cells, const double* bodies, const CellComm* comm) {
   int64_t ibegin = 0, nodes = 0;
   content_length(&nodes, NULL, &ibegin, comm);
   ibegin = comm->iGlobal(ibegin);
 
   for (int64_t i = 0; i < nodes; i++) {
     int64_t lc = ibegin + i;
-    const struct Cell* ci = &cells[lc];
+    const Cell* ci = &cells[lc];
     int64_t nbegin = rels->RowIndex[lc];
     int64_t nlen = rels->RowIndex[lc + 1] - nbegin;
     const int64_t* ngbs = &rels->ColIndex[nbegin];
@@ -204,7 +205,7 @@ void evalD(const EvalDouble& eval, struct Matrix* D, const CSR* rels, const stru
 
     for (int64_t j = 0; j < nlen; j++) {
       int64_t lj = ngbs[j];
-      const struct Cell* cj = &cells[lj];
+      const Cell* cj = &cells[lj];
       int64_t y_begin = cj->Body[0];
       int64_t m = cj->Body[1] - y_begin;
       gen_matrix(eval, n, m, &bodies[x_begin * 3], &bodies[y_begin * 3], D[offsetD + j].A, D[offsetD + j].LDA);
@@ -212,7 +213,7 @@ void evalD(const EvalDouble& eval, struct Matrix* D, const CSR* rels, const stru
   }
 }
 
-void evalS(const EvalDouble& eval, struct Matrix* S, const struct Base* basis, const CSR* rels, const struct CellComm* comm) {
+void evalS(const EvalDouble& eval, Matrix* S, const Base* basis, const CSR* rels, const CellComm* comm) {
   int64_t ibegin = 0, nodes = 0;
   content_length(&nodes, NULL, &ibegin, comm);
   int64_t seg = basis->dimS * 3;

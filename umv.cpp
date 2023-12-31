@@ -1,5 +1,9 @@
 
-#include <nbd.hpp>
+#include <umv.hpp>
+#include <basis.hpp>
+#include <sparse_row.hpp>
+#include <comm.hpp>
+#include <linalg.hpp>
 
 #include <cstdio>
 #include <cstring>
@@ -8,14 +12,14 @@
 #include <cstdlib>
 #include <algorithm>
 
-void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[], const CSR rels_far[], const struct CellComm comm[], int64_t levels) {
+void allocNodes(Node A[], const Base basis[], const CSR rels_near[], const CSR rels_far[], const CellComm comm[], int64_t levels) {
   for (int64_t i = levels; i >= 0; i--) {
     int64_t n_i = 0, ulen = 0, nloc = 0;
     content_length(&n_i, &ulen, &nloc, &comm[i]);
     int64_t nnz = rels_near[i].RowIndex[n_i];
     int64_t nnz_f = rels_far[i].RowIndex[n_i];
 
-    struct Matrix* arr_m = (struct Matrix*)malloc(sizeof(struct Matrix) * (nnz + nnz_f));
+    Matrix* arr_m = (Matrix*)malloc(sizeof(Matrix) * (nnz + nnz_f));
     A[i].A = arr_m;
     A[i].S = &arr_m[nnz];
     A[i].lenA = nnz;
@@ -30,10 +34,10 @@ void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[
 
     for (int64_t x = 0; x < n_i; x++) {
       for (int64_t yx = rels_near[i].RowIndex[x]; yx < rels_near[i].RowIndex[x + 1]; yx++)
-        arr_m[yx] = (struct Matrix) { &A[i].A_ptr[yx * stride], dimn, dimn, dimn }; // A
+        arr_m[yx] = (Matrix) { &A[i].A_ptr[yx * stride], dimn, dimn, dimn }; // A
 
       for (int64_t yx = rels_far[i].RowIndex[x]; yx < rels_far[i].RowIndex[x + 1]; yx++)
-        arr_m[yx + nnz] = (struct Matrix) { NULL, basis[i].dimS, basis[i].dimS, dimn_up }; // S
+        arr_m[yx + nnz] = (Matrix) { NULL, basis[i].dimS, basis[i].dimS, dimn_up }; // S
     }
 
     if (i < levels) {
@@ -88,20 +92,20 @@ void allocNodes(struct Node A[], const struct Base basis[], const CSR rels_near[
   }
 }
 
-void node_free(struct Node* node) {
+void node_free(Node* node) {
   free(node->A_ptr);
   free(node->X_ptr);
   free(node->A);
 }
 
-struct RightHandSides { struct Matrix *X, *Xc, *Xo, *B; };
+class RightHandSides { public: Matrix *X, *Xc, *Xo, *B; };
 
-void allocRightHandSidesMV(struct RightHandSides rhs[], const struct Base base[], const struct CellComm comm[], int64_t levels) {
+void allocRightHandSidesMV(RightHandSides rhs[], const Base base[], const CellComm comm[], int64_t levels) {
   for (int64_t l = 0; l <= levels; l++) {
     int64_t len;
     content_length(NULL, &len, NULL, &comm[l]);
     int64_t len_arr = len * 4;
-    struct Matrix* arr_m = (struct Matrix*)calloc(len_arr, sizeof(struct Matrix));
+    Matrix* arr_m = (Matrix*)calloc(len_arr, sizeof(Matrix));
     rhs[l].X = arr_m;
     rhs[l].B = &arr_m[len];
     rhs[l].Xo = &arr_m[len * 2];
@@ -111,26 +115,26 @@ void allocRightHandSidesMV(struct RightHandSides rhs[], const struct Base base[]
     double* data = (double*)calloc(len_data, sizeof(double));
     for (int64_t i = 0; i < len; i++) {
       std::pair<int64_t, int64_t> p = comm[l].LocalParent[i];
-      arr_m[i] = (struct Matrix) { &data[i * base[l].dimN], base[l].dimN, 1, base[l].dimN }; // X
-      arr_m[i + len] = (struct Matrix) { &data[len * base[l].dimN + i * base[l].dimN], base[l].dimN, 1, base[l].dimN }; // B
+      arr_m[i] = (Matrix) { &data[i * base[l].dimN], base[l].dimN, 1, base[l].dimN }; // X
+      arr_m[i + len] = (Matrix) { &data[len * base[l].dimN + i * base[l].dimN], base[l].dimN, 1, base[l].dimN }; // B
 
       double* x_next = (l == 0) ? NULL : &rhs[l - 1].X[0].A[std::get<1>(p) * base[l].dimS + std::get<0>(p) * base[l - 1].dimN];
-      arr_m[i + len * 2] = (struct Matrix) { x_next, base[l].dimS, 1, base[l].dimS }; // Xo
+      arr_m[i + len * 2] = (Matrix) { x_next, base[l].dimS, 1, base[l].dimS }; // Xo
 
       double* b_next = (l == 0) ? NULL : &rhs[l - 1].B[0].A[std::get<1>(p) * base[l].dimS + std::get<0>(p) * base[l - 1].dimN];
-      arr_m[i + len * 3] = (struct Matrix) { b_next, base[l].dimS, 1, base[l].dimS }; // Xc
+      arr_m[i + len * 3] = (Matrix) { b_next, base[l].dimS, 1, base[l].dimS }; // Xc
     }
   }
 }
 
-void rightHandSides_free(struct RightHandSides* rhs) {
+void rightHandSides_free(RightHandSides* rhs) {
   double* data = rhs->X[0].A;
   if (data)
     free(data);
   free(rhs->X);
 }
 
-void matVecA(const struct Node A[], const struct Base basis[], const CSR rels_near[], double* X, const struct CellComm comm[], int64_t levels) {
+void matVecA(const Node A[], const Base basis[], const CSR rels_near[], double* X, const CellComm comm[], int64_t levels) {
   int64_t lbegin = 0, llen = 0;
   content_length(&llen, NULL, &lbegin, &comm[levels]);
 

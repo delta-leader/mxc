@@ -1,12 +1,12 @@
 
 #include <geometry.hpp>
 #include <kernel.hpp>
-#include <nbd.hpp>
-
-#include <omp.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
+#include <build_tree.hpp>
+#include <basis.hpp>
+#include <comm.hpp>
+#include <sparse_row.hpp>
+#include <linalg.hpp>
+#include <umv.hpp>
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);

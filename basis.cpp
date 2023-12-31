@@ -1,12 +1,13 @@
 
-#include <nbd.hpp>
+#include <basis.hpp>
+#include <build_tree.hpp>
+#include <comm.hpp>
+#include <sparse_row.hpp>
+#include <linalg.hpp>
 
-#include <cstdio>
-#include <cstdlib>
-#include <cmath>
-#include <cstring>
 #include <algorithm>
 #include <numeric>
+#include <cstring>
 
 template <typename T>
 void memcpy2d(T* dst, const T* src, int64_t rows, int64_t cols, int64_t ld_dst, int64_t ld_src) {
@@ -17,8 +18,8 @@ void memcpy2d(T* dst, const T* src, int64_t rows, int64_t cols, int64_t ld_dst, 
       std::copy(&src[i * ld_src], &src[i * ld_src + rows], &dst[i * ld_dst]);
 }
 
-void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells, const CSR* rel_near, int64_t levels,
-  const struct CellComm* comm, const double* bodies, int64_t nbodies, double epi, int64_t alignment) {
+void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* rel_near, int64_t levels,
+  const CellComm* comm, const double* bodies, int64_t nbodies, double epi, int64_t alignment) {
 
   for (int64_t l = levels; l >= 0; l--) {
     int64_t xlen = 0, ibegin = 0, nodes = 0;
@@ -27,7 +28,7 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
     basis[l].Dims = std::vector<int64_t>(xlen, 0);
     basis[l].DimsLr = std::vector<int64_t>(xlen, 0);
 
-    struct Matrix* arr_m = (struct Matrix*)calloc(xlen * 2, sizeof(struct Matrix));
+    Matrix* arr_m = (Matrix*)calloc(xlen * 2, sizeof(Matrix));
     basis[l].Uo = arr_m;
     basis[l].R = &arr_m[xlen];
     std::vector<int64_t> celli(xlen, 0);
@@ -180,8 +181,8 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
           Ui_ptr[j] = 1.;
       }
 
-      basis[l].Uo[i] = (struct Matrix) { Uo_ptr, basis[l].dimN, basis[l].dimS, basis[l].dimN };
-      basis[l].R[i] = (struct Matrix) { R_ptr, basis[l].dimS, basis[l].dimS, basis[l].dimS };
+      basis[l].Uo[i] = (Matrix) { Uo_ptr, basis[l].dimN, basis[l].dimS, basis[l].dimN };
+      basis[l].R[i] = (Matrix) { R_ptr, basis[l].dimS, basis[l].dimS, basis[l].dimS };
     }
     neighbor_bcast_cpu(basis[l].M_cpu, 3 * basis[l].dimS, &comm[l]);
     comm[l].dup_bcast(basis[l].M_cpu, 3 * basis[l].dimS * xlen);
@@ -193,7 +194,7 @@ void buildBasis(const EvalDouble& eval, struct Base basis[], struct Cell* cells,
 }
 
 
-void basis_free(struct Base* basis) {
+void basis_free(Base* basis) {
   free(basis->Uo);
   if (basis->M_cpu)
     free(basis->M_cpu);
