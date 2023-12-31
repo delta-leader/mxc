@@ -271,10 +271,9 @@ void content_length(int64_t* local, int64_t* neighbors, int64_t* local_off, cons
     *local_off = offset;
 }
 
-int64_t neighbor_bcast_sizes_cpu(int64_t* data, const struct CellComm* comm) {
-  int64_t max = 0;
+void neighbor_bcast_sizes_cpu(int64_t* data, const struct CellComm* comm) {
   if (comm->Comm_box.size() > 0 || comm->Comm_share != MPI_COMM_NULL) {
-    double start_time = MPI_Wtime();
+    comm->record_mpi();
     int64_t y = 0;
     for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
       int64_t llen = std::get<1>(comm->ProcBoxes[p]);
@@ -285,19 +284,13 @@ int64_t neighbor_bcast_sizes_cpu(int64_t* data, const struct CellComm* comm) {
     content_length(NULL, &y, NULL, comm);
     if (comm->Comm_share != MPI_COMM_NULL)
       MPI_Bcast(data, y, MPI_DOUBLE, 0, comm->Comm_share);
-
-    for (int64_t i = 0; i < y; i++)
-      max = std::max(max, data[i]);
-    MPI_Allreduce(MPI_IN_PLACE, &max, 1, MPI_INT64_T, MPI_MAX, MPI_COMM_WORLD);
-    if (comm->timer)
-      comm->timer->record_mpi(start_time, MPI_Wtime());
+    comm->record_mpi();
   }
-  return max;
 }
 
 void neighbor_bcast_cpu(double* data, int64_t seg, const struct CellComm* comm) {
   if (comm->Comm_box.size() > 0) {
-    double start_time = MPI_Wtime();
+    comm->record_mpi();
     int64_t y = 0;
     for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
       int64_t llen = std::get<1>(comm->ProcBoxes[p]) * seg;
@@ -305,14 +298,13 @@ void neighbor_bcast_cpu(double* data, int64_t seg, const struct CellComm* comm) 
       MPI_Bcast(loc, llen, MPI_DOUBLE, std::get<0>(comm->Comm_box[p]), std::get<1>(comm->Comm_box[p]));
       y = y + llen;
     }
-    if (comm->timer)
-      comm->timer->record_mpi(start_time, MPI_Wtime());
+    comm->record_mpi();
   }
 }
 
 void neighbor_reduce_cpu(double* data, int64_t seg, const struct CellComm* comm) {
   if (comm->Comm_box.size() > 0) {
-    double start_time = MPI_Wtime();
+    comm->record_mpi();
     int64_t y = 0;
     for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
       int64_t llen = std::get<1>(comm->ProcBoxes[p]) * seg;
@@ -323,26 +315,32 @@ void neighbor_reduce_cpu(double* data, int64_t seg, const struct CellComm* comm)
         MPI_Reduce(loc, loc, llen, MPI_DOUBLE, MPI_SUM, std::get<0>(comm->Comm_box[p]), std::get<1>(comm->Comm_box[p]));
       y = y + llen;
     }
-    if (comm->timer)
-      comm->timer->record_mpi(start_time, MPI_Wtime());
+    comm->record_mpi();
   }
 }
 
-void level_merge_cpu(double* data, int64_t len, const struct CellComm* comm) {
-  if (comm->Comm_merge != MPI_COMM_NULL) {
-    double start_time = MPI_Wtime();
-    MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_DOUBLE, MPI_SUM, comm->Comm_merge);
-    if (comm->timer)
-      comm->timer->record_mpi(start_time, MPI_Wtime());
+void CellComm::level_merge(double* data, int64_t len) const {
+  if (Comm_merge != MPI_COMM_NULL) {
+    record_mpi();
+    MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_DOUBLE, MPI_SUM, Comm_merge);
+    record_mpi();
   }
 }
 
-void dup_bcast_cpu(double* data, int64_t len, const struct CellComm* comm) {
-  if (comm->Comm_share != MPI_COMM_NULL) {
-    double start_time = MPI_Wtime();
-    MPI_Bcast(data, len, MPI_DOUBLE, 0, comm->Comm_share);
-    if (comm->timer)
-      comm->timer->record_mpi(start_time, MPI_Wtime());
+void CellComm::dup_bcast(double* data, int64_t len) const {
+  if (Comm_share != MPI_COMM_NULL) {
+    record_mpi();
+    MPI_Bcast(data, len, MPI_DOUBLE, 0, Comm_share);
+    record_mpi();
+  }
+}
+
+void CellComm::record_mpi() const {
+  if (timer && timer->second == 0.)
+    timer->second = MPI_Wtime();
+  else if (timer) {
+    timer->first = MPI_Wtime() - timer->second;
+    timer->second = 0.;
   }
 }
 

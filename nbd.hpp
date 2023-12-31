@@ -44,8 +44,6 @@ void buildTreeBuckets(struct Cell* cells, const double* bodies, const int64_t bu
 
 void traverse(char NoF, CSR* rels, int64_t ncells, const struct Cell* cells, double theta);
 
-void countMaxIJ(int64_t* max_i, int64_t* max_j, const CSR* rels);
-
 void loadX(double* X, int64_t seg, const double Xbodies[], int64_t Xbegin, int64_t ncells, const struct Cell cells[]);
 
 void evalD(const EvalDouble& eval, struct Matrix* D, const CSR* rels, const struct Cell* cells, const double* bodies, const struct CellComm* comm);

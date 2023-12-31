@@ -142,16 +142,16 @@ void matVecA(const struct Node A[], const struct Base basis[], const CSR rels_ne
     int64_t ibegin = 0, iboxes = 0, xlen = 0;
     content_length(&iboxes, &xlen, &ibegin, &comm[i]);
 
-    level_merge_cpu(rhs[i].X[0].A, xlen * basis[i].dimN, &comm[i]);
+    comm[i].level_merge(rhs[i].X[0].A, xlen * basis[i].dimN);
     neighbor_bcast_cpu(rhs[i].X[0].A, basis[i].dimN, &comm[i]);
-    dup_bcast_cpu(rhs[i].X[0].A, xlen * basis[i].dimN, &comm[i]);
+    comm[i].dup_bcast(rhs[i].X[0].A, xlen * basis[i].dimN);
 
     for (int64_t j = 0; j < iboxes; j++)
       mmult('T', 'N', &basis[i].Uo[j + ibegin], &rhs[i].X[j + ibegin], &rhs[i].Xo[j + ibegin], 1., 0.);
   }
 
-  level_merge_cpu(rhs[0].X[0].A, basis[0].dimN, &comm[0]);
-  dup_bcast_cpu(rhs[0].X[0].A, basis[0].dimN, &comm[0]);
+  comm[0].level_merge(rhs[0].X[0].A, basis[0].dimN);
+  comm[0].dup_bcast(rhs[0].X[0].A, basis[0].dimN);
   mmult('N', 'N', &A[0].A[0], &rhs[0].X[0], &rhs[0].B[0], 1., 0.);
 
   for (int64_t i = 1; i <= levels; i++) {

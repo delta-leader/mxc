@@ -15,8 +15,7 @@ int main(int argc, char* argv[]) {
   double theta = argc > 2 ? atof(argv[2]) : 1e0;
   int64_t leaf_size = argc > 3 ? atol(argv[3]) : 256;
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
-  int64_t oversampling = argc > 5 ? atol(argv[5]) : 10;
-  const char* fname = argc > 6 ? argv[6] : NULL;
+  const char* fname = argc > 5 ? argv[5] : NULL;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   int64_t levels = (int64_t)log2((double)Nbody / leaf_size);
@@ -59,7 +58,7 @@ int main(int argc, char* argv[]) {
   traverse('N', &cellNear, ncells, &cell[0], theta);
   traverse('F', &cellFar, ncells, &cell[0], theta);
 
-  CommTimer timer;
+  std::pair<double, double> timer(0, 0);
   buildComm(&cell_comm[0], ncells, &cell[0], &cellFar, &cellNear, levels);
   for (int64_t i = 0; i <= levels; i++) {
     cell_comm[i].timer = &timer;
@@ -73,11 +72,12 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double construct_time = MPI_Wtime(), construct_comm_time;
-  buildBasis(eval, &basis[0], &cell[0], &cellNear, levels, &cell_comm[0], &body[0], Nbody, epi, oversampling, 4);
+  buildBasis(eval, &basis[0], &cell[0], &cellNear, levels, &cell_comm[0], &body[0], Nbody, epi, 4);
 
   MPI_Barrier(MPI_COMM_WORLD);
   construct_time = MPI_Wtime() - construct_time;
-  construct_comm_time = timer.get_comm_timing();
+  construct_comm_time = timer.first;
+  timer.first = 0;
 
   allocNodes(&nodes[0], &basis[0], &rels_near[0], &rels_far[0], &cell_comm[0], levels);
 
@@ -94,7 +94,8 @@ int main(int argc, char* argv[]) {
   matVecA(&nodes[0], &basis[0], &rels_near[0], &X1[0], &cell_comm[0], levels);
 
   matvec_time = MPI_Wtime() - matvec_time;
-  matvec_comm_time = timer.get_comm_timing();
+  matvec_comm_time = timer.first;
+  timer.first = 0;
 
   double cerr = 0.;
   int64_t body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
@@ -105,6 +106,8 @@ int main(int argc, char* argv[]) {
   solveRelErr(&cerr, &X1[0], &X2[0], lenX);
 
   std::cout << cerr << std::endl;
+  std::cout << construct_time << ", " << construct_comm_time << std::endl;
+  std::cout << matvec_time << ", " << matvec_comm_time << std::endl;
   
   for (int64_t i = 0; i <= levels; i++) {
     basis_free(&basis[i]);
