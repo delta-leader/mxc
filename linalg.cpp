@@ -92,21 +92,18 @@ int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, 
 }
 
 
-void mat_vec_reference(const EvalDouble& eval, int64_t begin, int64_t end, double B[], int64_t nbodies, const double* bodies, const double Xbodies[]) {
-  int64_t M = end - begin;
-  int64_t N = nbodies;
+void mat_vec_reference(const EvalDouble& eval, int64_t M, int64_t N, double B[], const double X[], const double ibodies[], const double jbodies[]) {
   int64_t size = 1024;
   std::vector<double> A(size * size);
   
   for (int64_t i = 0; i < M; i += size) {
-    int64_t y = begin + i;
     int64_t m = std::min(M - i, size);
-    const double* bi = &bodies[y * 3];
+    const double* bi = &ibodies[i * 3];
     for (int64_t j = 0; j < N; j += size) {
-      const double* bj = &bodies[j * 3];
+      const double* bj = &jbodies[j * 3];
       int64_t n = std::min(N - j, size);
       gen_matrix(eval, m, n, bi, bj, &A[0], size);
-      cblas_dgemv(CblasColMajor, CblasNoTrans, m, n, 1., &A[0], size, &Xbodies[j], 1, 1., &B[i], 1);
+      cblas_dgemv(CblasColMajor, CblasNoTrans, m, n, 1., &A[0], size, &X[j], 1, 1., &B[i], 1);
     }
   }
 }

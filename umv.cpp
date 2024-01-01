@@ -177,15 +177,3 @@ void matVecA(const Node A[], const Base basis[], const CSR* rels_near, double* X
     rightHandSides_free(&rhs[i]);
 }
 
-
-void solveRelErr(double* err_out, const double* X, const double* ref, int64_t lenX) {
-  double err[2] = { 0., 0. };
-  for (int64_t i = 0; i < lenX; i++) {
-    double diff = X[i] - ref[i];
-    err[0] = err[0] + diff * diff;
-    err[1] = err[1] + ref[i] * ref[i];
-  }
-  MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  *err_out = sqrt(err[0] / err[1]);
-}
-

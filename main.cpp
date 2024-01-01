@@ -89,9 +89,10 @@ int main(int argc, char* argv[]) {
   std::vector<double> X1(lenX, 0);
   std::vector<double> X2(lenX, 0);
 
-  loadX(&X1[0], basis[levels].dimN, &Xbody[0], 0, llen, &cell[gbegin]);
+  std::copy(Xbody.begin() + cell[gbegin].Body[0], Xbody.begin() + cell[gbegin + llen - 1].Body[1], &X1[0]);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matVecA(&nodes[0], &basis[0], &cellNear, &X1[0], &cell_comm[0], levels);
+  //matVecA(&nodes[0], &basis[0], &cellNear, &X1[0], &cell_comm[0], levels);
+  matVecA(eval, &basis[0], &body[0], &cell[0], &cellNear, &cellFar, &X1[0], &cell_comm[0], levels);
 
   matvec_time = MPI_Wtime() - matvec_time;
   matvec_comm_time = timer.first;
@@ -99,11 +100,9 @@ int main(int argc, char* argv[]) {
 
   double cerr = 0.;
   int64_t body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
-  std::vector<double> X3(lenX, 0);
-  mat_vec_reference(eval, body_local[0], body_local[1], &X3[0], Nbody, &body[0], &Xbody[0]);
-  loadX(&X2[0], basis[levels].dimN, &X3[0], body_local[0], llen, &cell[gbegin]);
+  mat_vec_reference(eval, body_local[1] - body_local[0], Nbody, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
 
-  solveRelErr(&cerr, &X1[0], &X2[0], lenX);
+  solveRelErr(&cerr, &X1[0], &X2[0], body_local[1] - body_local[0]);
 
   std::cout << cerr << std::endl;
   std::cout << construct_time << ", " << construct_comm_time << std::endl;

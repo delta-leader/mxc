@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cstring>
+#include <cmath>
 #include <tuple>
 
 template <typename T>
@@ -157,33 +158,13 @@ void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* re
       int64_t No = basis[l].DimsLr[i];
       int64_t M = basis[l].Dims[i];
 
-      if (ibegin <= i && i < iend) {
-        int64_t child = std::get<1>(celli[i]);
-        int64_t clen = std::get<2>(celli[i]);
-        if (child >= 0 && l < levels) {
-          int64_t row = 0;
-          for (int64_t j = 0; j < clen; j++) {
-            int64_t N = basis[l + 1].DimsLr[child + j];
-            int64_t Urow = j * basis[l + 1].dimS;
-            memcpy2d(&Uc_ptr[Urow], &MatrixData[SumLocalDims[i - ibegin].second + No * M + row], N, Nc, LD, M);
-            memcpy2d(&Uo_ptr[Urow], &MatrixData[SumLocalDims[i - ibegin].second + row], N, No, LD, M);
-            row = row + N;
-          }
-        }
-        else {
-          memcpy2d(Uc_ptr, &MatrixData[SumLocalDims[i - ibegin].second + No * M], M, Nc, LD, M);
-          memcpy2d(Uo_ptr, &MatrixData[SumLocalDims[i - ibegin].second], M, No, LD, M);
-        }
-        memcpy2d(R_ptr, &MatrixData[SumLocalDims[i - ibegin].second + M * M], No, No, basis[l].dimS, M);
-        memcpy(M_ptr, &Skeletons[SumLocalDims[i - ibegin].first], 3 * No * sizeof(double));
+      memcpy2d(Uc_ptr, &MatrixData[SumLocalDims[i - ibegin].second + No * M], M, Nc, LD, M);
+      memcpy2d(Uo_ptr, &MatrixData[SumLocalDims[i - ibegin].second], M, No, LD, M);
+      memcpy2d(R_ptr, &MatrixData[SumLocalDims[i - ibegin].second + M * M], No, No, basis[l].dimS, M);
+      memcpy(M_ptr, &Skeletons[SumLocalDims[i - ibegin].first], 3 * No * sizeof(double));
 
-        double* Ui_ptr = basis[l].U_cpu + xlen * stride + (i - ibegin) * basis[l].dimR; 
-        for (int64_t j = Nc; j < basis[l].dimR; j++)
-          Ui_ptr[j] = 1.;
-      }
-
-      basis[l].Uo[i] = (Matrix) { Uo_ptr, basis[l].dimN, basis[l].dimS, basis[l].dimN };
-      basis[l].R[i] = (Matrix) { R_ptr, basis[l].dimS, basis[l].dimS, basis[l].dimS };
+      basis[l].Uo[i] = (Matrix) { Uo_ptr, M, No, basis[l].dimN };
+      basis[l].R[i] = (Matrix) { R_ptr, No, No, basis[l].dimS };
     }
     neighbor_bcast_cpu(basis[l].M_cpu, 3 * basis[l].dimS, &comm[l]);
     comm[l].dup_bcast(basis[l].M_cpu, 3 * basis[l].dimS * xlen);
@@ -204,3 +185,117 @@ void basis_free(Base* basis) {
   if (basis->R_cpu)
     free(basis->R_cpu);
 }
+
+
+void matVecA(const EvalDouble& eval, const Base basis[], const double bodies[], const Cell cells[], const CSR* rels_near, const CSR* rels_far, double X[], const CellComm comm[], int64_t levels) {
+  int64_t lbegin = 0, llen = 0;
+  content_length(&llen, NULL, &lbegin, &comm[levels]);
+
+  std::vector<std::vector<double>> rhsX(levels + 1), rhsB(levels + 1);
+  std::vector<std::vector<double*>> rhsXptr(levels + 1), rhsXoptr(levels + 1), rhsBptr(levels + 1), rhsBoptr(levels + 1);
+
+  for (int64_t l = levels; l >= 0; l--) {
+    int64_t xlen = 0;
+    content_length(NULL, &xlen, NULL, &comm[l]);
+    std::vector<int64_t> offsets(xlen + 1);
+    std::inclusive_scan(basis[l].Dims.begin(), basis[l].Dims.end(), offsets.begin() + 1);
+
+    rhsX[l] = std::vector<double>(offsets[xlen], 0);
+    rhsB[l] = std::vector<double>(offsets[xlen], 0);
+    rhsXptr[l] = std::vector<double*>(xlen, NULL);
+    rhsBptr[l] = std::vector<double*>(xlen, NULL);
+    rhsXoptr[l] = std::vector<double*>(xlen, NULL);
+    rhsBoptr[l] = std::vector<double*>(xlen, NULL);
+
+    std::transform(offsets.begin(), offsets.begin() + xlen, rhsXptr[l].begin(), [&](const int64_t d) { return &rhsX[l][d]; });
+    std::transform(offsets.begin(), offsets.begin() + xlen, rhsBptr[l].begin(), [&](const int64_t d) { return &rhsB[l][d]; });
+
+    if (l < levels)
+      for (int64_t i = 0; i < xlen; i++) {
+        int64_t ci = comm[l].iGlobal(i);
+        int64_t child = comm[l + 1].iLocal(cells[ci].Child[0]);
+        int64_t clen = cells[ci].Child[1] - cells[ci].Child[0];
+
+        if (child >= 0 && clen > 0) {
+          std::vector<int64_t> offsets_child(clen + 1, 0);
+          std::inclusive_scan(&basis[l + 1].DimsLr[child], &basis[l + 1].DimsLr[child + clen], offsets_child.begin() + 1);
+          std::transform(offsets_child.begin(), offsets_child.begin() + clen, &rhsXoptr[l + 1][child], [&](const int64_t d) { return rhsXptr[l][i] + d; });
+          std::transform(offsets_child.begin(), offsets_child.begin() + clen, &rhsBoptr[l + 1][child], [&](const int64_t d) { return rhsBptr[l][i] + d; });
+        }
+      }
+  }
+
+  int64_t lenX = std::accumulate(&basis[levels].Dims[lbegin], &basis[levels].Dims[lbegin + llen], 0);
+  std::copy(X, &X[lenX], rhsXptr[levels][lbegin]);
+
+  for (int64_t i = levels; i >= 0; i--) {
+    int64_t ibegin = 0, iboxes = 0, xlen = 0;
+    content_length(&iboxes, &xlen, &ibegin, &comm[i]);
+
+    //comm[i].level_merge(rhs[i].X[0].A, xlen * basis[i].dimN);
+    //neighbor_bcast_cpu(rhs[i].X[0].A, basis[i].dimN, &comm[i]);
+    //comm[i].dup_bcast(rhs[i].X[0].A, xlen * basis[i].dimN);
+
+    for (int64_t j = 0; j < iboxes; j++) {
+      Matrix Xj = (Matrix) { rhsXptr[i][j + ibegin], basis[i].Dims[j + ibegin], 1, basis[i].Dims[j + ibegin] };
+      Matrix Xo = (Matrix) { rhsXoptr[i][j + ibegin], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
+      std::vector<double> tmp(basis[i].DimsLr[j + ibegin], 0.);
+      Matrix T = (Matrix) { &tmp[0], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
+
+      mmult('T', 'N', &basis[i].Uo[j + ibegin], &Xj, &T, 1., 0.);
+      mmult('T', 'N', &basis[i].R[j + ibegin], &T, &Xo, 1., 0.);
+    }
+  }
+
+  //comm[0].level_merge(rhs[0].X[0].A, basis[0].dimN);
+  //comm[0].dup_bcast(rhs[0].X[0].A, basis[0].dimN);
+
+  for (int64_t i = 0; i <= levels; i++) {
+    int64_t ibegin = 0, iboxes = 0;
+    content_length(&iboxes, NULL, &ibegin, &comm[i]);
+    int64_t gbegin = comm[i].iGlobal(ibegin);
+
+    for (int64_t y = 0; y < iboxes; y++)
+      for (int64_t yx = rels_far->RowIndex[y + gbegin]; yx < rels_far->RowIndex[y + gbegin + 1]; yx++) {
+        int64_t x = comm[i].iLocal(rels_far->ColIndex[yx]);
+        int64_t M = basis[i].DimsLr[y + ibegin];
+        int64_t N = basis[i].DimsLr[x];
+        mat_vec_reference(eval, M, N, rhsBoptr[i][y + ibegin], rhsXoptr[i][x], basis[i].M_cpu + 3 * basis[i].dimS * (y + ibegin), basis[i].M_cpu + 3 * basis[i].dimS * x);
+      }
+
+    for (int64_t j = 0; j < iboxes; j++) {
+      Matrix Bj = (Matrix) { rhsBptr[i][j + ibegin], basis[i].Dims[j + ibegin], 1, basis[i].Dims[j + ibegin] };
+      Matrix Bo = (Matrix) { rhsBoptr[i][j + ibegin], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
+      std::vector<double> tmp(basis[i].DimsLr[j + ibegin], 0.);
+      Matrix T = (Matrix) { &tmp[0], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
+
+      mmult('N', 'N', &basis[i].R[j + ibegin], &Bo, &T, 1., 0.);
+      mmult('N', 'N', &basis[i].Uo[j + ibegin], &T, &Bj, 1., 0.);
+    }
+  }
+
+  int64_t gbegin = comm[levels].iGlobal(lbegin);
+  for (int64_t y = 0; y < llen; y++)
+    for (int64_t yx = rels_near->RowIndex[y + gbegin]; yx < rels_near->RowIndex[y + gbegin + 1]; yx++) {
+      int64_t x = rels_near->ColIndex[yx];
+      int64_t x_loc = comm[levels].iLocal(x);
+      int64_t M = cells[y + gbegin].Body[1] - cells[y + gbegin].Body[0];
+      int64_t N = cells[x].Body[1] - cells[x].Body[0];
+      mat_vec_reference(eval, M, N, rhsBptr[levels][y + lbegin], rhsXptr[levels][x_loc], &bodies[3 * cells[y + gbegin].Body[0]], &bodies[3 * cells[x].Body[0]]);
+    }
+
+  std::copy(rhsBptr[levels][lbegin], rhsBptr[levels][lbegin] + lenX, X);
+}
+
+
+void solveRelErr(double* err_out, const double* X, const double* ref, int64_t lenX) {
+  double err[2] = { 0., 0. };
+  for (int64_t i = 0; i < lenX; i++) {
+    double diff = X[i] - ref[i];
+    err[0] = err[0] + diff * diff;
+    err[1] = err[1] + ref[i] * ref[i];
+  }
+  MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  *err_out = sqrt(err[0] / err[1]);
+}
+
