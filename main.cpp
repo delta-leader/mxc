@@ -91,7 +91,7 @@ int main(int argc, char* argv[]) {
 
   loadX(&X1[0], basis[levels].dimN, &Xbody[0], 0, llen, &cell[gbegin]);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matVecA(&nodes[0], &basis[0], &rels_near[0], &X1[0], &cell_comm[0], levels);
+  matVecA(&nodes[0], &basis[0], &cellNear, &X1[0], &cell_comm[0], levels);
 
   matvec_time = MPI_Wtime() - matvec_time;
   matvec_comm_time = timer.first;

@@ -134,7 +134,7 @@ void rightHandSides_free(RightHandSides* rhs) {
   free(rhs->X);
 }
 
-void matVecA(const Node A[], const Base basis[], const CSR rels_near[], double* X, const CellComm comm[], int64_t levels) {
+void matVecA(const Node A[], const Base basis[], const CSR* rels_near, double* X, const CellComm comm[], int64_t levels) {
   int64_t lbegin = 0, llen = 0;
   content_length(&llen, NULL, &lbegin, &comm[levels]);
 
@@ -161,12 +161,15 @@ void matVecA(const Node A[], const Base basis[], const CSR rels_near[], double* 
   for (int64_t i = 1; i <= levels; i++) {
     int64_t ibegin = 0, iboxes = 0;
     content_length(&iboxes, NULL, &ibegin, &comm[i]);
+    int64_t gbegin = comm[i].iGlobal(ibegin);
+    int64_t Aoffset = rels_near->RowIndex[gbegin];
+
     for (int64_t j = 0; j < iboxes; j++)
       mmult('N', 'N', &basis[i].Uo[j + ibegin], &rhs[i].Xc[j + ibegin], &rhs[i].B[j + ibegin], 1., 0.);
     for (int64_t y = 0; y < iboxes; y++)
-      for (int64_t xy = rels_near[i].RowIndex[y]; xy < rels_near[i].RowIndex[y + 1]; xy++) {
-        int64_t x = rels_near[i].ColIndex[xy];
-        mmult('N', 'N', &A[i].A[xy], &rhs[i].X[x], &rhs[i].B[y + ibegin], 1., 1.);
+      for (int64_t yx = rels_near->RowIndex[y + gbegin]; yx < rels_near->RowIndex[y + gbegin + 1]; yx++) {
+        int64_t x = comm[i].iLocal(rels_near->ColIndex[yx]);
+        mmult('N', 'N', &A[i].A[yx - Aoffset], &rhs[i].X[x], &rhs[i].B[y + ibegin], 1., 1.);
       }
   }
   memcpy(X, rhs[levels].B[lbegin].A, llen * basis[levels].dimN * sizeof(double));

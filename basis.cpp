@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cstring>
+#include <tuple>
 
 template <typename T>
 void memcpy2d(T* dst, const T* src, int64_t rows, int64_t cols, int64_t ld_dst, int64_t ld_src) {
@@ -31,19 +32,19 @@ void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* re
     Matrix* arr_m = (Matrix*)calloc(xlen * 2, sizeof(Matrix));
     basis[l].Uo = arr_m;
     basis[l].R = &arr_m[xlen];
-    std::vector<int64_t> celli(xlen, 0);
+    std::vector<std::tuple<int64_t, int64_t, int64_t>> celli(xlen);
 
     for (int64_t i = 0; i < xlen; i++) {
-      int64_t childi = comm[l].LocalChild[i].first;
-      int64_t clen = comm[l].LocalChild[i].second;
       int64_t gi = comm[l].iGlobal(i);
-      celli[i] = gi;
+      int64_t childi = l < levels ? comm[l + 1].iLocal(cells[gi].Child[0]) : -1;
+      int64_t clen = cells[gi].Child[1] - cells[gi].Child[0];
+      celli[i] = std::make_tuple(gi, childi, clen);
 
       if (childi >= 0 && l < levels)
         for (int64_t j = 0; j < clen; j++)
           basis[l].Dims[i] = basis[l].Dims[i] + basis[l + 1].DimsLr[childi + j];
       else
-        basis[l].Dims[i] = cells[celli[i]].Body[1] - cells[celli[i]].Body[0];
+        basis[l].Dims[i] = cells[gi].Body[1] - cells[gi].Body[0];
     }
 
     std::vector<std::pair<int64_t, int64_t>> LocalDims(nodes), SumLocalDims(nodes + 1);
@@ -54,20 +55,20 @@ void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* re
     SumLocalDims[0] = std::make_pair(0, 0);
 
     std::vector<double> Skeletons(SumLocalDims[nodes].first, 0.);
-    std::vector<double> matrix_data(SumLocalDims[nodes].second, 0.);
+    std::vector<double> MatrixData(SumLocalDims[nodes].second, 0.);
     
     if (l < levels) {
       int64_t seg = basis[l + 1].dimS;
       for (int64_t i = 0; i < nodes; i++) {
         int64_t dim = basis[l].Dims[i + ibegin];
-        int64_t childi = comm[l].LocalChild[i + ibegin].first;
-        int64_t clen = comm[l].LocalChild[i + ibegin].second;
+        int64_t childi = std::get<1>(celli[i + ibegin]);
+        int64_t clen = std::get<2>(celli[i + ibegin]);
 
         int64_t y = 0;
         for (int64_t j = 0; j < clen; j++) {
           int64_t len = basis[l + 1].DimsLr[childi + j];
           memcpy(&Skeletons[SumLocalDims[i].first + y * 3], &basis[l + 1].M_cpu[(childi + j) * seg * 3], len * 3 * sizeof(double));
-          memcpy2d(&matrix_data[SumLocalDims[i].second + y * (dim + 1)], 
+          memcpy2d(&MatrixData[SumLocalDims[i].second + y * (dim + 1)], 
             &basis[l + 1].R_cpu[(childi + j) * seg * seg], len, len, dim, seg);
           y = y + len;
         }
@@ -76,21 +77,21 @@ void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* re
     else 
       for (int64_t i = 0; i < nodes; i++) {
         int64_t dim = basis[l].Dims[i + ibegin];
-        int64_t ci = celli[i + ibegin];
+        int64_t ci = std::get<0>(celli[i + ibegin]);
         int64_t len = cells[ci].Body[1] - cells[ci].Body[0];
         int64_t offset_body = 3 * cells[ci].Body[0];
         
         memcpy(&Skeletons[SumLocalDims[i].first], &bodies[offset_body], len * 3 * sizeof(double));
         for (int64_t j = 0; j < len; j++)
-          matrix_data[SumLocalDims[i].second + j * (dim + 1)] = 1.;
+          MatrixData[SumLocalDims[i].second + j * (dim + 1)] = 1.;
       }
 
     for (int64_t i = 0; i < nodes; i++) {
       int64_t ske_len = basis[l].Dims[i + ibegin];
-      double* mat = &matrix_data[SumLocalDims[i].second];
+      double* mat = &MatrixData[SumLocalDims[i].second];
       double* Xbodies = &Skeletons[SumLocalDims[i].first];
 
-      int64_t ci = celli[i + ibegin];
+      int64_t ci = std::get<0>(celli[i + ibegin]);
       int64_t nbegin = rel_near->RowIndex[ci];
       int64_t nlen = rel_near->RowIndex[ci + 1] - nbegin;
       const int64_t* ngbs = &rel_near->ColIndex[nbegin];
@@ -131,7 +132,7 @@ void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* re
       i2 = std::max(alignment, i2 - rem2 + (rem2 ? alignment : 0));
       max[0] = std::max(max[0], i1);
       max[1] = std::max(max[1], i2);
-      max[2] = std::max(max[2], comm[l].LocalChild[i].second);
+      max[2] = std::max(max[2], std::get<2>(celli[i]));
     }
     MPI_Allreduce(MPI_IN_PLACE, max, 3, MPI_INT64_T, MPI_MAX, MPI_COMM_WORLD);
 
@@ -157,23 +158,23 @@ void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* re
       int64_t M = basis[l].Dims[i];
 
       if (ibegin <= i && i < iend) {
-        int64_t child = comm[l].LocalChild[i].first;
-        int64_t clen = comm[l].LocalChild[i].second;
+        int64_t child = std::get<1>(celli[i]);
+        int64_t clen = std::get<2>(celli[i]);
         if (child >= 0 && l < levels) {
           int64_t row = 0;
           for (int64_t j = 0; j < clen; j++) {
             int64_t N = basis[l + 1].DimsLr[child + j];
             int64_t Urow = j * basis[l + 1].dimS;
-            memcpy2d(&Uc_ptr[Urow], &matrix_data[SumLocalDims[i - ibegin].second + No * M + row], N, Nc, LD, M);
-            memcpy2d(&Uo_ptr[Urow], &matrix_data[SumLocalDims[i - ibegin].second + row], N, No, LD, M);
+            memcpy2d(&Uc_ptr[Urow], &MatrixData[SumLocalDims[i - ibegin].second + No * M + row], N, Nc, LD, M);
+            memcpy2d(&Uo_ptr[Urow], &MatrixData[SumLocalDims[i - ibegin].second + row], N, No, LD, M);
             row = row + N;
           }
         }
         else {
-          memcpy2d(Uc_ptr, &matrix_data[SumLocalDims[i - ibegin].second + No * M], M, Nc, LD, M);
-          memcpy2d(Uo_ptr, &matrix_data[SumLocalDims[i - ibegin].second], M, No, LD, M);
+          memcpy2d(Uc_ptr, &MatrixData[SumLocalDims[i - ibegin].second + No * M], M, Nc, LD, M);
+          memcpy2d(Uo_ptr, &MatrixData[SumLocalDims[i - ibegin].second], M, No, LD, M);
         }
-        memcpy2d(R_ptr, &matrix_data[SumLocalDims[i - ibegin].second + M * M], No, No, basis[l].dimS, M);
+        memcpy2d(R_ptr, &MatrixData[SumLocalDims[i - ibegin].second + M * M], No, No, basis[l].dimS, M);
         memcpy(M_ptr, &Skeletons[SumLocalDims[i - ibegin].first], 3 * No * sizeof(double));
 
         double* Ui_ptr = basis[l].U_cpu + xlen * stride + (i - ibegin) * basis[l].dimR; 
