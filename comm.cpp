@@ -207,19 +207,22 @@ int64_t CellComm::iGlobal(int64_t ilocal) const {
   return pnx_to_global(local_to_pnx(ilocal, ProcBoxes), ProcBoxes);
 }
 
-void content_length(int64_t* local, int64_t* neighbors, int64_t* local_off, const CellComm* comm) {
-  int64_t slen = 0, offset = -1, len_self = -1;
-  for (int64_t i = 0; i < (int64_t)comm->ProcBoxes.size(); i++) {
-    if (i == comm->Proc)
-    { offset = slen; len_self = comm->ProcBoxes[i].second; }
-    slen = slen + comm->ProcBoxes[i].second;
-  }
-  if (local)
-    *local = len_self;
-  if (neighbors)
-    *neighbors = slen;
-  if (local_off)
-    *local_off = offset;
+int64_t CellComm::oLocal() const {
+  return std::accumulate(ProcBoxes.begin(), ProcBoxes.begin() + Proc, 0,
+    [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
+}
+
+int64_t CellComm::oGlobal() const {
+  return ProcBoxes[Proc].first;
+}
+
+int64_t CellComm::lenLocal() const {
+  return ProcBoxes[Proc].second;
+}
+
+int64_t CellComm::lenNeighbors() const {
+  return std::accumulate(ProcBoxes.begin(), ProcBoxes.end(), 0,
+    [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
 }
 
 void neighbor_bcast_cpu(double* data, int64_t seg, const CellComm* comm) {

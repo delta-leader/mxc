@@ -20,6 +20,10 @@ public:
 
   int64_t iLocal(int64_t iglobal) const;
   int64_t iGlobal(int64_t ilocal) const;
+  int64_t oLocal() const;
+  int64_t oGlobal() const;
+  int64_t lenLocal() const;
+  int64_t lenNeighbors() const;
 
   void level_merge(double* data, int64_t len) const;
   void dup_bcast(double* data, int64_t len) const;
@@ -32,8 +36,6 @@ public:
 void buildComm(CellComm* comms, int64_t ncells, const Cell* cells, const CSR* cellFar, const CSR* cellNear, int64_t levels);
 
 void cellComm_free(CellComm* comms, int64_t levels);
-
-void content_length(int64_t* local, int64_t* neighbors, int64_t* local_off, const CellComm* comm);
 
 void neighbor_bcast_cpu(double* data, int64_t seg, const CellComm* comm);
 

@@ -27,7 +27,6 @@ int main(int argc, char* argv[]) {
   std::vector<double> body(Nbody * 3);
   std::vector<double> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
-  CSR cellNear, cellFar;
 
   std::vector<CellComm> cell_comm(levels + 1);
   std::vector<Base> basis(levels + 1);
@@ -51,8 +50,8 @@ int main(int argc, char* argv[]) {
   ncells = Nleaf + 1;
   levels = 1;*/
 
-  traverse('N', &cellNear, ncells, &cell[0], theta);
-  traverse('F', &cellFar, ncells, &cell[0], theta);
+  CSR cellNear('N', ncells, &cell[0], theta);
+  CSR cellFar('F', ncells, &cell[0], theta);
 
   std::pair<double, double> timer(0, 0);
   buildComm(&cell_comm[0], ncells, &cell[0], &cellFar, &cellNear, levels);
@@ -60,20 +59,20 @@ int main(int argc, char* argv[]) {
     cell_comm[i].timer = &timer;
   }
 
-  int64_t lbegin = 0, llen = 0;
-  content_length(&llen, NULL, &lbegin, &cell_comm[levels]);
-  int64_t gbegin = cell_comm[levels].iGlobal(lbegin);
+  int64_t llen = cell_comm[levels].lenLocal();
+  int64_t gbegin = cell_comm[levels].oGlobal();
 
   MPI_Barrier(MPI_COMM_WORLD);
   double construct_time = MPI_Wtime(), construct_comm_time;
-  buildBasis(eval, &basis[0], &cell[0], &cellNear, levels, &cell_comm[0], &body[0], Nbody, epi, 4);
+  buildBasis(eval, epi, &basis[0], &cell[0], &cellNear, levels, &cell_comm[0], &body[0], Nbody);
 
   MPI_Barrier(MPI_COMM_WORLD);
   construct_time = MPI_Wtime() - construct_time;
   construct_comm_time = timer.first;
   timer.first = 0;
 
-  int64_t lenX = llen * basis[levels].dimN;
+  int64_t body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
+  int64_t lenX = body_local[1] - body_local[0];
   std::vector<double> X1(lenX, 0);
   std::vector<double> X2(lenX, 0);
 
@@ -86,18 +85,14 @@ int main(int argc, char* argv[]) {
   timer.first = 0;
 
   double cerr = 0.;
-  int64_t body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
-  mat_vec_reference(eval, body_local[1] - body_local[0], Nbody, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
+  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
 
-  solveRelErr(&cerr, &X1[0], &X2[0], body_local[1] - body_local[0]);
+  solveRelErr(&cerr, &X1[0], &X2[0], lenX);
 
   std::cout << cerr << std::endl;
   std::cout << construct_time << ", " << construct_comm_time << std::endl;
   std::cout << matvec_time << ", " << matvec_comm_time << std::endl;
-  
-  for (int64_t i = 0; i <= levels; i++) {
-    basis_free(&basis[i]);
-  }
+
   cellComm_free(&cell_comm[0], levels);
 
   MPI_Finalize();

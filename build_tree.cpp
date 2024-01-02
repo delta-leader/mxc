@@ -155,25 +155,22 @@ void getList(char NoF, std::vector<std::pair<int64_t, int64_t>>& rels, const Cel
         getList(NoF, rels, cells, k, l, theta);
 }
 
-void traverse(char NoF, CSR* rels, int64_t ncells, const Cell* cells, double theta) {
-  std::vector<std::pair<int64_t, int64_t>> rel_arr;
-  getList(NoF, rel_arr, cells, 0, 0, theta);
-  std::sort(rel_arr.begin(), rel_arr.end(), 
+CSR::CSR(char NoF, int64_t ncells, const Cell* cells, double theta) {
+  std::vector<std::pair<int64_t, int64_t>> LIL;
+  getList(NoF, LIL, cells, 0, 0, theta);
+  std::sort(LIL.begin(), LIL.end(), 
     [](const std::pair<int64_t, int64_t>& a, const std::pair<int64_t, int64_t>& b) -> bool 
-      { return ((a.second == b.second) && (a.first < b.first)) || (a.second < b.second); });
+      { return ((a.first == b.first) && (a.second < b.second)) || (a.first < b.first); });
 
-  int64_t len = rel_arr.size();
-  rels->RowIndex.resize(ncells + 1);
-  rels->ColIndex.resize(len);
+  int64_t len = LIL.size();
+  RowIndex.resize(ncells + 1);
+  ColIndex.resize(len);
+  std::transform(LIL.begin(), LIL.end(), ColIndex.begin(), 
+    [](const std::pair<int64_t, int64_t>& i) { return i.second; });
 
-  int64_t loc = -1;
-  for (int64_t i = 0; i < len; i++) {
-    int64_t x = rel_arr[i].second;
-    int64_t y = rel_arr[i].first;
-    rels->ColIndex[i] = y;
-    while (x > loc)
-      rels->RowIndex[++loc] = i;
-  }
-  for (int64_t i = loc + 1; i <= ncells; i++)
-    rels->RowIndex[i] = len;
+  RowIndex[0] = 0;
+  for (int64_t n = 1; n <= ncells; n++)
+    RowIndex[n] = std::distance(LIL.begin(), 
+      std::find_if(LIL.begin() + RowIndex[n - 1], LIL.end(), 
+        [=](const std::pair<int64_t, int64_t>& i) { return n <= i.first; }));
 }
