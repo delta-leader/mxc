@@ -336,6 +336,24 @@ void CellComm::dup_bcast(double* data, int64_t len) const {
   }
 }
 
+void CellComm::neighbor_bcast(double* data, const int64_t box_dims[]) const {
+  if (Comm_box.size() > 0) {
+    std::vector<int64_t> offsets(Comm_box.size() + 1, 0);
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t end = ProcBoxes[p].second;
+      offsets[p + 1] = std::accumulate(box_dims, &box_dims[end], offsets[p]);
+      box_dims = &box_dims[end];
+    }
+
+    record_mpi();
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t llen = offsets[p + 1] - offsets[p];
+      MPI_Bcast(&data[offsets[p]], llen, MPI_DOUBLE, Comm_box[p].first, Comm_box[p].second);
+    }
+    record_mpi();
+  }
+}
+
 void CellComm::record_mpi() const {
   if (timer && timer->second == 0.)
     timer->second = MPI_Wtime();

@@ -24,6 +24,7 @@ public:
 
   void level_merge(double* data, int64_t len) const;
   void dup_bcast(double* data, int64_t len) const;
+  void neighbor_bcast(double* data, const int64_t box_dims[]) const;
 
   void record_mpi() const;
 };

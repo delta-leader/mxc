@@ -158,10 +158,12 @@ void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* re
       int64_t No = basis[l].DimsLr[i];
       int64_t M = basis[l].Dims[i];
 
-      memcpy2d(Uc_ptr, &MatrixData[SumLocalDims[i - ibegin].second + No * M], M, Nc, LD, M);
-      memcpy2d(Uo_ptr, &MatrixData[SumLocalDims[i - ibegin].second], M, No, LD, M);
-      memcpy2d(R_ptr, &MatrixData[SumLocalDims[i - ibegin].second + M * M], No, No, basis[l].dimS, M);
-      memcpy(M_ptr, &Skeletons[SumLocalDims[i - ibegin].first], 3 * No * sizeof(double));
+      if (i >= ibegin && i < iend) {
+        memcpy2d(Uc_ptr, &MatrixData[SumLocalDims[i - ibegin].second + No * M], M, Nc, LD, M);
+        memcpy2d(Uo_ptr, &MatrixData[SumLocalDims[i - ibegin].second], M, No, LD, M);
+        memcpy2d(R_ptr, &MatrixData[SumLocalDims[i - ibegin].second + M * M], No, No, basis[l].dimS, M);
+        memcpy(M_ptr, &Skeletons[SumLocalDims[i - ibegin].first], 3 * No * sizeof(double));
+      }
 
       basis[l].Uo[i] = (Matrix) { Uo_ptr, M, No, basis[l].dimN };
       basis[l].R[i] = (Matrix) { R_ptr, No, No, basis[l].dimS };
@@ -228,29 +230,28 @@ void matVecA(const EvalDouble& eval, const Base basis[], const double bodies[], 
   int64_t lenX = std::accumulate(&basis[levels].Dims[lbegin], &basis[levels].Dims[lbegin + llen], 0);
   std::copy(X, &X[lenX], rhsXptr[levels][lbegin]);
 
-  for (int64_t i = levels; i >= 0; i--) {
+  for (int64_t i = levels; i > 0; i--) {
     int64_t ibegin = 0, iboxes = 0, xlen = 0;
     content_length(&iboxes, &xlen, &ibegin, &comm[i]);
 
-    //comm[i].level_merge(rhs[i].X[0].A, xlen * basis[i].dimN);
-    //neighbor_bcast_cpu(rhs[i].X[0].A, basis[i].dimN, &comm[i]);
-    //comm[i].dup_bcast(rhs[i].X[0].A, xlen * basis[i].dimN);
+    int64_t lenI = std::accumulate(&basis[i].Dims[0], &basis[i].Dims[xlen], 0);
+    comm[i].level_merge(rhsX[i].data(), lenI);
+    comm[i].neighbor_bcast(rhsX[i].data(), basis[i].Dims.data());
+    comm[i].dup_bcast(rhsX[i].data(), lenI);
 
     for (int64_t j = 0; j < iboxes; j++) {
       Matrix Xj = (Matrix) { rhsXptr[i][j + ibegin], basis[i].Dims[j + ibegin], 1, basis[i].Dims[j + ibegin] };
       Matrix Xo = (Matrix) { rhsXoptr[i][j + ibegin], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
-      std::vector<double> tmp(basis[i].DimsLr[j + ibegin], 0.);
-      Matrix T = (Matrix) { &tmp[0], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
-
-      mmult('T', 'N', &basis[i].Uo[j + ibegin], &Xj, &T, 1., 0.);
-      mmult('T', 'N', &basis[i].R[j + ibegin], &T, &Xo, 1., 0.);
+      mmult('T', 'N', &basis[i].Uo[j + ibegin], &Xj, &Xo, 1., 0.);
     }
   }
 
-  //comm[0].level_merge(rhs[0].X[0].A, basis[0].dimN);
-  //comm[0].dup_bcast(rhs[0].X[0].A, basis[0].dimN);
+  if (basis[0].Dims[0] > 0) {
+    comm[0].level_merge(rhsX[0].data(), basis[0].Dims[0]);
+    comm[0].dup_bcast(rhsX[0].data(), basis[0].Dims[0]);
+  }
 
-  for (int64_t i = 0; i <= levels; i++) {
+  for (int64_t i = 1; i <= levels; i++) {
     int64_t ibegin = 0, iboxes = 0;
     content_length(&iboxes, NULL, &ibegin, &comm[i]);
     int64_t gbegin = comm[i].iGlobal(ibegin);
@@ -260,17 +261,26 @@ void matVecA(const EvalDouble& eval, const Base basis[], const double bodies[], 
         int64_t x = comm[i].iLocal(rels_far->ColIndex[yx]);
         int64_t M = basis[i].DimsLr[y + ibegin];
         int64_t N = basis[i].DimsLr[x];
-        mat_vec_reference(eval, M, N, rhsBoptr[i][y + ibegin], rhsXoptr[i][x], basis[i].M_cpu + 3 * basis[i].dimS * (y + ibegin), basis[i].M_cpu + 3 * basis[i].dimS * x);
-      }
 
+        Matrix Xo = (Matrix) { rhsXoptr[i][x], N, 1, N };
+        Matrix Bo = (Matrix) { rhsBoptr[i][y + ibegin], M, 1, M };
+        std::vector<double> TMPX(N, 0.), TMPB(M, 0.);
+        Matrix T1 = (Matrix) { &TMPX[0], N, 1, N };
+        Matrix T2 = (Matrix) { &TMPB[0], M, 1, M };
+
+        mmult('T', 'N', &basis[i].R[x], &Xo, &T1, 1., 0.);
+        mat_vec_reference(eval, M, N, &TMPB[0], &TMPX[0], basis[i].M_cpu + 3 * basis[i].dimS * (y + ibegin), basis[i].M_cpu + 3 * basis[i].dimS * x);
+        mmult('N', 'N', &basis[i].R[y + ibegin], &T2, &Bo, 1., 1.);
+      }
+  }
+  
+  for (int64_t i = 1; i <= levels; i++) {
+    int64_t ibegin = 0, iboxes = 0;
+    content_length(&iboxes, NULL, &ibegin, &comm[i]);
     for (int64_t j = 0; j < iboxes; j++) {
       Matrix Bj = (Matrix) { rhsBptr[i][j + ibegin], basis[i].Dims[j + ibegin], 1, basis[i].Dims[j + ibegin] };
       Matrix Bo = (Matrix) { rhsBoptr[i][j + ibegin], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
-      std::vector<double> tmp(basis[i].DimsLr[j + ibegin], 0.);
-      Matrix T = (Matrix) { &tmp[0], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
-
-      mmult('N', 'N', &basis[i].R[j + ibegin], &Bo, &T, 1., 0.);
-      mmult('N', 'N', &basis[i].Uo[j + ibegin], &T, &Bj, 1., 0.);
+      mmult('N', 'N', &basis[i].Uo[j + ibegin], &Bo, &Bj, 1., 1.);
     }
   }
 
