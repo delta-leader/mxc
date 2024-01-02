@@ -225,20 +225,6 @@ int64_t CellComm::lenNeighbors() const {
     [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
 }
 
-void neighbor_bcast_cpu(double* data, int64_t seg, const CellComm* comm) {
-  if (comm->Comm_box.size() > 0) {
-    comm->record_mpi();
-    int64_t y = 0;
-    for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
-      int64_t llen = comm->ProcBoxes[p].second * seg;
-      double* loc = &data[y];
-      MPI_Bcast(loc, llen, MPI_DOUBLE, comm->Comm_box[p].first, comm->Comm_box[p].second);
-      y = y + llen;
-    }
-    comm->record_mpi();
-  }
-}
-
 void CellComm::level_merge(double* data, int64_t len) const {
   if (Comm_merge != MPI_COMM_NULL) {
     record_mpi();

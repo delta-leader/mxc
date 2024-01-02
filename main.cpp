@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
   double theta = argc > 2 ? atof(argv[2]) : 1e0;
   int64_t leaf_size = argc > 3 ? atol(argv[3]) : 256;
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
-  const char* fname = argc > 5 ? argv[5] : NULL;
+  const char* fname = argc > 5 ? argv[5] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   int64_t levels = (int64_t)log2((double)Nbody / leaf_size);
@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
   std::vector<CellComm> cell_comm(levels + 1);
   std::vector<Base> basis(levels + 1);
 
-  if (fname == NULL) {
+  if (fname == nullptr) {
     mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
     //mesh_unit_cube(&body[0], Nbody);
     //uniform_unit_cube(&body[0], Nbody, 3);

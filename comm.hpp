@@ -37,5 +37,3 @@ void buildComm(CellComm* comms, int64_t ncells, const Cell* cells, const CSR* ce
 
 void cellComm_free(CellComm* comms, int64_t levels);
 
-void neighbor_bcast_cpu(double* data, int64_t seg, const CellComm* comm);
-

@@ -12,10 +12,11 @@ class CellComm;
 
 class Base {
 public:
-  int64_t dimR, dimS, dimN;
   std::vector<int64_t> Dims, DimsLr;
   std::vector<Matrix> Uo, R;
   std::vector<double> Mdata, Udata, Rdata;
+
+  const double* ske_at_i(int64_t i) const;
 };
 
 void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* cells, const CSR* rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies);
