@@ -20,14 +20,6 @@ void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, double
   cblas_dgemm(CblasColMajor, tac, tbc, C->M, C->N, k, alpha, A->A, lda, B->A, ldb, beta, C->A, ldc);
 }
 
-void mul_AS(const Matrix* RU, const Matrix* RV, Matrix* A) {
-  if (A->M > 0 && A->N > 0) {
-    std::vector<double> tmp(A->M * A->N);
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, A->M, A->N, A->M, 1., RU->A, RU->LDA, A->A, A->LDA, 0., &tmp[0], A->M);
-    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans, A->M, A->N, A->N, 1., &tmp[0], A->M, RV->A, RV->LDA, 0., A->A, A->LDA);
-  }
-}
-
 void gen_matrix(const EvalDouble& Eval, int64_t m, int64_t n, const double* bi, const double* bj, double Aij[], int64_t lda) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
   const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * m]);

@@ -2,7 +2,6 @@
 #include <basis.hpp>
 #include <build_tree.hpp>
 #include <comm.hpp>
-#include <sparse_row.hpp>
 #include <linalg.hpp>
 
 #include <algorithm>
@@ -119,8 +118,8 @@ void buildBasis(const EvalDouble& eval, Base basis[], Cell* cells, const CSR* re
       int64_t rank = compute_basis(eval, epi, ske_len, mat, ske_len, &Xbodies[0], remote.size(), &lens[0], &remote[0]);
       basis[l].DimsLr[i + ibegin] = rank;
     }
-    neighbor_bcast_sizes_cpu(basis[l].Dims.data(), &comm[l]);
-    neighbor_bcast_sizes_cpu(basis[l].DimsLr.data(), &comm[l]);
+    comm[l].neighbor_bcast_sizes(basis[l].Dims.data());
+    comm[l].neighbor_bcast_sizes(basis[l].DimsLr.data());
 
     int64_t max[3] = { 0, 0, 0 };
     for (int64_t i = 0; i < xlen; i++) {
@@ -306,6 +305,6 @@ void solveRelErr(double* err_out, const double* X, const double* ref, int64_t le
     err[1] = err[1] + ref[i] * ref[i];
   }
   MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  *err_out = sqrt(err[0] / err[1]);
+  *err_out = std::sqrt(err[0] / err[1]);
 }
 

@@ -1,6 +1,5 @@
 
 #include <build_tree.hpp>
-#include <sparse_row.hpp>
 #include <basis.hpp>
 #include <comm.hpp>
 #include <linalg.hpp>
@@ -177,55 +176,4 @@ void traverse(char NoF, CSR* rels, int64_t ncells, const Cell* cells, double the
   }
   for (int64_t i = loc + 1; i <= ncells; i++)
     rels->RowIndex[i] = len;
-}
-
-void loadX(double* X, int64_t seg, const double Xbodies[], int64_t Xbegin, int64_t ncells, const Cell cells[]) {
-  for (int64_t i = 0; i < ncells; i++) {
-    int64_t b0 = cells[i].Body[0] - Xbegin;
-    int64_t lenB = cells[i].Body[1] - cells[i].Body[0];
-    for (int64_t j = 0; j < lenB; j++)
-      X[i * seg + j] = Xbodies[j + b0];
-  }
-}
-
-void evalD(const EvalDouble& eval, Matrix* D, const CSR* rels, const Cell* cells, const double* bodies, const CellComm* comm) {
-  int64_t ibegin = 0, nodes = 0;
-  content_length(&nodes, NULL, &ibegin, comm);
-  ibegin = comm->iGlobal(ibegin);
-
-  for (int64_t i = 0; i < nodes; i++) {
-    int64_t lc = ibegin + i;
-    const Cell* ci = &cells[lc];
-    int64_t nbegin = rels->RowIndex[lc];
-    int64_t nlen = rels->RowIndex[lc + 1] - nbegin;
-    const int64_t* ngbs = &rels->ColIndex[nbegin];
-    int64_t x_begin = ci->Body[0];
-    int64_t n = ci->Body[1] - x_begin;
-    int64_t offsetD = nbegin - rels->RowIndex[ibegin];
-
-    for (int64_t j = 0; j < nlen; j++) {
-      int64_t lj = ngbs[j];
-      const Cell* cj = &cells[lj];
-      int64_t y_begin = cj->Body[0];
-      int64_t m = cj->Body[1] - y_begin;
-      gen_matrix(eval, n, m, &bodies[x_begin * 3], &bodies[y_begin * 3], D[offsetD + j].A, D[offsetD + j].LDA);
-    }
-  }
-}
-
-void evalS(const EvalDouble& eval, Matrix* S, const Base* basis, const CSR* rels, const CellComm* comm) {
-  int64_t ibegin = 0, nodes = 0;
-  content_length(&nodes, NULL, &ibegin, comm);
-  int64_t seg = basis->dimS * 3;
-
-  for (int64_t x = 0; x < nodes; x++) {
-    int64_t n = basis->DimsLr[x + ibegin];
-
-    for (int64_t yx = rels->RowIndex[x]; yx < rels->RowIndex[x + 1]; yx++) {
-      int64_t y = rels->ColIndex[yx];
-      int64_t m = basis->DimsLr[y];
-      gen_matrix(eval, n, m, &basis->M_cpu[(x + ibegin) * seg], &basis->M_cpu[y * seg], S[yx].A, S[yx].LDA);
-      mul_AS(&basis->R[x + ibegin], &basis->R[y], &S[yx]);
-    }
-  }
 }

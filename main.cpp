@@ -4,9 +4,7 @@
 #include <build_tree.hpp>
 #include <basis.hpp>
 #include <comm.hpp>
-#include <sparse_row.hpp>
 #include <linalg.hpp>
-#include <umv.hpp>
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
@@ -30,11 +28,9 @@ int main(int argc, char* argv[]) {
   std::vector<double> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
   CSR cellNear, cellFar;
-  std::vector<CSR> rels_far(levels + 1), rels_near(levels + 1);
 
   std::vector<CellComm> cell_comm(levels + 1);
   std::vector<Base> basis(levels + 1);
-  std::vector<Node> nodes(levels + 1);
 
   if (fname == NULL) {
     mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
@@ -63,8 +59,6 @@ int main(int argc, char* argv[]) {
   for (int64_t i = 0; i <= levels; i++) {
     cell_comm[i].timer = &timer;
   }
-  relations(&rels_near[0], &cellNear, levels, &cell_comm[0]);
-  relations(&rels_far[0], &cellFar, levels, &cell_comm[0]);
 
   int64_t lbegin = 0, llen = 0;
   content_length(&llen, NULL, &lbegin, &cell_comm[levels]);
@@ -79,19 +73,12 @@ int main(int argc, char* argv[]) {
   construct_comm_time = timer.first;
   timer.first = 0;
 
-  allocNodes(&nodes[0], &basis[0], &rels_near[0], &rels_far[0], &cell_comm[0], levels);
-
-  evalD(eval, nodes[levels].A, &cellNear, &cell[0], &body[0], &cell_comm[levels]);
-  for (int64_t i = 0; i <= levels; i++)
-    evalS(eval, nodes[i].S, &basis[i], &rels_far[i], &cell_comm[i]);
-
   int64_t lenX = llen * basis[levels].dimN;
   std::vector<double> X1(lenX, 0);
   std::vector<double> X2(lenX, 0);
 
   std::copy(Xbody.begin() + cell[gbegin].Body[0], Xbody.begin() + cell[gbegin + llen - 1].Body[1], &X1[0]);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  //matVecA(&nodes[0], &basis[0], &cellNear, &X1[0], &cell_comm[0], levels);
   matVecA(eval, &basis[0], &body[0], &cell[0], &cellNear, &cellFar, &X1[0], &cell_comm[0], levels);
 
   matvec_time = MPI_Wtime() - matvec_time;
@@ -110,7 +97,6 @@ int main(int argc, char* argv[]) {
   
   for (int64_t i = 0; i <= levels; i++) {
     basis_free(&basis[i]);
-    node_free(&nodes[i]);
   }
   cellComm_free(&cell_comm[0], levels);
 

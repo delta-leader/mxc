@@ -1,6 +1,5 @@
 
 #include <comm.hpp>
-#include <sparse_row.hpp>
 #include <build_tree.hpp>
 
 #include <algorithm>
@@ -174,25 +173,6 @@ void buildComm(CellComm* comms, int64_t ncells, const Cell* cells, const CSR* ce
       MPI_Bcast(&comms[i].ProcBoxes[j], sizeof(std::pair<int64_t, int64_t>), MPI_BYTE, comms[i].Comm_box[j].first, comms[i].Comm_box[j].second);
     if (comms[i].Comm_share != MPI_COMM_NULL)
       MPI_Bcast(&comms[i].ProcBoxes[0], sizeof(std::pair<int64_t, int64_t>) * comms[i].ProcBoxes.size(), MPI_BYTE, 0, comms[i].Comm_share);
-
-    for (int64_t j = 0; j < (int64_t)comms[i].ProcBoxes.size(); j++)
-      for (int64_t k = 0; k < comms[i].ProcBoxes[j].second; k++) {
-        int64_t ki = k + comms[i].ProcBoxes[j].first;
-        int64_t li = pnx_to_local(std::make_pair(j, k), comms[i].ProcBoxes);
-        int64_t lc = Child[ki].first;
-        int64_t lclen = Child[ki].second;
-        if (i < levels) {
-          std::pair<int64_t, int64_t> pnx = global_to_pnx(lc, comms[i + 1].ProcBoxes);
-          lc = pnx_to_local(pnx, comms[i + 1].ProcBoxes);
-          if (lc >= 0)
-            std::for_each(comms[i + 1].LocalParent.begin() + lc, comms[i + 1].LocalParent.begin() + (lc + lclen), 
-              [&](std::pair<int64_t, int64_t>& x) { x.first = li; x.second = std::distance(&comms[i + 1].LocalParent[lc], &x); });
-          else
-            lclen = 0;
-        }
-        comms[i].LocalChild.emplace_back(lc, lclen);
-      }
-    comms[i].LocalParent = std::vector<std::pair<int64_t, int64_t>>(comms[i].LocalChild.size(), std::make_pair(-1, -1));
   }
 }
 
@@ -219,36 +199,6 @@ void cellComm_free(CellComm* comms, int64_t levels) {
     MPI_Comm_free(&mpi_comms[i]);
 }
 
-void relations(CSR rels[], const CSR* cellRel, int64_t levels, const CellComm* comm) {
- 
-  for (int64_t i = 0; i <= levels; i++) {
-    int64_t nodes, neighbors, ibegin;
-    content_length(&nodes, &neighbors, &ibegin, &comm[i]);
-    ibegin = comm[i].iGlobal(ibegin);
-    CSR* csc = &rels[i];
-
-    int64_t ent_max = nodes * neighbors;
-    csc->RowIndex.resize(nodes + 1);
-    csc->ColIndex.resize(ent_max);
-
-    int64_t count = 0;
-    for (int64_t j = 0; j < nodes; j++) {
-      int64_t lc = ibegin + j;
-      csc->RowIndex[j] = count;
-      int64_t cbegin = cellRel->RowIndex[lc];
-      int64_t ent = cellRel->RowIndex[lc + 1] - cbegin;
-      for (int64_t k = 0; k < ent; k++) {
-        csc->ColIndex[count + k] = comm[i].iLocal(cellRel->ColIndex[cbegin + k]);
-      }
-      count = count + ent;
-    }
-
-    if (count < ent_max)
-      csc->ColIndex.resize(count);
-    csc->RowIndex[nodes] = count;
-  }
-}
-
 int64_t CellComm::iLocal(int64_t iglobal) const {
   return pnx_to_local(global_to_pnx(iglobal, ProcBoxes), ProcBoxes);
 }
@@ -272,23 +222,6 @@ void content_length(int64_t* local, int64_t* neighbors, int64_t* local_off, cons
     *local_off = offset;
 }
 
-void neighbor_bcast_sizes_cpu(int64_t* data, const CellComm* comm) {
-  if (comm->Comm_box.size() > 0 || comm->Comm_share != MPI_COMM_NULL) {
-    comm->record_mpi();
-    int64_t y = 0;
-    for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
-      int64_t llen = comm->ProcBoxes[p].second;
-      int64_t* loc = &data[y];
-      MPI_Bcast(loc, llen, MPI_INT64_T, comm->Comm_box[p].first, comm->Comm_box[p].second);
-      y = y + llen;
-    }
-    content_length(NULL, &y, NULL, comm);
-    if (comm->Comm_share != MPI_COMM_NULL)
-      MPI_Bcast(data, y, MPI_DOUBLE, 0, comm->Comm_share);
-    comm->record_mpi();
-  }
-}
-
 void neighbor_bcast_cpu(double* data, int64_t seg, const CellComm* comm) {
   if (comm->Comm_box.size() > 0) {
     comm->record_mpi();
@@ -297,23 +230,6 @@ void neighbor_bcast_cpu(double* data, int64_t seg, const CellComm* comm) {
       int64_t llen = comm->ProcBoxes[p].second * seg;
       double* loc = &data[y];
       MPI_Bcast(loc, llen, MPI_DOUBLE, comm->Comm_box[p].first, comm->Comm_box[p].second);
-      y = y + llen;
-    }
-    comm->record_mpi();
-  }
-}
-
-void neighbor_reduce_cpu(double* data, int64_t seg, const CellComm* comm) {
-  if (comm->Comm_box.size() > 0) {
-    comm->record_mpi();
-    int64_t y = 0;
-    for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
-      int64_t llen = comm->ProcBoxes[p].second * seg;
-      double* loc = &data[y];
-      if (p == comm->Proc)
-        MPI_Reduce(MPI_IN_PLACE, loc, llen, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p].first, comm->Comm_box[p].second);
-      else
-        MPI_Reduce(loc, loc, llen, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p].first, comm->Comm_box[p].second);
       y = y + llen;
     }
     comm->record_mpi();
@@ -354,6 +270,24 @@ void CellComm::neighbor_bcast(double* data, const int64_t box_dims[]) const {
   }
 }
 
+void CellComm::neighbor_bcast_sizes(int64_t* data) const {
+  if (Comm_box.size() > 0 || Comm_share != MPI_COMM_NULL) {
+    record_mpi();
+    int64_t y = 0;
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t llen = ProcBoxes[p].second;
+      int64_t* loc = &data[y];
+      MPI_Bcast(loc, llen, MPI_INT64_T, Comm_box[p].first, Comm_box[p].second);
+      y = y + llen;
+    }
+    int64_t len = std::accumulate(ProcBoxes.begin(), ProcBoxes.end(), 0, 
+      [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
+    if (Comm_share != MPI_COMM_NULL)
+      MPI_Bcast(data, len, MPI_INT64_T, 0, Comm_share);
+    record_mpi();
+  }
+}
+
 void CellComm::record_mpi() const {
   if (timer && timer->second == 0.)
     timer->second = MPI_Wtime();
@@ -362,4 +296,21 @@ void CellComm::record_mpi() const {
     timer->second = 0.;
   }
 }
+
+/*void neighbor_reduce_cpu(double* data, int64_t seg, const CellComm* comm) {
+  if (comm->Comm_box.size() > 0) {
+    comm->record_mpi();
+    int64_t y = 0;
+    for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
+      int64_t llen = comm->ProcBoxes[p].second * seg;
+      double* loc = &data[y];
+      if (p == comm->Proc)
+        MPI_Reduce(MPI_IN_PLACE, loc, llen, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p].first, comm->Comm_box[p].second);
+      else
+        MPI_Reduce(loc, loc, llen, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p].first, comm->Comm_box[p].second);
+      y = y + llen;
+    }
+    comm->record_mpi();
+  }
+}*/
 
