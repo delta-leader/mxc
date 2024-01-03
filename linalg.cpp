@@ -50,7 +50,10 @@ int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, 
       loc = loc + Nfar[i];
     }
 
-    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, N, M, &Aall[0], N, &ipiv[0], &S[0]);
+    LAPACKE_dgeqrf(LAPACK_COL_MAJOR, N, M, &Aall[0], N, &S[0]);
+    LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &Aall[1], N);
+
+    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, M, M, &Aall[0], N, &ipiv[0], &S[0]);
     LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &Aall[1], N);
     int64_t rank = 0;
     double s0 = std::abs(epi * Aall[0]);

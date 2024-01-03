@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <numeric>
-#include <cstring>
 #include <cmath>
 #include <tuple>
 
@@ -73,7 +72,7 @@ void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* ce
         }
 
         const double* mbegin = basis[l + 1].ske_at_i(childi);
-        int64_t mlen = 3 * std::accumulate(&basis[l + 1].DimsLr[childi], &basis[l + 1].DimsLr[childi + clen], 0);
+        int64_t mlen = 3 * basis[l].Dims[i + ibegin];
         std::copy(mbegin, &mbegin[mlen], &Skeletons[SumLocalDims[i].first]);
       }
     else 
@@ -83,7 +82,7 @@ void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* ce
         int64_t len = cells[ci].Body[1] - cells[ci].Body[0];
         int64_t offset_body = 3 * cells[ci].Body[0];
         
-        memcpy(&Skeletons[SumLocalDims[i].first], &bodies[offset_body], len * 3 * sizeof(double));
+        std::copy(&bodies[offset_body], &bodies[offset_body + len * 3], &Skeletons[SumLocalDims[i].first]);
         for (int64_t j = 0; j < len; j++)
           MatrixData[SumLocalDims[i].second + j * (dim + 1)] = 1.;
       }
@@ -154,7 +153,7 @@ void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* ce
         memcpy2d(Uc_ptr, &MatrixData[SumLocalDims[i - ibegin].second + No * M], M, Nc, M, M);
         memcpy2d(Uo_ptr, &MatrixData[SumLocalDims[i - ibegin].second], M, No, M, M);
         memcpy2d(R_ptr, &MatrixData[SumLocalDims[i - ibegin].second + M * M], No, No, No, M);
-        memcpy(M_ptr, &Skeletons[SumLocalDims[i - ibegin].first], 3 * No * sizeof(double));
+        std::copy(&Skeletons[SumLocalDims[i - ibegin].first], &Skeletons[SumLocalDims[i - ibegin].first + 3 * No], M_ptr);
       }
 
       basis[l].Uo[i] = (Matrix) { Uo_ptr, M, No, M };
