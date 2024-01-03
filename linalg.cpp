@@ -42,43 +42,42 @@ void gen_matrix(const EvalDouble& Eval, int64_t m, int64_t n, const double* bi, 
 int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Lfar, int64_t Nfar[], const double* Fbodies[]) {
 
   if (M > 0 && Lfar > 0) {
-    int64_t M2 = M * 2;
-    std::vector<double> Aall(M * M, 0.), U(M * M2, 0.), S(M * 3);
+    int64_t N = std::max(M, (int64_t)(1 << 12)), B2 = N + M;
+    std::vector<double> B(M * B2, 0.), U(M * M, 0.), S(M * 3);
     std::vector<int32_t> ipiv(M, 0);
     for (int64_t i = 0; i < Lfar; i++)
-      for (int64_t j = 0; j < Nfar[i]; j += M) {
-        int64_t len = std::min(Nfar[i] - j, M);
-        gen_matrix(eval, len, M, Fbodies[i] + (j * 3), Xbodies, &U[M], M2);
-        LAPACKE_dgeqrf(LAPACK_COL_MAJOR, M + len, M, &U[0], M2, &S[0]);
-        LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &U[1], M2);
+      for (int64_t j = 0; j < Nfar[i]; j += N) {
+        int64_t len = std::min(Nfar[i] - j, N);
+        gen_matrix(eval, len, M, Fbodies[i] + (j * 3), Xbodies, &B[M], B2);
+        LAPACKE_dgeqrf(LAPACK_COL_MAJOR, M + len, M, &B[0], B2, &S[0]);
+        LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &B[1], B2);
       }
-    LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'U', M, M, &U[0], M2, &Aall[0], M);
 
-    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, M, M, &Aall[0], M, &ipiv[0], &S[0]);
-    LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &Aall[1], M);
+    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, M, M, &B[0], B2, &ipiv[0], &S[0]);
+    LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &B[1], B2);
     int64_t rank = 0;
-    double s0 = std::abs(epi * Aall[0]);
-    while (rank < M && s0 <= std::abs(Aall[rank * (M + 1)]))
+    double s0 = std::abs(epi * B[0]);
+    while (rank < M && s0 <= std::abs(B[rank * (B2 + 1)]))
       ++rank;
     
     if (rank > 0) {
       if (rank < M)
-        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, 1., &Aall[0], M, &Aall[rank * M], M);
-      LAPACKE_dlaset(LAPACK_COL_MAJOR, 'F', rank, rank, 0., 1., &Aall[0], M);
+        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, 1., &B[0], B2, &B[rank * B2], B2);
+      LAPACKE_dlaset(LAPACK_COL_MAJOR, 'F', rank, rank, 0., 1., &B[0], B2);
 
       for (int64_t i = 0; i < M; i++) {
         int64_t piv = (int64_t)ipiv[i] - 1;
-        std::copy(&Aall[i * M], &Aall[i * M + rank], &U[piv * M]);
+        std::copy(&B[i * B2], &B[i * B2 + rank], &U[piv * M]);
         std::copy(&Xbodies[piv * 3], &Xbodies[piv * 3 + 3], &S[i * 3]);
       }
       std::copy(&S[0], &S[M * 3], Xbodies);
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans, M, rank, M, 1., A, LDA, &U[0], M, 0., &Aall[0], M);
-      LAPACKE_dgeqrf(LAPACK_COL_MAJOR, M, rank, &Aall[0], M, &S[0]);
-      LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'L', M, rank, &Aall[0], M, A, LDA);
+      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans, M, rank, M, 1., A, LDA, &U[0], M, 0., &B[0], M);
+      LAPACKE_dgeqrf(LAPACK_COL_MAJOR, M, rank, &B[0], M, &S[0]);
+      LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'L', M, rank, &B[0], M, A, LDA);
       LAPACKE_dorgqr(LAPACK_COL_MAJOR, M, M, rank, A, LDA, &S[0]);
 
-      LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'U', rank, rank, &Aall[0], M, &A[M * LDA], LDA);
+      LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'U', rank, rank, &B[0], M, &A[M * LDA], LDA);
       LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', rank - 1, rank - 1, 0., 0., &A[M * LDA + 1], LDA);
     }
     return rank;
@@ -88,7 +87,7 @@ int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, 
 
 
 void mat_vec_reference(const EvalDouble& eval, int64_t M, int64_t N, double B[], const double X[], const double ibodies[], const double jbodies[]) {
-  int64_t size = 1024;
+  int64_t size = 1 << 8;
   std::vector<double> A(size * size);
   
   for (int64_t i = 0; i < M; i += size) {

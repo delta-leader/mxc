@@ -77,9 +77,11 @@ int main(int argc, char* argv[]) {
   std::vector<double> X2(lenX, 0);
 
   std::copy(Xbody.begin() + cell[gbegin].Body[0], Xbody.begin() + cell[gbegin + llen - 1].Body[1], &X1[0]);
+  MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
   matVecA(eval, &basis[0], &body[0], &cell[0], &cellNear, &cellFar, &X1[0], &cell_comm[0], levels);
 
+  MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
   matvec_comm_time = timer.first;
   timer.first = 0;
