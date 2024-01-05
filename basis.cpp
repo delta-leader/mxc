@@ -119,8 +119,12 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
       int64_t rank = compute_basis(eval, epi, ske_len, mat, ske_len, &Xbodies[0], remote.size(), &lens[0], &remote[0]);
       basis[l].DimsLr[i + ibegin] = rank;
     }
-    comm[l].neighbor_bcast_sizes(basis[l].Dims.data());
-    comm[l].neighbor_bcast_sizes(basis[l].DimsLr.data());
+
+    std::vector<int64_t> ones(xlen, 1);
+    comm[l].neighbor_bcast(basis[l].Dims.data(), ones.data());
+    comm[l].dup_bcast(basis[l].Dims.data(), xlen);
+    comm[l].neighbor_bcast(basis[l].DimsLr.data(), ones.data());
+    comm[l].dup_bcast(basis[l].DimsLr.data(), xlen);
 
     std::vector<int64_t> Msizes(xlen), Usizes(xlen), Rsizes(xlen);
     std::transform(basis[l].DimsLr.begin(), basis[l].DimsLr.end(), Msizes.begin(), [](const int64_t& d) { return d * 3; });

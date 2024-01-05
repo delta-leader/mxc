@@ -21,6 +21,8 @@ int main(int argc, char* argv[]) {
   int64_t levels = (int64_t)log2((double)Nbody / leaf_size);
   int64_t Nleaf = (int64_t)1 << levels;
   int64_t ncells = Nleaf + Nleaf - 1;
+  MPI_Comm world;
+  MPI_Comm_dup(MPI_COMM_WORLD, &world);
   
   //Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
@@ -61,7 +63,7 @@ int main(int argc, char* argv[]) {
   CSR cellFar('F', ncells, &cell[0], theta);
 
   std::pair<double, double> timer(0, 0);
-  buildComm(&cell_comm[0], ncells, &cell[0], &cellFar, &cellNear, levels);
+  std::vector<MPI_Comm> mpi_comms = buildComm(&cell_comm[0], ncells, &cell[0], &cellFar, &cellNear, levels, world);
   for (int64_t i = 0; i <= levels; i++) {
     cell_comm[i].timer = &timer;
   }
@@ -102,8 +104,9 @@ int main(int argc, char* argv[]) {
   std::cout << construct_time << ", " << construct_comm_time << std::endl;
   std::cout << matvec_time << ", " << matvec_comm_time << std::endl;
 
-  cellComm_free(&cell_comm[0], levels);
-
+  for (MPI_Comm& c : mpi_comms)
+    MPI_Comm_free(&c);
+  MPI_Comm_free(&world);
   MPI_Finalize();
   return 0;
 }
