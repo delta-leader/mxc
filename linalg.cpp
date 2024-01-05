@@ -12,8 +12,8 @@
 
 void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, std::complex<double> alpha, std::complex<double> beta) {
   int64_t k = ta == 'N' ? A->N : A->M;
-  CBLAS_TRANSPOSE tac = ta == 'N' ? CblasNoTrans : CblasConjTrans;
-  CBLAS_TRANSPOSE tbc = tb == 'N' ? CblasNoTrans : CblasConjTrans;
+  CBLAS_TRANSPOSE tac = ta == 'N' ? CblasNoTrans : CblasTrans;
+  CBLAS_TRANSPOSE tbc = tb == 'N' ? CblasNoTrans : CblasTrans;
   int64_t lda = 1 < A->LDA ? A->LDA : 1;
   int64_t ldb = 1 < B->LDA ? B->LDA : 1;
   int64_t ldc = 1 < C->LDA ? C->LDA : 1;
@@ -76,7 +76,7 @@ int64_t compute_basis(const Eval& eval, double epi, int64_t M, std::complex<doub
       }
       std::copy(&S[0], &S[M * 3], Xbodies);
 
-      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, M, rank, M, &one, A, LDA, &U[0], M, &zero, &B[0], M);
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasTrans, M, rank, M, &one, A, LDA, &U[0], M, &zero, &B[0], M);
       LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, rank, reinterpret_cast<lapack_complex_double*>(&B[0]), M, reinterpret_cast<lapack_complex_double*>(&U[0]));
       LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'L', M, rank, reinterpret_cast<lapack_complex_double*>(&B[0]), M, reinterpret_cast<lapack_complex_double*>(A), LDA);
       LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, rank, reinterpret_cast<lapack_complex_double*>(A), LDA, reinterpret_cast<lapack_complex_double*>(&U[0]));

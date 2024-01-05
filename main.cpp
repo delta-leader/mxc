@@ -22,9 +22,10 @@ int main(int argc, char* argv[]) {
   int64_t Nleaf = (int64_t)1 << levels;
   int64_t ncells = Nleaf + Nleaf - 1;
   
-  Laplace3D eval(1);
+  //Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(0.2);
+  Helmholtz3D eval(1, 1.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody);
