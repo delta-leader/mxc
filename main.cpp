@@ -6,6 +6,8 @@
 #include <comm.hpp>
 #include <linalg.hpp>
 
+#include <random>
+
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
@@ -25,7 +27,7 @@ int main(int argc, char* argv[]) {
   //Gaussian eval(0.2);
   
   std::vector<double> body(Nbody * 3);
-  std::vector<double> Xbody(Nbody);
+  std::vector<std::complex<double>> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
 
   std::vector<CellComm> cell_comm(levels + 1);
@@ -43,7 +45,11 @@ int main(int argc, char* argv[]) {
     //buildTreeBuckets(cell, body, buckets, levels);
     buildTree(&cell[0], &body[0], Nbody, levels);
   }
-  body_neutral_charge(&Xbody[0], Nbody, 999);
+
+  std::mt19937 gen(999);
+  std::uniform_real_distribution<> dis(0., 1.);
+  for (int64_t n = 0; n < Nbody; ++n)
+    Xbody[n] = std::complex<double>(dis(gen), 0.);
 
   /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
   cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
@@ -64,7 +70,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double construct_time = MPI_Wtime(), construct_comm_time;
-  buildBasis(eval, epi, &basis[0], &cell[0], &cellNear, levels, &cell_comm[0], &body[0], Nbody);
+  buildBasis(eval, epi, &basis[0], &cell[0], cellNear, levels, &cell_comm[0], &body[0], Nbody);
 
   MPI_Barrier(MPI_COMM_WORLD);
   construct_time = MPI_Wtime() - construct_time;
@@ -73,13 +79,13 @@ int main(int argc, char* argv[]) {
 
   int64_t body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
   int64_t lenX = body_local[1] - body_local[0];
-  std::vector<double> X1(lenX, 0);
-  std::vector<double> X2(lenX, 0);
+  std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
   std::copy(Xbody.begin() + cell[gbegin].Body[0], Xbody.begin() + cell[gbegin + llen - 1].Body[1], &X1[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matVecA(eval, &basis[0], &body[0], &cell[0], &cellNear, &cellFar, &X1[0], &cell_comm[0], levels);
+  matVecA(eval, &basis[0], &body[0], &cell[0], cellNear, cellFar, &X1[0], &cell_comm[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;

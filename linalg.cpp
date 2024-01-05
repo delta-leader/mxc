@@ -10,17 +10,17 @@
 #include <numeric>
 #include <array>
 
-void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, double alpha, double beta) {
+void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, std::complex<double> alpha, std::complex<double> beta) {
   int64_t k = ta == 'N' ? A->N : A->M;
-  CBLAS_TRANSPOSE tac = ta == 'N' ? CblasNoTrans : CblasTrans;
-  CBLAS_TRANSPOSE tbc = tb == 'N' ? CblasNoTrans : CblasTrans;
+  CBLAS_TRANSPOSE tac = ta == 'N' ? CblasNoTrans : CblasConjTrans;
+  CBLAS_TRANSPOSE tbc = tb == 'N' ? CblasNoTrans : CblasConjTrans;
   int64_t lda = 1 < A->LDA ? A->LDA : 1;
   int64_t ldb = 1 < B->LDA ? B->LDA : 1;
   int64_t ldc = 1 < C->LDA ? C->LDA : 1;
-  cblas_dgemm(CblasColMajor, tac, tbc, C->M, C->N, k, alpha, A->A, lda, B->A, ldb, beta, C->A, ldc);
+  cblas_zgemm(CblasColMajor, tac, tbc, C->M, C->N, k, &alpha, A->A, lda, B->A, ldb, &beta, C->A, ldc);
 }
 
-void gen_matrix(const EvalDouble& Eval, int64_t m, int64_t n, const double* bi, const double* bj, double Aij[], int64_t lda) {
+void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
   const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * m]);
   const std::array<double, 3>* bj3 = reinterpret_cast<const std::array<double, 3>*>(bj);
@@ -34,36 +34,40 @@ void gen_matrix(const EvalDouble& Eval, int64_t m, int64_t n, const double* bi, 
       double y = i[1] - j[1];
       double z = i[2] - j[2];
       double d = std::sqrt(x * x + y * y + z * z);
-      Aij[iy + ix * lda] = Eval(d);
+      Aij[iy + ix * lda] = eval(d);
     });
   });
 }
 
-int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, int64_t LDA, double Xbodies[], int64_t Lfar, int64_t Nfar[], const double* Fbodies[]) {
+int64_t compute_basis(const Eval& eval, double epi, int64_t M, std::complex<double>* A, int64_t LDA, double Xbodies[], int64_t Lfar, int64_t Nfar[], const double* Fbodies[]) {
 
   if (M > 0 && Lfar > 0) {
     int64_t N = std::max(M, (int64_t)(1 << 12)), B2 = N + M;
-    std::vector<double> B(M * B2, 0.), U(M * M, 0.), S(M * 3);
+    lapack_complex_double one { 1., 0. }, zero { 0., 0. };
+
+    std::vector<std::complex<double>> B(M * B2, 0.), U(M * M, 0.);
+    std::vector<double> S(M * 3);
     std::vector<int32_t> ipiv(M, 0);
+
     for (int64_t i = 0; i < Lfar; i++)
       for (int64_t j = 0; j < Nfar[i]; j += N) {
         int64_t len = std::min(Nfar[i] - j, N);
         gen_matrix(eval, len, M, Fbodies[i] + (j * 3), Xbodies, &B[M], B2);
-        LAPACKE_dgeqrf(LAPACK_COL_MAJOR, M + len, M, &B[0], B2, &S[0]);
-        LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &B[1], B2);
+        LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + len, M, reinterpret_cast<lapack_complex_double*>(&B[0]), B2, reinterpret_cast<lapack_complex_double*>(&U[0]));
+        LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, reinterpret_cast<lapack_complex_double*>(&B[1]), B2);
       }
 
-    LAPACKE_dgeqp3(LAPACK_COL_MAJOR, M, M, &B[0], B2, &ipiv[0], &S[0]);
-    LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, 0., 0., &B[1], B2);
+    LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, reinterpret_cast<lapack_complex_double*>(&B[0]), B2, &ipiv[0], reinterpret_cast<lapack_complex_double*>(&U[0]));
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, reinterpret_cast<lapack_complex_double*>(&B[1]), B2);
     int64_t rank = 0;
-    double s0 = std::abs(epi * B[0]);
-    while (rank < M && s0 <= std::abs(B[rank * (B2 + 1)]))
+    double s0 = epi * std::sqrt(std::norm(B[0]));
+    while (rank < M && s0 <= std::sqrt(std::norm(B[rank * (B2 + 1)])))
       ++rank;
     
     if (rank > 0) {
       if (rank < M)
-        cblas_dtrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, 1., &B[0], B2, &B[rank * B2], B2);
-      LAPACKE_dlaset(LAPACK_COL_MAJOR, 'F', rank, rank, 0., 1., &B[0], B2);
+        cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, &B[0], B2, &B[rank * B2], B2);
+      LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', rank, rank, zero, one, reinterpret_cast<lapack_complex_double*>(&B[0]), B2);
 
       for (int64_t i = 0; i < M; i++) {
         int64_t piv = (int64_t)ipiv[i] - 1;
@@ -72,13 +76,13 @@ int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, 
       }
       std::copy(&S[0], &S[M * 3], Xbodies);
 
-      cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans, M, rank, M, 1., A, LDA, &U[0], M, 0., &B[0], M);
-      LAPACKE_dgeqrf(LAPACK_COL_MAJOR, M, rank, &B[0], M, &S[0]);
-      LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'L', M, rank, &B[0], M, A, LDA);
-      LAPACKE_dorgqr(LAPACK_COL_MAJOR, M, M, rank, A, LDA, &S[0]);
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, M, rank, M, &one, A, LDA, &U[0], M, &zero, &B[0], M);
+      LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, rank, reinterpret_cast<lapack_complex_double*>(&B[0]), M, reinterpret_cast<lapack_complex_double*>(&U[0]));
+      LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'L', M, rank, reinterpret_cast<lapack_complex_double*>(&B[0]), M, reinterpret_cast<lapack_complex_double*>(A), LDA);
+      LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, rank, reinterpret_cast<lapack_complex_double*>(A), LDA, reinterpret_cast<lapack_complex_double*>(&U[0]));
 
-      LAPACKE_dlacpy(LAPACK_COL_MAJOR, 'U', rank, rank, &B[0], M, &A[M * LDA], LDA);
-      LAPACKE_dlaset(LAPACK_COL_MAJOR, 'L', rank - 1, rank - 1, 0., 0., &A[M * LDA + 1], LDA);
+      LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', rank, rank, reinterpret_cast<lapack_complex_double*>(&B[0]), M, reinterpret_cast<lapack_complex_double*>(&A[M * LDA]), LDA);
+      LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', rank - 1, rank - 1, zero, zero, reinterpret_cast<lapack_complex_double*>(&A[M * LDA + 1]), LDA);
     }
     return rank;
   }
@@ -86,9 +90,10 @@ int64_t compute_basis(const EvalDouble& eval, double epi, int64_t M, double* A, 
 }
 
 
-void mat_vec_reference(const EvalDouble& eval, int64_t M, int64_t N, double B[], const double X[], const double ibodies[], const double jbodies[]) {
+void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]) {
   int64_t size = 1 << 8;
-  std::vector<double> A(size * size);
+  std::vector<std::complex<double>> A(size * size);
+  std::complex<double> one(1., 0.);
   
   for (int64_t i = 0; i < M; i += size) {
     int64_t m = std::min(M - i, size);
@@ -97,7 +102,7 @@ void mat_vec_reference(const EvalDouble& eval, int64_t M, int64_t N, double B[],
       const double* bj = &jbodies[j * 3];
       int64_t n = std::min(N - j, size);
       gen_matrix(eval, m, n, bi, bj, &A[0], size);
-      cblas_dgemv(CblasColMajor, CblasNoTrans, m, n, 1., &A[0], size, &X[j], 1, 1., &B[i], 1);
+      cblas_zgemv(CblasColMajor, CblasNoTrans, m, n, &one, &A[0], size, &X[j], 1, &one, &B[i], 1);
     }
   }
 }

@@ -22,7 +22,7 @@ const double* Base::ske_at_i(int64_t i) const {
   return Mdata.data() + 3 * std::accumulate(DimsLr.begin(), DimsLr.begin() + i, 0);
 }
 
-void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* cells, const CSR* rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies) {
+void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, const CSR& rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies) {
 
   for (int64_t l = levels; l >= 0; l--) {
     int64_t xlen = comm[l].lenNeighbors();
@@ -56,7 +56,7 @@ void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* ce
     SumLocalDims[0] = std::make_pair(0, 0);
 
     std::vector<double> Skeletons(SumLocalDims[nodes].first, 0.);
-    std::vector<double> MatrixData(SumLocalDims[nodes].second, 0.);
+    std::vector<std::complex<double>> MatrixData(SumLocalDims[nodes].second, 0.);
     
     if (l < levels)
       for (int64_t i = 0; i < nodes; i++) {
@@ -89,13 +89,13 @@ void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* ce
 
     for (int64_t i = 0; i < nodes; i++) {
       int64_t ske_len = basis[l].Dims[i + ibegin];
-      double* mat = &MatrixData[SumLocalDims[i].second];
+      std::complex<double>* mat = &MatrixData[SumLocalDims[i].second];
       double* Xbodies = &Skeletons[SumLocalDims[i].first];
 
       int64_t ci = std::get<0>(celli[i + ibegin]);
-      int64_t nbegin = rel_near->RowIndex[ci];
-      int64_t nlen = rel_near->RowIndex[ci + 1] - nbegin;
-      const int64_t* ngbs = &rel_near->ColIndex[nbegin];
+      int64_t nbegin = rel_near.RowIndex[ci];
+      int64_t nlen = rel_near.RowIndex[ci + 1] - nbegin;
+      const int64_t* ngbs = &rel_near.ColIndex[nbegin];
       std::vector<const double*> remote;
       std::vector<int64_t> lens;
 
@@ -136,8 +136,8 @@ void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* ce
     Roffsets[0] = 0;
 
     basis[l].Mdata = std::vector<double>(Moffsets[xlen]);
-    basis[l].Udata = std::vector<double>(Uoffsets[xlen]);
-    basis[l].Rdata = std::vector<double>(Roffsets[xlen]);
+    basis[l].Udata = std::vector<std::complex<double>>(Uoffsets[xlen]);
+    basis[l].Rdata = std::vector<std::complex<double>>(Roffsets[xlen]);
 
     for (int64_t i = 0; i < xlen; i++) {
       int64_t Nc = basis[l].Dims[i] - basis[l].DimsLr[i];
@@ -145,9 +145,9 @@ void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* ce
       int64_t M = basis[l].Dims[i];
 
       double* M_ptr = &basis[l].Mdata[Moffsets[i]];
-      double* Uc_ptr = &basis[l].Udata[Uoffsets[i]];
-      double* Uo_ptr = Uc_ptr + M * Nc;
-      double* R_ptr = &basis[l].Rdata[Roffsets[i]];
+      std::complex<double>* Uc_ptr = &basis[l].Udata[Uoffsets[i]];
+      std::complex<double>* Uo_ptr = Uc_ptr + M * Nc;
+      std::complex<double>* R_ptr = &basis[l].Rdata[Roffsets[i]];
 
       if (i >= ibegin && i < iend) {
         memcpy2d(Uc_ptr, &MatrixData[SumLocalDims[i - ibegin].second + No * M], M, Nc, M, M);
@@ -170,24 +170,24 @@ void buildBasis(const EvalDouble& eval, double epi, Base basis[], const Cell* ce
 }
 
 
-void matVecA(const EvalDouble& eval, const Base basis[], const double bodies[], const Cell cells[], const CSR* rels_near, const CSR* rels_far, double X[], const CellComm comm[], int64_t levels) {
+void matVecA(const Eval& eval, const Base basis[], const double bodies[], const Cell cells[], const CSR& rels_near, const CSR& rels_far, std::complex<double> X[], const CellComm comm[], int64_t levels) {
   int64_t lbegin = comm[levels].oLocal();
   int64_t llen = comm[levels].lenLocal();
 
-  std::vector<std::vector<double>> rhsX(levels + 1), rhsB(levels + 1);
-  std::vector<std::vector<double*>> rhsXptr(levels + 1), rhsXoptr(levels + 1), rhsBptr(levels + 1), rhsBoptr(levels + 1);
+  std::vector<std::vector<std::complex<double>>> rhsX(levels + 1), rhsB(levels + 1);
+  std::vector<std::vector<std::complex<double>*>> rhsXptr(levels + 1), rhsXoptr(levels + 1), rhsBptr(levels + 1), rhsBoptr(levels + 1);
 
   for (int64_t l = levels; l >= 0; l--) {
     int64_t xlen = comm[l].lenNeighbors();
     std::vector<int64_t> offsets(xlen + 1);
     std::inclusive_scan(basis[l].Dims.begin(), basis[l].Dims.end(), offsets.begin() + 1);
 
-    rhsX[l] = std::vector<double>(offsets[xlen], 0);
-    rhsB[l] = std::vector<double>(offsets[xlen], 0);
-    rhsXptr[l] = std::vector<double*>(xlen, nullptr);
-    rhsBptr[l] = std::vector<double*>(xlen, nullptr);
-    rhsXoptr[l] = std::vector<double*>(xlen, nullptr);
-    rhsBoptr[l] = std::vector<double*>(xlen, nullptr);
+    rhsX[l] = std::vector<std::complex<double>>(offsets[xlen], std::complex<double>(0., 0.));
+    rhsB[l] = std::vector<std::complex<double>>(offsets[xlen], std::complex<double>(0., 0.));
+    rhsXptr[l] = std::vector<std::complex<double>*>(xlen, nullptr);
+    rhsBptr[l] = std::vector<std::complex<double>*>(xlen, nullptr);
+    rhsXoptr[l] = std::vector<std::complex<double>*>(xlen, nullptr);
+    rhsBoptr[l] = std::vector<std::complex<double>*>(xlen, nullptr);
 
     std::transform(offsets.begin(), offsets.begin() + xlen, rhsXptr[l].begin(), [&](const int64_t d) { return &rhsX[l][d]; });
     std::transform(offsets.begin(), offsets.begin() + xlen, rhsBptr[l].begin(), [&](const int64_t d) { return &rhsB[l][d]; });
@@ -223,7 +223,7 @@ void matVecA(const EvalDouble& eval, const Base basis[], const double bodies[], 
     for (int64_t j = 0; j < iboxes; j++) {
       Matrix Xj = (Matrix) { rhsXptr[i][j + ibegin], basis[i].Dims[j + ibegin], 1, basis[i].Dims[j + ibegin] };
       Matrix Xo = (Matrix) { rhsXoptr[i][j + ibegin], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
-      mmult('T', 'N', &basis[i].Uo[j + ibegin], &Xj, &Xo, 1., 0.);
+      mmult('T', 'N', &basis[i].Uo[j + ibegin], &Xj, &Xo, std::complex<double>(1., 0.), std::complex<double>(0., 0.));
     }
   }
 
@@ -238,20 +238,20 @@ void matVecA(const EvalDouble& eval, const Base basis[], const double bodies[], 
     int64_t gbegin = comm[i].oGlobal();
 
     for (int64_t y = 0; y < iboxes; y++)
-      for (int64_t yx = rels_far->RowIndex[y + gbegin]; yx < rels_far->RowIndex[y + gbegin + 1]; yx++) {
-        int64_t x = comm[i].iLocal(rels_far->ColIndex[yx]);
+      for (int64_t yx = rels_far.RowIndex[y + gbegin]; yx < rels_far.RowIndex[y + gbegin + 1]; yx++) {
+        int64_t x = comm[i].iLocal(rels_far.ColIndex[yx]);
         int64_t M = basis[i].DimsLr[y + ibegin];
         int64_t N = basis[i].DimsLr[x];
 
         Matrix Xo = (Matrix) { rhsXoptr[i][x], N, 1, N };
         Matrix Bo = (Matrix) { rhsBoptr[i][y + ibegin], M, 1, M };
-        std::vector<double> TMPX(N, 0.), TMPB(M, 0.);
+        std::vector<std::complex<double>> TMPX(N, std::complex<double>(0., 0.)), TMPB(M, std::complex<double>(0., 0.));
         Matrix T1 = (Matrix) { &TMPX[0], N, 1, N };
         Matrix T2 = (Matrix) { &TMPB[0], M, 1, M };
 
-        mmult('T', 'N', &basis[i].R[x], &Xo, &T1, 1., 0.);
+        mmult('T', 'N', &basis[i].R[x], &Xo, &T1, std::complex<double>(1., 0.), std::complex<double>(0., 0.));
         mat_vec_reference(eval, M, N, &TMPB[0], &TMPX[0], basis[i].ske_at_i(y + ibegin), basis[i].ske_at_i(x));
-        mmult('N', 'N', &basis[i].R[y + ibegin], &T2, &Bo, 1., 1.);
+        mmult('N', 'N', &basis[i].R[y + ibegin], &T2, &Bo, std::complex<double>(1., 0.), std::complex<double>(1., 0.));
       }
   }
   
@@ -261,14 +261,14 @@ void matVecA(const EvalDouble& eval, const Base basis[], const double bodies[], 
     for (int64_t j = 0; j < iboxes; j++) {
       Matrix Bj = (Matrix) { rhsBptr[i][j + ibegin], basis[i].Dims[j + ibegin], 1, basis[i].Dims[j + ibegin] };
       Matrix Bo = (Matrix) { rhsBoptr[i][j + ibegin], basis[i].DimsLr[j + ibegin], 1, basis[i].DimsLr[j + ibegin] };
-      mmult('N', 'N', &basis[i].Uo[j + ibegin], &Bo, &Bj, 1., 1.);
+      mmult('N', 'N', &basis[i].Uo[j + ibegin], &Bo, &Bj, std::complex<double>(1., 0.), std::complex<double>(1., 0.));
     }
   }
 
   int64_t gbegin = comm[levels].oGlobal();
   for (int64_t y = 0; y < llen; y++)
-    for (int64_t yx = rels_near->RowIndex[y + gbegin]; yx < rels_near->RowIndex[y + gbegin + 1]; yx++) {
-      int64_t x = rels_near->ColIndex[yx];
+    for (int64_t yx = rels_near.RowIndex[y + gbegin]; yx < rels_near.RowIndex[y + gbegin + 1]; yx++) {
+      int64_t x = rels_near.ColIndex[yx];
       int64_t x_loc = comm[levels].iLocal(x);
       int64_t M = cells[y + gbegin].Body[1] - cells[y + gbegin].Body[0];
       int64_t N = cells[x].Body[1] - cells[x].Body[0];
@@ -279,12 +279,12 @@ void matVecA(const EvalDouble& eval, const Base basis[], const double bodies[], 
 }
 
 
-void solveRelErr(double* err_out, const double* X, const double* ref, int64_t lenX) {
+void solveRelErr(double* err_out, const std::complex<double>* X, const std::complex<double>* ref, int64_t lenX) {
   double err[2] = { 0., 0. };
   for (int64_t i = 0; i < lenX; i++) {
-    double diff = X[i] - ref[i];
-    err[0] = err[0] + diff * diff;
-    err[1] = err[1] + ref[i] * ref[i];
+    std::complex<double> diff = X[i] - ref[i];
+    err[0] = err[0] + (diff.real() * diff.real());
+    err[1] = err[1] + (ref[i].real() * ref[i].real());
   }
   MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   *err_out = std::sqrt(err[0] / err[1]);

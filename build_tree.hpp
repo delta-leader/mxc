@@ -4,8 +4,6 @@
 #include <cstdint>
 #include <vector>
 
-class EvalDouble;
-
 class CellComm;
 class Base;
 class Matrix;

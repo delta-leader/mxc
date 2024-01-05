@@ -225,10 +225,10 @@ int64_t CellComm::lenNeighbors() const {
     [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
 }
 
-void CellComm::level_merge(double* data, int64_t len) const {
+void CellComm::level_merge(std::complex<double>* data, int64_t len) const {
   if (Comm_merge != MPI_COMM_NULL) {
     record_mpi();
-    MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_DOUBLE, MPI_SUM, Comm_merge);
+    MPI_Allreduce(MPI_IN_PLACE, data, len, MPI_DOUBLE_COMPLEX, MPI_SUM, Comm_merge);
     record_mpi();
   }
 }
@@ -237,6 +237,14 @@ void CellComm::dup_bcast(double* data, int64_t len) const {
   if (Comm_share != MPI_COMM_NULL) {
     record_mpi();
     MPI_Bcast(data, len, MPI_DOUBLE, 0, Comm_share);
+    record_mpi();
+  }
+}
+
+void CellComm::dup_bcast(std::complex<double>* data, int64_t len) const {
+  if (Comm_share != MPI_COMM_NULL) {
+    record_mpi();
+    MPI_Bcast(data, len, MPI_DOUBLE_COMPLEX, 0, Comm_share);
     record_mpi();
   }
 }
@@ -254,6 +262,24 @@ void CellComm::neighbor_bcast(double* data, const int64_t box_dims[]) const {
     for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
       int64_t llen = offsets[p + 1] - offsets[p];
       MPI_Bcast(&data[offsets[p]], llen, MPI_DOUBLE, Comm_box[p].first, Comm_box[p].second);
+    }
+    record_mpi();
+  }
+}
+
+void CellComm::neighbor_bcast(std::complex<double>* data, const int64_t box_dims[]) const {
+  if (Comm_box.size() > 0) {
+    std::vector<int64_t> offsets(Comm_box.size() + 1, 0);
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t end = ProcBoxes[p].second;
+      offsets[p + 1] = std::accumulate(box_dims, &box_dims[end], offsets[p]);
+      box_dims = &box_dims[end];
+    }
+
+    record_mpi();
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t llen = offsets[p + 1] - offsets[p];
+      MPI_Bcast(&data[offsets[p]], llen, MPI_DOUBLE_COMPLEX, Comm_box[p].first, Comm_box[p].second);
     }
     record_mpi();
   }

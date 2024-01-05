@@ -148,13 +148,6 @@ void mesh_unit_sphere(double* bodies, int64_t nbodies, double r) {
   }
 }
 
-void body_neutral_charge(double X[], int64_t nbodies, unsigned int seed) {
-  std::mt19937 gen(seed);
-  std::uniform_real_distribution<> dis(0., 1.);
-  for (int64_t n = 0; n < nbodies; ++n)
-    X[n] = dis(gen);
-}
-
 void read_sorted_bodies(int64_t* nbodies, int64_t lbuckets, double* bodies, int64_t buckets[], const char* fname) {
   std::ifstream file(fname);
 
