@@ -21,6 +21,7 @@ int main(int argc, char* argv[]) {
   int64_t levels = (int64_t)log2((double)Nbody / leaf_size);
   int64_t Nleaf = (int64_t)1 << levels;
   int64_t ncells = Nleaf + Nleaf - 1;
+  int64_t nrhs = 2;
   MPI_Comm world;
   MPI_Comm_dup(MPI_COMM_WORLD, &world);
   
@@ -30,7 +31,7 @@ int main(int argc, char* argv[]) {
   Helmholtz3D eval(1, 1.);
   
   std::vector<double> body(Nbody * 3);
-  std::vector<std::complex<double>> Xbody(Nbody);
+  std::vector<std::complex<double>> Xbody(Nbody * nrhs);
   std::vector<Cell> cell(ncells);
 
   std::vector<CellComm> cell_comm(levels + 1);
@@ -51,7 +52,7 @@ int main(int argc, char* argv[]) {
 
   std::mt19937 gen(999);
   std::uniform_real_distribution<> dis(0., 1.);
-  for (int64_t n = 0; n < Nbody; ++n)
+  for (int64_t n = 0; n < (int64_t)Xbody.size(); ++n)
     Xbody[n] = std::complex<double>(dis(gen), 0.);
 
   /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
@@ -82,13 +83,14 @@ int main(int argc, char* argv[]) {
 
   int64_t body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
   int64_t lenX = body_local[1] - body_local[0];
-  std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
-  std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> X1(lenX * nrhs, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> X2(lenX * nrhs, std::complex<double>(0., 0.));
 
-  std::copy(Xbody.begin() + cell[gbegin].Body[0], Xbody.begin() + cell[gbegin + llen - 1].Body[1], &X1[0]);
+  for (int64_t i = 0; i < nrhs; i++)
+    std::copy(&Xbody[i * Nbody] + body_local[0], &Xbody[i * Nbody] + body_local[1], &X1[i * lenX]);
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matVecA(eval, &basis[0], &body[0], &cell[0], cellNear, cellFar, &X1[0], &cell_comm[0], levels);
+  matVecA(eval, nrhs, &X1[0], lenX, &basis[0], &body[0], &cell[0], cellNear, cellFar, &cell_comm[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -96,9 +98,9 @@ int main(int argc, char* argv[]) {
   timer.first = 0;
 
   double cerr = 0.;
-  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
+  mat_vec_reference(eval, lenX, Nbody, nrhs, &X2[0], lenX, &Xbody[0], Nbody, &body[body_local[0] * 3], &body[0]);
 
-  solveRelErr(&cerr, &X1[0], &X2[0], lenX);
+  solveRelErr(&cerr, &X1[0], &X2[0], lenX * nrhs);
 
   std::cout << cerr << std::endl;
   std::cout << construct_time << ", " << construct_comm_time << std::endl;

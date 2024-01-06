@@ -18,5 +18,5 @@ void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, std::c
 
 int64_t compute_basis(const Eval& eval, double epi, int64_t M, std::complex<double> A[], int64_t LDA, double Xbodies[], int64_t Lfar, int64_t Nfar[], const double* Fbodies[]);
 
-void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]);
+void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, int64_t nrhs, std::complex<double> B[], int64_t ldB, const std::complex<double> X[], int64_t ldX, const double ibodies[], const double jbodies[]);
 

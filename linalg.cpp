@@ -90,7 +90,7 @@ int64_t compute_basis(const Eval& eval, double epi, int64_t M, std::complex<doub
 }
 
 
-void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]) {
+void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, int64_t nrhs, std::complex<double> B[], int64_t ldB, const std::complex<double> X[], int64_t ldX, const double ibodies[], const double jbodies[]) {
   int64_t size = 1 << 8;
   std::vector<std::complex<double>> A(size * size);
   std::complex<double> one(1., 0.);
@@ -102,7 +102,7 @@ void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, std::complex<doub
       const double* bj = &jbodies[j * 3];
       int64_t n = std::min(N - j, size);
       gen_matrix(eval, m, n, bi, bj, &A[0], size);
-      cblas_zgemv(CblasColMajor, CblasNoTrans, m, n, &one, &A[0], size, &X[j], 1, &one, &B[i], 1);
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, nrhs, n, &one, &A[0], size, &X[j], ldX, &one, &B[i], ldB);
     }
   }
 }
