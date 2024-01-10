@@ -3,6 +3,7 @@
 #include <build_tree.hpp>
 
 #include <algorithm>
+#include <set>
 #include <numeric>
 #include <cmath>
 
@@ -250,7 +251,7 @@ void get_level_procs(std::vector<std::pair<int64_t, int64_t>>& Procs, std::vecto
   }
 }
 
-std::vector<MPI_Comm> buildComm(CellComm* comms, int64_t ncells, const Cell* cells, const CSR* cellFar, const CSR* cellNear, int64_t levels, MPI_Comm world) {
+std::vector<MPI_Comm> buildComm(CellComm* comms, int64_t ncells, const Cell* cells, const CSR& cellFar, const CSR& cellNear, int64_t levels, MPI_Comm world) {
   int __mpi_rank = 0, __mpi_size = 1;
   MPI_Comm_rank(world, &__mpi_rank);
   MPI_Comm_size(world, &__mpi_size);
@@ -272,13 +273,11 @@ std::vector<MPI_Comm> buildComm(CellComm* comms, int64_t ncells, const Cell* cel
 
     std::vector<int64_t> ProcTargets;
     for (int64_t i = 0; i < mpi_size; i++) {
-      int is_ngb = 0;
-      for (int64_t k = cellNear->RowIndex[mbegin]; k < cellNear->RowIndex[mend]; k++)
-        if (Procs[cellNear->ColIndex[k]].first == i)
-          is_ngb = 1;
-      for (int64_t k = cellFar->RowIndex[mbegin]; k < cellFar->RowIndex[mend]; k++)
-        if (Procs[cellFar->ColIndex[k]].first == i)
-          is_ngb = 1;
+      std::set<int64_t> unique_cols;
+      unique_cols.insert(cellNear.ColIndex.begin() + cellNear.RowIndex[mbegin], cellNear.ColIndex.begin() + cellNear.RowIndex[mend]);
+      unique_cols.insert(cellFar.ColIndex.begin() + cellFar.RowIndex[mbegin], cellFar.ColIndex.begin() + cellFar.RowIndex[mend]);
+      bool is_ngb = unique_cols.size() > 0 ? (unique_cols.end() != std::find_if(unique_cols.begin(), unique_cols.end(), 
+        [&](const int64_t col) { return Procs[col].first == i; })) : false;
       
       if (is_ngb)
         ProcTargets.emplace_back(i);

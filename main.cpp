@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
   CSR cellFar('F', ncells, &cell[0], theta);
 
   std::pair<double, double> timer(0, 0);
-  std::vector<MPI_Comm> mpi_comms = buildComm(&cell_comm[0], ncells, &cell[0], &cellFar, &cellNear, levels, world);
+  std::vector<MPI_Comm> mpi_comms = buildComm(&cell_comm[0], ncells, &cell[0], cellFar, cellNear, levels, world);
   for (int64_t i = 0; i <= levels; i++) {
     cell_comm[i].timer = &timer;
   }
@@ -86,11 +86,13 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> X1(lenX * nrhs, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX * nrhs, std::complex<double>(0., 0.));
 
+  MatVec mv(eval, &basis[0], &body[0], &cell[0], cellNear, cellFar, &cell_comm[0], levels);
   for (int64_t i = 0; i < nrhs; i++)
     std::copy(&Xbody[i * Nbody] + body_local[0], &Xbody[i * Nbody] + body_local[1], &X1[i * lenX]);
+
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matVecA(eval, nrhs, &X1[0], lenX, &basis[0], &body[0], &cell[0], cellNear, cellFar, &cell_comm[0], levels);
+  mv(nrhs, &X1[0], lenX);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;

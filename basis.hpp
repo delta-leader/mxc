@@ -21,8 +21,23 @@ public:
   const double* ske_at_i(int64_t i) const;
 };
 
-void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, const CSR& rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies);
+class MatVec {
+private:
+  const Eval* EvalFunc;
+  const Base* Basis;
+  const double* Bodies;
+  const Cell* Cells;
+  const CSR* Near;
+  const CSR* Far;
+  const CellComm* Comm;
+  int64_t Levels;
 
-void matVecA(const Eval& eval, int64_t nrhs, std::complex<double> X[], int64_t ldX, const Base basis[], const double bodies[], const Cell cells[], const CSR& rels_near, const CSR& rels_far, const CellComm comm[], int64_t levels);
+public:
+  MatVec(const Eval& eval, const Base basis[], const double bodies[], const Cell cells[], const CSR& rels_near, const CSR& rels_far, const CellComm comm[], int64_t levels);
+
+  void operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) const;
+};
+
+void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, const CSR& rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies);
 
 void solveRelErr(double* err_out, const std::complex<double>* X, const std::complex<double>* ref, int64_t lenX);

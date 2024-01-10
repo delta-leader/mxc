@@ -47,5 +47,5 @@ public:
   void record_mpi() const;
 };
 
-std::vector<MPI_Comm> buildComm(CellComm* comms, int64_t ncells, const Cell* cells, const CSR* cellFar, const CSR* cellNear, int64_t levels, MPI_Comm world);
+std::vector<MPI_Comm> buildComm(CellComm* comms, int64_t ncells, const Cell* cells, const CSR& cellFar, const CSR& cellNear, int64_t levels, MPI_Comm world);
 
