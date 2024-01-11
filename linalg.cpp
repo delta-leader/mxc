@@ -39,6 +39,25 @@ void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const 
   });
 }
 
+void compute_schur(const Eval& eval, int64_t M, int64_t N, int64_t K, std::complex<double> SijT[], int64_t LD, const double Ibodies[], const double Jbodies[], const double Kbodies[]) {
+  if (M > 0 && N > 0 && K > 0) {
+    std::vector<std::complex<double>> Aki(M * K), Akk(K * K), Ajk(N * K), S((M + N) * M);
+    std::vector<int32_t> ipiv(K);
+    std::complex<double> one(1., 0.), zero(0., 0.);
+
+    gen_matrix(eval, K, M, Kbodies, Ibodies, &Aki[0], K);
+    gen_matrix(eval, K, K, Kbodies, Kbodies, &Akk[0], K);
+    gen_matrix(eval, N, K, Jbodies, Kbodies, &Ajk[0], N);
+
+    LAPACKE_zgetrf(LAPACK_COL_MAJOR, K, K, reinterpret_cast<lapack_complex_double*>(&Akk[0]), K, &ipiv[0]);
+    LAPACKE_zgetrs(LAPACK_COL_MAJOR, 'N', K, M, reinterpret_cast<lapack_complex_double*>(&Akk[0]), K, &ipiv[0], reinterpret_cast<lapack_complex_double*>(&Aki[0]), K);
+    cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, M, K, &one, &Ajk[0], K, &Aki[0], K, &zero, &S[M], M + N);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, reinterpret_cast<lapack_complex_double*>(SijT), LD, reinterpret_cast<lapack_complex_double*>(&S[0]), M + N);
+    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + N, M, reinterpret_cast<lapack_complex_double*>(&S[0]), M + N, reinterpret_cast<lapack_complex_double*>(&Aki[0]));
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, reinterpret_cast<lapack_complex_double*>(&S[0]), M + N, reinterpret_cast<lapack_complex_double*>(SijT), LD);
+  }
+}
+
 int64_t compute_basis(const Eval& eval, double epi, int64_t M, std::complex<double>* A, int64_t LDA, double Xbodies[], int64_t Lfar, int64_t Nfar[], const double* Fbodies[]) {
 
   if (M > 0 && Lfar > 0) {

@@ -21,6 +21,7 @@ private:
   template<typename T> inline void dup_bast(T* data, int64_t len) const;
   template<typename T> inline void neighbor_bcast(T* data, const int64_t box_dims[]) const;
   template<typename T> inline void neighbor_reduce(T* data, const int64_t box_dims[]) const;
+  template<typename T> inline void neighbor_gather(const T* data_in, T* data_out, const int64_t box_dims[]) const;
 
 public:
   std::pair<double, double>* timer;
@@ -34,6 +35,7 @@ public:
   int64_t oGlobal() const;
   int64_t lenLocal() const;
   int64_t lenNeighbors() const;
+  int64_t allToAllLength() const;
 
   void level_merge(std::complex<double>* data, int64_t len) const;
 
@@ -46,6 +48,8 @@ public:
   void neighbor_bcast(std::complex<double>* data, const int64_t box_dims[]) const;
 
   void neighbor_reduce(std::complex<double>* data, const int64_t box_dims[]) const;
+
+  void neighbor_gather(const std::complex<double>* data_in, std::complex<double>* data_out, const int64_t box_dims[]) const;
 
   void record_mpi() const;
 };

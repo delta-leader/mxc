@@ -195,8 +195,10 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
     std::inclusive_scan(LocalDims.begin(), LocalDims.end(), SumLocalDims.begin() + 1);
     SumLocalDims[0] = 0;
 
+    int64_t p_neighbors = comm[l].allToAllLength();
     std::vector<double> Skeletons(SumLocalDims[xlen], 0.);
     std::vector<std::complex<double>> MatrixData(2 * (Uoffsets[iend] - Uoffsets[ibegin]), std::complex<double>(0., 0.));
+    std::vector<std::complex<double>> SchurData(p_neighbors * (Uoffsets[iend] - Uoffsets[ibegin]), std::complex<double>(0., 0.));
     
     if (l < levels)
       for (int64_t i = 0; i < nodes; i++) {
@@ -233,6 +235,25 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
 
     comm[l].neighbor_bcast(Skeletons.data(), LocalDims.data());
     comm[l].dup_bcast(Skeletons.data(), SumLocalDims[xlen]);
+
+    for (int64_t i = 0; i < nodes; i++) {
+      int64_t c0 = std::get<0>(celli[i]);
+      for (int64_t c1 = rel_near.RowIndex[c0]; c1 < rel_near.RowIndex[c0 + 1]; c1++)
+        for (int64_t c2 = rel_near.RowIndex[c0]; c2 < rel_near.RowIndex[c0 + 1]; c2++) {
+          int64_t cbegin = rel_near.RowIndex[rel_near.ColIndex[c1]];
+          int64_t cend = rel_near.RowIndex[rel_near.ColIndex[c1] + 1];
+          if (std::find(&rel_near.ColIndex[cbegin], &rel_near.ColIndex[cend], rel_near.ColIndex[c2]) == &rel_near.ColIndex[cend]) {
+            int64_t ci = comm[l].iLocal(rel_near.ColIndex[c1]);
+            int64_t cj = comm[l].iLocal(rel_near.ColIndex[c2]);
+            std::complex<double>* matrix = &basis[l].Udata[Uoffsets[ci]];
+            compute_schur(eval, basis[l].Dims[ci], basis[l].Dims[cj], basis[l].Dims[i + ibegin], matrix, basis[l].Dims[ci], 
+              &Skeletons[SumLocalDims[ci]], &Skeletons[SumLocalDims[cj]], &Skeletons[SumLocalDims[i + ibegin]]);
+          }
+      }
+    }
+
+    comm[l].neighbor_gather(basis[l].Udata.data(), SchurData.data(), Usizes.data());
+    comm[l].dup_bcast(SchurData.data(), p_neighbors * (Uoffsets[iend] - Uoffsets[ibegin]));
 
     for (int64_t i = 0; i < nodes; i++) {
       int64_t dim = basis[l].Dims[i + ibegin];

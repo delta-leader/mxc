@@ -126,6 +126,10 @@ int64_t CellComm::lenNeighbors() const {
     [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
 }
 
+int64_t CellComm::allToAllLength() const {
+  return ProcBoxes.size();
+}
+
 template<typename T> inline MPI_Datatype get_mpi_datatype() {
   if (typeid(T) == typeid(int64_t))
     return MPI_INT64_T;
@@ -191,6 +195,27 @@ template<typename T> inline void CellComm::neighbor_reduce(T* data, const int64_
   }
 }
 
+template<typename T> inline void CellComm::neighbor_gather(const T* data_in, T* data_out, const int64_t box_dims[]) const {
+  if (Comm_box.size() > 0) {
+    std::vector<int64_t> offsets(Comm_box.size() + 1, 0);
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t end = ProcBoxes[p].second;
+      offsets[p + 1] = std::accumulate(box_dims, &box_dims[end], offsets[p]);
+      box_dims = &box_dims[end];
+    }
+
+    record_mpi();
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t llen = offsets[p + 1] - offsets[p];
+      if (p == Proc) 
+        MPI_Gather(&data_in[offsets[p]], llen, get_mpi_datatype<T>(), data_out, llen, get_mpi_datatype<T>(), Comm_box[p].first, Comm_box[p].second);
+      else
+        MPI_Gather(&data_in[offsets[p]], llen, get_mpi_datatype<T>(), nullptr, 0, get_mpi_datatype<T>(), Comm_box[p].first, Comm_box[p].second);
+    }
+    record_mpi();
+  }
+}
+
 void CellComm::level_merge(std::complex<double>* data, int64_t len) const {
   level_merge<std::complex<double>>(data, len);
 }
@@ -221,6 +246,10 @@ void CellComm::neighbor_bcast(std::complex<double>* data, const int64_t box_dims
 
 void CellComm::neighbor_reduce(std::complex<double>* data, const int64_t box_dims[]) const {
   neighbor_reduce<std::complex<double>>(data, box_dims);
+}
+
+void CellComm::neighbor_gather(const std::complex<double>* data_in, std::complex<double>* data_out, const int64_t box_dims[]) const {
+  neighbor_gather<std::complex<double>>(data_in, data_out, box_dims);
 }
 
 void CellComm::record_mpi() const {
