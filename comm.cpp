@@ -170,6 +170,27 @@ template<typename T> inline void CellComm::neighbor_bcast(T* data, const int64_t
   }
 }
 
+template<typename T> inline void CellComm::neighbor_reduce(T* data, const int64_t box_dims[]) const {
+  if (Comm_box.size() > 0) {
+    std::vector<int64_t> offsets(Comm_box.size() + 1, 0);
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t end = ProcBoxes[p].second;
+      offsets[p + 1] = std::accumulate(box_dims, &box_dims[end], offsets[p]);
+      box_dims = &box_dims[end];
+    }
+
+    record_mpi();
+    for (int64_t p = 0; p < (int64_t)Comm_box.size(); p++) {
+      int64_t llen = offsets[p + 1] - offsets[p];
+      if (p == Proc)
+        MPI_Reduce(MPI_IN_PLACE, &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, Comm_box[p].first, Comm_box[p].second);
+      else
+        MPI_Reduce(&data[offsets[p]], &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, Comm_box[p].first, Comm_box[p].second);
+    }
+    record_mpi();
+  }
+}
+
 void CellComm::level_merge(std::complex<double>* data, int64_t len) const {
   level_merge<std::complex<double>>(data, len);
 }
@@ -196,6 +217,10 @@ void CellComm::neighbor_bcast(double* data, const int64_t box_dims[]) const {
 
 void CellComm::neighbor_bcast(std::complex<double>* data, const int64_t box_dims[]) const {
   neighbor_bcast<std::complex<double>>(data, box_dims);
+}
+
+void CellComm::neighbor_reduce(std::complex<double>* data, const int64_t box_dims[]) const {
+  neighbor_reduce<std::complex<double>>(data, box_dims);
 }
 
 void CellComm::record_mpi() const {
@@ -296,21 +321,4 @@ std::vector<MPI_Comm> buildComm(CellComm* comms, int64_t ncells, const Cell* cel
 
   return unique_comms;
 }
-
-/*void neighbor_reduce_cpu(double* data, int64_t seg, const CellComm* comm) {
-  if (comm->Comm_box.size() > 0) {
-    comm->record_mpi();
-    int64_t y = 0;
-    for (int64_t p = 0; p < (int64_t)comm->Comm_box.size(); p++) {
-      int64_t llen = comm->ProcBoxes[p].second * seg;
-      double* loc = &data[y];
-      if (p == comm->Proc)
-        MPI_Reduce(MPI_IN_PLACE, loc, llen, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p].first, comm->Comm_box[p].second);
-      else
-        MPI_Reduce(loc, loc, llen, MPI_DOUBLE, MPI_SUM, comm->Comm_box[p].first, comm->Comm_box[p].second);
-      y = y + llen;
-    }
-    comm->record_mpi();
-  }
-}*/
 

@@ -180,32 +180,42 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
         basis[l].Dims[i + ibegin] = cells[gi].Body[1] - cells[gi].Body[0];
     }
 
-    std::vector<std::pair<int64_t, int64_t>> LocalDims(nodes), SumLocalDims(nodes + 1);
-    std::transform(&basis[l].Dims[ibegin], &basis[l].Dims[iend], LocalDims.begin(), 
-      [](const int64_t& d) { return std::make_pair(3 * d, 2 * d * d); });
-    std::inclusive_scan(LocalDims.begin(), LocalDims.end(), SumLocalDims.begin() + 1, 
-      [](const std::pair<int64_t, int64_t>& i, const std::pair<int64_t, int64_t>& j) { return std::make_pair(i.first + j.first, i.second + j.second); });
-    SumLocalDims[0] = std::make_pair(0, 0);
+    const std::vector<int64_t> ones(xlen, 1);
+    comm[l].neighbor_bcast(basis[l].Dims.data(), ones.data());
+    comm[l].dup_bcast(basis[l].Dims.data(), xlen);
 
-    std::vector<double> Skeletons(SumLocalDims[nodes].first, 0.);
-    std::vector<std::complex<double>> MatrixData(SumLocalDims[nodes].second, 0.);
+    std::vector<int64_t> Usizes(xlen), Uoffsets(xlen + 1);
+    std::transform(basis[l].Dims.begin(), basis[l].Dims.end(), Usizes.begin(), [](const int64_t d) { return d * d; });
+    std::inclusive_scan(Usizes.begin(), Usizes.end(), Uoffsets.begin() + 1);
+    Uoffsets[0] = 0;
+    basis[l].Udata = std::vector<std::complex<double>>(Uoffsets[xlen], std::complex<double>(0., 0.));
+
+    std::vector<int64_t> LocalDims(xlen), SumLocalDims(xlen + 1);
+    std::transform(basis[l].Dims.begin(), basis[l].Dims.end(), LocalDims.begin(), [](const int64_t d) { return 3 * d; });
+    std::inclusive_scan(LocalDims.begin(), LocalDims.end(), SumLocalDims.begin() + 1);
+    SumLocalDims[0] = 0;
+
+    std::vector<double> Skeletons(SumLocalDims[xlen], 0.);
+    std::vector<std::complex<double>> MatrixData(2 * (Uoffsets[iend] - Uoffsets[ibegin]), std::complex<double>(0., 0.));
     
     if (l < levels)
       for (int64_t i = 0; i < nodes; i++) {
         int64_t dim = basis[l].Dims[i + ibegin];
         int64_t childi = std::get<1>(celli[i]);
         int64_t clen = std::get<2>(celli[i]);
+        std::complex<double>* matrix = &MatrixData[2 * (Uoffsets[i + ibegin] - Uoffsets[ibegin])];
+        double* ske = &Skeletons[SumLocalDims[i + ibegin]];
 
         int64_t y = 0;
         for (int64_t j = 0; j < clen; j++) {
           int64_t len = basis[l + 1].DimsLr[childi + j];
-          memcpy2d(&MatrixData[SumLocalDims[i].second + y * (dim + 1)], basis[l + 1].R[childi + j].A, len, len, dim, len);
+          memcpy2d(&matrix[y * (dim + 1)], basis[l + 1].R[childi + j].A, len, len, dim, len);
           y = y + len;
         }
 
         const double* mbegin = basis[l + 1].ske_at_i(childi);
         int64_t mlen = 3 * basis[l].Dims[i + ibegin];
-        std::copy(mbegin, &mbegin[mlen], &Skeletons[SumLocalDims[i].first]);
+        std::copy(mbegin, &mbegin[mlen], ske);
       }
     else 
       for (int64_t i = 0; i < nodes; i++) {
@@ -213,27 +223,29 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
         int64_t ci = std::get<0>(celli[i]);
         int64_t len = cells[ci].Body[1] - cells[ci].Body[0];
         int64_t offset_body = 3 * cells[ci].Body[0];
+        std::complex<double>* matrix = &MatrixData[2 * (Uoffsets[i + ibegin] - Uoffsets[ibegin])];
+        double* ske = &Skeletons[SumLocalDims[i + ibegin]];
         
-        std::copy(&bodies[offset_body], &bodies[offset_body + len * 3], &Skeletons[SumLocalDims[i].first]);
+        std::copy(&bodies[offset_body], &bodies[offset_body + len * 3], ske);
         for (int64_t j = 0; j < len; j++)
-          MatrixData[SumLocalDims[i].second + j * (dim + 1)] = 1.;
+          matrix[j * (dim + 1)] = std::complex<double>(1., 0.);
       }
 
+    comm[l].neighbor_bcast(Skeletons.data(), LocalDims.data());
+    comm[l].dup_bcast(Skeletons.data(), SumLocalDims[xlen]);
+
     for (int64_t i = 0; i < nodes; i++) {
-      int64_t ske_len = basis[l].Dims[i + ibegin];
-      std::complex<double>* mat = &MatrixData[SumLocalDims[i].second];
-      double* Xbodies = &Skeletons[SumLocalDims[i].first];
+      int64_t dim = basis[l].Dims[i + ibegin];
+      std::complex<double>* matrix = &MatrixData[2 * (Uoffsets[i + ibegin] - Uoffsets[ibegin])];
+      double* ske = &Skeletons[SumLocalDims[i + ibegin]];
 
       int64_t ci = std::get<0>(celli[i]);
-      int64_t nbegin = rel_near.RowIndex[ci];
-      int64_t nlen = rel_near.RowIndex[ci + 1] - nbegin;
-      const int64_t* ngbs = &rel_near.ColIndex[nbegin];
       std::vector<const double*> remote;
       std::vector<int64_t> lens;
 
       int64_t loc = 0, len_f = 0;
-      for (int64_t j = 0; j < nlen; j++) {
-        int64_t cj = ngbs[j];
+      for (int64_t c = rel_near.RowIndex[ci]; c < rel_near.RowIndex[ci + 1]; c++) {
+        int64_t cj = rel_near.ColIndex[c];
         int64_t len = cells[cj].Body[0] - loc;
         if (len > 0) {
           remote.emplace_back(&bodies[loc * 3]);
@@ -248,31 +260,24 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
         len_f = len_f + nbodies - loc;
       }
       
-      int64_t rank = compute_basis(eval, epi, ske_len, mat, ske_len, &Xbodies[0], remote.size(), &lens[0], &remote[0]);
+      int64_t rank = compute_basis(eval, epi, dim, matrix, dim, ske, remote.size(), &lens[0], &remote[0]);
       basis[l].DimsLr[i + ibegin] = rank;
     }
 
-    std::vector<int64_t> ones(xlen, 1);
-    comm[l].neighbor_bcast(basis[l].Dims.data(), ones.data());
-    comm[l].dup_bcast(basis[l].Dims.data(), xlen);
     comm[l].neighbor_bcast(basis[l].DimsLr.data(), ones.data());
     comm[l].dup_bcast(basis[l].DimsLr.data(), xlen);
 
-    std::vector<int64_t> Msizes(xlen), Usizes(xlen), Rsizes(xlen);
+    std::vector<int64_t> Msizes(xlen), Rsizes(xlen);
     std::transform(basis[l].DimsLr.begin(), basis[l].DimsLr.end(), Msizes.begin(), [](const int64_t& d) { return d * 3; });
-    std::transform(basis[l].Dims.begin(), basis[l].Dims.end(), Usizes.begin(), [](const int64_t& d) { return d * d; });
     std::transform(basis[l].DimsLr.begin(), basis[l].DimsLr.end(), Rsizes.begin(), [](const int64_t& d) { return d * d; });
 
-    std::vector<int64_t> Moffsets(xlen + 1), Uoffsets(xlen + 1), Roffsets(xlen + 1);
+    std::vector<int64_t> Moffsets(xlen + 1), Roffsets(xlen + 1);
     std::inclusive_scan(Msizes.begin(), Msizes.end(), Moffsets.begin() + 1);
-    std::inclusive_scan(Usizes.begin(), Usizes.end(), Uoffsets.begin() + 1);
     std::inclusive_scan(Rsizes.begin(), Rsizes.end(), Roffsets.begin() + 1);
     Moffsets[0] = 0;
-    Uoffsets[0] = 0;
     Roffsets[0] = 0;
 
     basis[l].Mdata = std::vector<double>(Moffsets[xlen]);
-    basis[l].Udata = std::vector<std::complex<double>>(Uoffsets[xlen]);
     basis[l].Rdata = std::vector<std::complex<double>>(Roffsets[xlen]);
 
     for (int64_t i = 0; i < xlen; i++) {
@@ -286,10 +291,12 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
       std::complex<double>* R_ptr = &basis[l].Rdata[Roffsets[i]];
 
       if (i >= ibegin && i < iend) {
-        memcpy2d(Uc_ptr, &MatrixData[SumLocalDims[i - ibegin].second + No * M], M, Nc, M, M);
-        memcpy2d(Uo_ptr, &MatrixData[SumLocalDims[i - ibegin].second], M, No, M, M);
-        memcpy2d(R_ptr, &MatrixData[SumLocalDims[i - ibegin].second + M * M], No, No, No, M);
-        std::copy(&Skeletons[SumLocalDims[i - ibegin].first], &Skeletons[SumLocalDims[i - ibegin].first + 3 * No], M_ptr);
+        const std::complex<double>* matrix = &MatrixData[2 * (Uoffsets[i] - Uoffsets[ibegin])];
+        const double* ske = &Skeletons[SumLocalDims[i]];
+        memcpy2d(Uc_ptr, &matrix[No * M], M, Nc, M, M);
+        memcpy2d(Uo_ptr, &matrix[0], M, No, M, M);
+        memcpy2d(R_ptr, &matrix[M * M], No, No, No, M);
+        std::copy(&ske[0], &ske[3 * No], M_ptr);
       }
 
       basis[l].Uo[i] = (Matrix) { Uo_ptr, M, No, M };
