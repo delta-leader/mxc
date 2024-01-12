@@ -16,7 +16,7 @@ void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const 
 
 void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, std::complex<double> alpha, std::complex<double> beta);
 
-void compute_schur(const Eval& eval, int64_t M, int64_t N, int64_t K, std::complex<double> SijT[], int64_t LD, const double Ibodies[], const double Jbodies[], const double Kbodies[]);
+void compute_schur(const Eval& eval, int64_t M, int64_t N, int64_t K, std::complex<double> SijT[], int64_t LD, const std::complex<double> Aki[], int64_t LDA, const double Jbodies[], const double Kbodies[]);
 
 void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], int64_t Lfar, const int64_t Nfar[], const double* Fbodies[], int64_t Ls, const std::complex<double>* SijT[], const int64_t LDS[], std::complex<double> Aall[], int64_t LDA);
 

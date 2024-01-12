@@ -4,6 +4,7 @@
 #include <comm.hpp>
 #include <linalg.hpp>
 
+#include <lapacke.h>
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -16,6 +17,17 @@ void memcpy2d(T* dst, const T* src, int64_t rows, int64_t cols, int64_t ld_dst, 
   else 
     for (int64_t i = 0; i < cols; i++)
       std::copy(&src[i * ld_src], &src[i * ld_src + rows], &dst[i * ld_dst]);
+}
+
+template <typename T>
+void matrixLaset(char uplo, int64_t M, int64_t N, T alpha, T beta, T A[], int64_t LDA) {
+  for (int64_t x = 0; x < N; x++)
+    for (int64_t y = 0; y < M; y++) {
+      if ((x < y && uplo != 'L') || (x > y && uplo != 'U'))
+        A[y + x * LDA] = alpha;
+      else if (y == x)
+        A[y + x * LDA] = beta;
+    }
 }
 
 const double* Base::ske_at_i(int64_t i) const {
@@ -174,10 +186,9 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
       int64_t clen = cells[gi].Child[1] - cells[gi].Child[0];
       celli[i] = std::make_tuple(gi, child, clen);
 
-      if (l < levels)
-        basis[l].Dims[i + ibegin] = std::accumulate(&basis[l + 1].DimsLr[child], &basis[l + 1].DimsLr[child + clen], 0);
-      else
-        basis[l].Dims[i + ibegin] = cells[gi].Body[1] - cells[gi].Body[0];
+      int64_t dim = l < levels ? 
+        std::accumulate(&basis[l + 1].DimsLr[child], &basis[l + 1].DimsLr[child + clen], 0) : (cells[gi].Body[1] - cells[gi].Body[0]);
+      basis[l].Dims[i + ibegin] = dim;
     }
 
     const std::vector<int64_t> ones(xlen, 1);
@@ -196,58 +207,59 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
     SumLocalDims[0] = 0;
 
     int64_t p_neighbors = comm[l].allToAllLength();
+    int64_t dim_max = *std::max_element(basis[l].Dims.begin(), basis[l].Dims.end());
     std::vector<double> Skeletons(SumLocalDims[xlen], 0.);
-    std::vector<std::complex<double>> MatrixData(2 * (Uoffsets[iend] - Uoffsets[ibegin]), std::complex<double>(0., 0.));
+    std::vector<std::complex<double>> MatrixData(nodes * 2 * dim_max * dim_max, std::complex<double>(0., 0.));
     std::vector<std::complex<double>> SchurData(p_neighbors * (Uoffsets[iend] - Uoffsets[ibegin]), std::complex<double>(0., 0.));
     
-    if (l < levels)
-      for (int64_t i = 0; i < nodes; i++) {
-        int64_t dim = basis[l].Dims[i + ibegin];
-        int64_t childi = std::get<1>(celli[i]);
-        int64_t clen = std::get<2>(celli[i]);
-        std::complex<double>* matrix = &MatrixData[2 * (Uoffsets[i + ibegin] - Uoffsets[ibegin])];
-        double* ske = &Skeletons[SumLocalDims[i + ibegin]];
-
-        int64_t y = 0;
-        for (int64_t j = 0; j < clen; j++) {
-          int64_t len = basis[l + 1].DimsLr[childi + j];
-          memcpy2d(&matrix[y * (dim + 1)], basis[l + 1].R[childi + j].A, len, len, dim, len);
-          y = y + len;
-        }
-
-        const double* mbegin = basis[l + 1].ske_at_i(childi);
-        int64_t mlen = 3 * basis[l].Dims[i + ibegin];
-        std::copy(mbegin, &mbegin[mlen], ske);
-      }
-    else 
-      for (int64_t i = 0; i < nodes; i++) {
-        int64_t dim = basis[l].Dims[i + ibegin];
-        int64_t ci = std::get<0>(celli[i]);
-        int64_t len = cells[ci].Body[1] - cells[ci].Body[0];
-        int64_t offset_body = 3 * cells[ci].Body[0];
-        std::complex<double>* matrix = &MatrixData[2 * (Uoffsets[i + ibegin] - Uoffsets[ibegin])];
-        double* ske = &Skeletons[SumLocalDims[i + ibegin]];
-        
-        std::copy(&bodies[offset_body], &bodies[offset_body + len * 3], ske);
-        for (int64_t j = 0; j < len; j++)
-          matrix[j * (dim + 1)] = std::complex<double>(1., 0.);
-      }
+    for (int64_t i = 0; i < nodes; i++) {
+      int64_t ci = std::get<0>(celli[i]);
+      int64_t childi = std::get<1>(celli[i]);
+      double* ske = &Skeletons[SumLocalDims[i + ibegin]];
+      const double* mbegin = l < levels ? basis[l + 1].ske_at_i(childi) : &bodies[3 * cells[ci].Body[0]];
+      int64_t mlen = 3 * basis[l].Dims[i + ibegin];
+      std::copy(mbegin, &mbegin[mlen], ske);
+    }
 
     comm[l].neighbor_bcast(Skeletons.data(), LocalDims.data());
     comm[l].dup_bcast(Skeletons.data(), SumLocalDims[xlen]);
 
     for (int64_t i = 0; i < nodes; i++) {
-      int64_t c0 = std::get<0>(celli[i]);
-      for (int64_t c1 = rel_near.RowIndex[c0]; c1 < rel_near.RowIndex[c0 + 1]; c1++)
-        for (int64_t c2 = rel_near.RowIndex[c0]; c2 < rel_near.RowIndex[c0 + 1]; c2++) {
+      int64_t dim = basis[l].Dims[i + ibegin];
+      if (dim > 0) {
+        std::complex<double>* matrix = &MatrixData[i * 2 * dim_max * dim_max];
+        std::vector<int32_t> ipiv(dim);
+        const double* ske = &Skeletons[SumLocalDims[i + ibegin]];
+        gen_matrix(eval, dim, dim, ske, ske, matrix, dim);
+        LAPACKE_zgetrf(LAPACK_COL_MAJOR, dim, dim, reinterpret_cast<lapack_complex_double*>(matrix), dim, &ipiv[0]);
+
+        int64_t c0 = std::get<0>(celli[i]);
+        for (int64_t c1 = rel_near.RowIndex[c0]; c1 < rel_near.RowIndex[c0 + 1]; c1++) {
+          int64_t ci = comm[l].iLocal(rel_near.ColIndex[c1]);
+          std::complex<double>* matrixKi = &matrix[dim * dim];
+          std::complex<double>* matrixS = &basis[l].Udata[Uoffsets[ci]];
+          gen_matrix(eval, dim, basis[l].Dims[ci], ske, &Skeletons[SumLocalDims[ci]], matrixKi, dim);
+          LAPACKE_zgetrs(LAPACK_COL_MAJOR, 'N', dim, basis[l].Dims[ci], reinterpret_cast<lapack_complex_double*>(matrix), dim, &ipiv[0], reinterpret_cast<lapack_complex_double*>(matrixKi), dim);
+
           int64_t cbegin = rel_near.RowIndex[rel_near.ColIndex[c1]];
           int64_t cend = rel_near.RowIndex[rel_near.ColIndex[c1] + 1];
-          if (std::find(&rel_near.ColIndex[cbegin], &rel_near.ColIndex[cend], rel_near.ColIndex[c2]) == &rel_near.ColIndex[cend]) {
-            int64_t ci = comm[l].iLocal(rel_near.ColIndex[c1]);
-            int64_t cj = comm[l].iLocal(rel_near.ColIndex[c2]);
-            std::complex<double>* matrix = &basis[l].Udata[Uoffsets[ci]];
-            compute_schur(eval, basis[l].Dims[ci], basis[l].Dims[cj], basis[l].Dims[i + ibegin], matrix, basis[l].Dims[ci], 
-              &Skeletons[SumLocalDims[ci]], &Skeletons[SumLocalDims[cj]], &Skeletons[SumLocalDims[i + ibegin]]);
+          for (int64_t c2 = rel_near.RowIndex[c0]; c2 < rel_near.RowIndex[c0 + 1]; c2++) {
+            if (std::find(&rel_near.ColIndex[cbegin], &rel_near.ColIndex[cend], rel_near.ColIndex[c2]) == &rel_near.ColIndex[cend]) {
+              int64_t cj = comm[l].iLocal(rel_near.ColIndex[c2]);
+              compute_schur(eval, basis[l].Dims[ci], basis[l].Dims[cj], dim, matrixS, basis[l].Dims[ci], matrixKi, dim,
+                &Skeletons[SumLocalDims[cj]], &Skeletons[SumLocalDims[i + ibegin]]);
+            }
+          }
+        }
+
+        int64_t childi = std::get<1>(celli[i]);
+        int64_t clen = std::get<2>(celli[i]);
+        matrixLaset('F', dim, dim, std::complex<double>(0., 0.), std::complex<double>(1., 0.), matrix, dim);
+        if (l < levels)
+          for (int64_t j = 0; j < clen; j++) {
+            int64_t offset = std::accumulate(&basis[l + 1].DimsLr[childi], &basis[l + 1].DimsLr[childi + j], 0);
+            int64_t len = basis[l + 1].DimsLr[childi + j];
+            memcpy2d(&matrix[offset * (dim + 1)], basis[l + 1].R[childi + j].A, len, len, dim, len);
           }
       }
     }
@@ -257,8 +269,7 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
 
     for (int64_t i = 0; i < nodes; i++) {
       int64_t dim = basis[l].Dims[i + ibegin];
-      int64_t offset_i = Uoffsets[i + ibegin] - Uoffsets[ibegin];
-      std::complex<double>* matrix = &MatrixData[2 * offset_i];
+      std::complex<double>* matrix = &MatrixData[i * 2 * dim_max * dim_max];
       double* ske = &Skeletons[SumLocalDims[i + ibegin]];
 
       int64_t ci = std::get<0>(celli[i]);
@@ -266,7 +277,7 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
       std::vector<const std::complex<double>*> sij(p_neighbors);
       std::vector<int64_t> lens, lds(p_neighbors, dim);
       for (int64_t p = 0; p < p_neighbors; p++)
-        sij[p] = &SchurData[offset_i + p * (Uoffsets[iend] - Uoffsets[ibegin])];
+        sij[p] = &SchurData[Uoffsets[i + ibegin] - Uoffsets[ibegin] + p * (Uoffsets[iend] - Uoffsets[ibegin])];
 
       int64_t loc = 0;
       for (int64_t c = rel_near.RowIndex[ci]; c < rel_near.RowIndex[ci + 1]; c++) {
@@ -315,7 +326,7 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
       std::complex<double>* R_ptr = &basis[l].Rdata[Roffsets[i]];
 
       if (i >= ibegin && i < iend) {
-        const std::complex<double>* matrix = &MatrixData[2 * (Uoffsets[i] - Uoffsets[ibegin])];
+        const std::complex<double>* matrix = &MatrixData[(i - ibegin) * 2 * dim_max * dim_max];
         const double* ske = &Skeletons[SumLocalDims[i]];
         memcpy2d(Uc_ptr, &matrix[No * M], M, Nc, M, M);
         memcpy2d(Uo_ptr, &matrix[0], M, No, M, M);
