@@ -257,31 +257,34 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
 
     for (int64_t i = 0; i < nodes; i++) {
       int64_t dim = basis[l].Dims[i + ibegin];
-      std::complex<double>* matrix = &MatrixData[2 * (Uoffsets[i + ibegin] - Uoffsets[ibegin])];
+      int64_t offset_i = Uoffsets[i + ibegin] - Uoffsets[ibegin];
+      std::complex<double>* matrix = &MatrixData[2 * offset_i];
       double* ske = &Skeletons[SumLocalDims[i + ibegin]];
 
       int64_t ci = std::get<0>(celli[i]);
       std::vector<const double*> remote;
-      std::vector<int64_t> lens;
+      std::vector<const std::complex<double>*> sij(p_neighbors);
+      std::vector<int64_t> lens, lds(p_neighbors, dim);
+      for (int64_t p = 0; p < p_neighbors; p++)
+        sij[p] = &SchurData[offset_i + p * (Uoffsets[iend] - Uoffsets[ibegin])];
 
-      int64_t loc = 0, len_f = 0;
+      int64_t loc = 0;
       for (int64_t c = rel_near.RowIndex[ci]; c < rel_near.RowIndex[ci + 1]; c++) {
         int64_t cj = rel_near.ColIndex[c];
         int64_t len = cells[cj].Body[0] - loc;
         if (len > 0) {
           remote.emplace_back(&bodies[loc * 3]);
           lens.emplace_back(len);
-          len_f = len_f + len;
         }
         loc = cells[cj].Body[1];
       }
       if (loc < nbodies) {
         remote.emplace_back(&bodies[loc * 3]);
         lens.emplace_back(nbodies - loc);
-        len_f = len_f + nbodies - loc;
       }
       
-      int64_t rank = compute_basis(eval, epi, dim, matrix, dim, ske, remote.size(), &lens[0], &remote[0]);
+      compute_AallT(eval, dim, ske, remote.size(), &lens[0], &remote[0], p_neighbors, &sij[0], &lds[0], &matrix[dim * dim], dim);
+      int64_t rank = remote.size() > 0 ? compute_basis(epi, dim, matrix, dim, &matrix[dim * dim], dim, ske) : 0;
       basis[l].DimsLr[i + ibegin] = rank;
     }
 
