@@ -39,17 +39,7 @@ void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const 
   });
 }
 
-void compute_schur(const Eval& eval, int64_t M, int64_t N, int64_t K, std::complex<double> SijT[], int64_t LD, const std::complex<double> Aki[], int64_t LDA, const double Jbodies[], const double Kbodies[]) {
-  if (M > 0 && N > 0 && K > 0) {
-    std::vector<std::complex<double>> S((M + N) * M, 0.), tau(M);
-    mat_vec_reference(eval, N, K, M, &S[M], M + N, Aki, LDA, Jbodies, Kbodies);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, reinterpret_cast<lapack_complex_double*>(SijT), LD, reinterpret_cast<lapack_complex_double*>(&S[0]), M + N);
-    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + N, M, reinterpret_cast<lapack_complex_double*>(&S[0]), M + N, reinterpret_cast<lapack_complex_double*>(&tau[0]));
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, reinterpret_cast<lapack_complex_double*>(&S[0]), M + N, reinterpret_cast<lapack_complex_double*>(SijT), LD);
-  }
-}
-
-void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], int64_t Lfar, const int64_t Nfar[], const double* Fbodies[], int64_t Ls, const std::complex<double>* SijT[], const int64_t LDS[], std::complex<double> Aall[], int64_t LDA) {
+void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], int64_t Lfar, const int64_t Nfar[], const double* Fbodies[], std::complex<double> Aall[], int64_t LDA) {
   if (M > 0) {
     int64_t N = std::max(M, (int64_t)(1 << 11)), B2 = N + M;
     std::vector<std::complex<double>> B(M * B2, 0.), tau(M);
@@ -61,21 +51,6 @@ void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], int64_t 
       while(loc_i < Nfar[i]) {
         int64_t len = std::min(Nfar[i] - loc_i, N - loc);
         gen_matrix(eval, len, M, Fbodies[i] + (loc_i * 3), Xbodies, &B[M + loc], B2);
-        loc_i = loc_i + len;
-        loc = loc + len;
-        if (loc == N) {
-          LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + N, M, reinterpret_cast<lapack_complex_double*>(&B[0]), B2, reinterpret_cast<lapack_complex_double*>(&tau[0]));
-          LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, reinterpret_cast<lapack_complex_double*>(&B[1]), B2);
-          loc = 0;
-        }
-      }
-    }
-
-    for (int64_t i = 0; i < Ls; i++) {
-      int64_t loc_i = 0;
-      while(loc_i < M) {
-        int64_t len = std::min(M - loc_i, N - loc);
-        LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'F', len, M, reinterpret_cast<const lapack_complex_double*>(SijT[i] + loc_i), LDS[i], reinterpret_cast<lapack_complex_double*>(&B[M + loc]), B2);
         loc_i = loc_i + len;
         loc = loc + len;
         if (loc == N) {
