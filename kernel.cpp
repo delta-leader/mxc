@@ -2,7 +2,6 @@
 #include <kernel.hpp>
 
 #include <cblas.h>
-#include <vector>
 #include <algorithm>
 #include <numeric>
 #include <array>
@@ -17,10 +16,7 @@ void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const 
     int64_t ix = std::distance(bj3, &j);
     std::for_each(bi3, bi3_end, [&](const std::array<double, 3>& i) -> void {
       int64_t iy = std::distance(bi3, &i);
-      double x = i[0] - j[0];
-      double y = i[1] - j[1];
-      double z = i[2] - j[2];
-      double d = std::sqrt(x * x + y * y + z * z);
+      double d = std::hypot(i[0] - j[0], i[1] - j[1], i[2] - j[2]);
       Aij[iy + ix * lda] = eval(d);
     });
   });
