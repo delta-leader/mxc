@@ -2,7 +2,6 @@
 #include <build_tree.hpp>
 #include <basis.hpp>
 #include <comm.hpp>
-#include <linalg.hpp>
 
 #include <cmath>
 #include <algorithm>

@@ -2,9 +2,10 @@
 #include <basis.hpp>
 #include <build_tree.hpp>
 #include <comm.hpp>
-#include <linalg.hpp>
+#include <kernel.hpp>
 
 #include <cblas.h>
+#include <lapacke.h>
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -23,7 +24,7 @@ template <typename T>
 void matrixLaset(char uplo, int64_t M, int64_t N, T alpha, T beta, T A[], int64_t LDA) {
   for (int64_t x = 0; x < N; x++)
     for (int64_t y = 0; y < M; y++) {
-      if ((x < y && uplo != 'L') || (x > y && uplo != 'U'))
+      if ((y < x && uplo != 'L') || (y > x && uplo != 'U'))
         A[y + x * LDA] = alpha;
       else if (y == x)
         A[y + x * LDA] = beta;
@@ -178,6 +179,72 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
     memcpy2d(&X[Y], rhsBptr[Levels][lbegin + i], M, nrhs, ldX, M);
     Y = Y + M;
   }
+}
+
+void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], int64_t Lfar, const int64_t Nfar[], const double* Fbodies[], std::complex<double> Aall[], int64_t LDA) {
+  if (M > 0) {
+    int64_t N = std::max(M, (int64_t)(1 << 11)), B2 = N + M;
+    std::vector<std::complex<double>> B(M * B2, 0.), tau(M);
+    std::complex<double> zero(0., 0.);
+
+    int64_t loc = 0;
+    for (int64_t i = 0; i < Lfar; i++) {
+      int64_t loc_i = 0;
+      while(loc_i < Nfar[i]) {
+        int64_t len = std::min(Nfar[i] - loc_i, N - loc);
+        gen_matrix(eval, len, M, Fbodies[i] + (loc_i * 3), Xbodies, &B[M + loc], B2);
+        loc_i = loc_i + len;
+        loc = loc + len;
+        if (loc == N) {
+          LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + N, M, reinterpret_cast<lapack_complex_double*>(&B[0]), B2, reinterpret_cast<lapack_complex_double*>(&tau[0]));
+          matrixLaset('L', M - 1, M - 1, zero, zero, &B[1], B2);
+          loc = 0;
+        }
+      }
+    }
+
+    if (loc > 0)
+      LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + loc, M, reinterpret_cast<lapack_complex_double*>(&B[0]), B2, reinterpret_cast<lapack_complex_double*>(&tau[0]));
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, reinterpret_cast<lapack_complex_double*>(&B[0]), B2, reinterpret_cast<lapack_complex_double*>(Aall), LDA);
+    matrixLaset('L', M - 1, M - 1, zero, zero, &Aall[1], LDA);
+  }
+}
+
+int64_t compute_basis(double epi, int64_t M, std::complex<double> A[], int64_t LDA, std::complex<double> R[], int64_t LDR, double Xbodies[]) {
+  if (M > 0) {
+    std::complex<double> one(1., 0.), zero(0., 0.);
+    std::vector<std::complex<double>> U(M * M, 0.);
+    std::vector<double> S(M * 3);
+    std::vector<int32_t> ipiv(M, 0);
+
+    LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, reinterpret_cast<lapack_complex_double*>(R), LDR, &ipiv[0], reinterpret_cast<lapack_complex_double*>(&U[0]));
+    matrixLaset('L', M - 1, M - 1, zero, zero, &R[1], LDR);
+    int64_t rank = 0;
+    double s0 = epi * std::sqrt(std::norm(R[0]));
+    while (rank < M && s0 <= std::sqrt(std::norm(R[rank * (LDR + 1)])))
+      ++rank;
+    
+    if (rank > 0) {
+      if (rank < M)
+        cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, R, LDR, &R[rank * LDR], LDR);
+      matrixLaset('F', rank, rank, zero, one, R, LDR);
+
+      for (int64_t i = 0; i < M; i++) {
+        int64_t piv = (int64_t)ipiv[i] - 1;
+        std::copy(&R[i * LDR], &R[i * LDR + rank], &U[piv * M]);
+        std::copy(&Xbodies[piv * 3], &Xbodies[piv * 3 + 3], &S[i * 3]);
+      }
+      std::copy(&S[0], &S[M * 3], Xbodies);
+
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasTrans, M, rank, M, &one, A, LDA, &U[0], M, &zero, R, LDR);
+      LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, rank, reinterpret_cast<lapack_complex_double*>(R), LDR, reinterpret_cast<lapack_complex_double*>(&U[0]));
+      LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'L', M, rank, reinterpret_cast<lapack_complex_double*>(R), LDR, reinterpret_cast<lapack_complex_double*>(A), LDA);
+      LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, rank, reinterpret_cast<lapack_complex_double*>(A), LDA, reinterpret_cast<lapack_complex_double*>(&U[0]));
+      matrixLaset('L', rank - 1, rank - 1, zero, zero, &R[1], LDR);
+    }
+    return rank;
+  }
+  return 0;
 }
 
 void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, const CSR& rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies) {
