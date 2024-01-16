@@ -10,16 +10,6 @@
 #include <numeric>
 #include <array>
 
-void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, std::complex<double> alpha, std::complex<double> beta) {
-  int64_t k = ta == 'N' ? A->N : A->M;
-  CBLAS_TRANSPOSE tac = ta == 'N' ? CblasNoTrans : CblasTrans;
-  CBLAS_TRANSPOSE tbc = tb == 'N' ? CblasNoTrans : CblasTrans;
-  int64_t lda = 1 < A->LDA ? A->LDA : 1;
-  int64_t ldb = 1 < B->LDA ? B->LDA : 1;
-  int64_t ldc = 1 < C->LDA ? C->LDA : 1;
-  cblas_zgemm(CblasColMajor, tac, tbc, C->M, C->N, k, &alpha, A->A, lda, B->A, ldb, &beta, C->A, ldc);
-}
-
 void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
   const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * m]);

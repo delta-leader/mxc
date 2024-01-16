@@ -14,11 +14,15 @@ class CellComm;
 class Base {
 public:
   std::vector<int64_t> Dims, DimsLr;
-  std::vector<Matrix> Uo, R;
+  std::vector<std::complex<double>*> Uo, R;
   std::vector<double> Mdata;
   std::vector<std::complex<double>> Udata, Rdata;
 
   const double* ske_at_i(int64_t i) const;
+
+  void mulUcLeft(int64_t i, int64_t N, std::complex<double>* A, int64_t LDA) const;
+
+  void mulUcRight(int64_t i, int64_t M, std::complex<double>* A, int64_t LDA) const;
 };
 
 class MatVec {

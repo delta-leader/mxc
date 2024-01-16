@@ -6,15 +6,7 @@
 
 class Eval;
 
-class Matrix {
-public:
-  std::complex<double>* A;
-  int64_t M, N, LDA;
-};
-
 void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda);
-
-void mmult(char ta, char tb, const Matrix* A, const Matrix* B, Matrix* C, std::complex<double> alpha, std::complex<double> beta);
 
 void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], int64_t Lfar, const int64_t Nfar[], const double* Fbodies[], std::complex<double> Aall[], int64_t LDA);
 
