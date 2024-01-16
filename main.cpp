@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
   std::vector<Cell> cell(ncells);
 
   std::vector<CellComm> cell_comm(levels + 1);
-  std::vector<Base> basis(levels + 1);
+  std::vector<MatVecBasis> basis(levels + 1);
 
   if (fname == nullptr) {
     mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));

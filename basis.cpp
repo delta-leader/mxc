@@ -31,35 +31,15 @@ void matrixLaset(char uplo, int64_t M, int64_t N, T alpha, T beta, T A[], int64_
     }
 }
 
-const double* Base::ske_at_i(int64_t i) const {
+const double* MatVecBasis::ske_at_i(int64_t i) const {
   return Mdata.data() + 3 * std::accumulate(Dims.begin(), Dims.begin() + i, 0);
 }
 
-void Base::mulUcLeft(int64_t i, int64_t N, std::complex<double>* A, int64_t LDA) const {
-  int64_t M = Dims[i], K = DimsLr[i];
-  std::vector<std::complex<double>> B(N * K);
-  std::complex<double> one(1., 0.), zero(0., 0.), minus_one(-1., 0.);
-  cblas_zgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, K, N, M, &one, Uo[i], M, A, LDA, &zero, &B[0], K);
-  cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, N, K, &minus_one, Uo[i], M, &B[0], K, &one, A, LDA);
-}
-
-void Base::mulUcRight(int64_t i, int64_t M, std::complex<double>* A, int64_t LDA) const {
-  int64_t N = Dims[i], K = DimsLr[i];
-  std::vector<std::complex<double>> B(M * K);
-  std::complex<double> one(1., 0.), zero(0., 0.), minus_one(-1., 0.);
-  cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, K, N, &one, A, LDA, Uo[i], N, &zero, &B[0], M);
-  cblas_zgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, M, N, K, &minus_one, &B[0], M, Uo[i], N, &one, A, LDA);
-}
-
-MatVec::MatVec(const Eval& eval, const Base basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& far, const CellComm comm[], int64_t levels) :
+MatVec::MatVec(const Eval& eval, const MatVecBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& far, const CellComm comm[], int64_t levels) :
   EvalFunc(&eval), Basis(basis), Bodies(bodies), Cells(cells), Near(&near), Far(&far), Comm(comm), Levels(levels) {
 }
 
 void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) const {
-  const Eval& eval = *EvalFunc;
-  const CSR& near = *Near;
-  const CSR& far = *Far;
-
   int64_t lbegin = Comm[Levels].oLocal();
   int64_t llen = Comm[Levels].lenLocal();
 
@@ -107,6 +87,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
     Y = Y + M;
   }
 
+  const std::complex<double> one(1., 0.), zero(0., 0.);
   for (int64_t i = Levels; i > 0; i--) {
     int64_t ibegin = Comm[i].oLocal();
     int64_t iboxes = Comm[i].lenLocal();
@@ -119,11 +100,11 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
     Comm[i].neighbor_bcast(rhsX[i].data(), lens.data());
     Comm[i].dup_bcast(rhsX[i].data(), lenI);
 
-    for (int64_t j = 0; j < iboxes; j++) {
-      int64_t M = Basis[i].Dims[j + ibegin];
-      int64_t N = Basis[i].DimsLr[j + ibegin];
-      std::complex<double> one(1., 0.), zero(0., 0.);
-      cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, nrhs, M, &one, Basis[i].Uo[j + ibegin], M, rhsXptr[i][j + ibegin], M, &zero, rhsXoptr[i][j + ibegin].first, rhsXoptr[i][j + ibegin].second);
+    for (int64_t y = 0; y < iboxes; y++) {
+      int64_t M = Basis[i].Dims[y + ibegin];
+      int64_t N = Basis[i].DimsLr[y + ibegin];
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, nrhs, M, &one, Basis[i].V[y + ibegin], M, 
+        rhsXptr[i][y + ibegin], M, &zero, rhsXoptr[i][y + ibegin].first, rhsXoptr[i][y + ibegin].second);
     }
   }
 
@@ -137,40 +118,28 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
     int64_t iboxes = Comm[i].lenLocal();
     int64_t gbegin = Comm[i].oGlobal();
 
-    for (int64_t y = 0; y < iboxes; y++)
-      for (int64_t yx = far.RowIndex[y + gbegin]; yx < far.RowIndex[y + gbegin + 1]; yx++) {
-        int64_t x = Comm[i].iLocal(far.ColIndex[yx]);
-        int64_t M = Basis[i].DimsLr[y + ibegin];
+    for (int64_t y = 0; y < iboxes; y++) {
+      int64_t K = Basis[i].DimsLr[y + ibegin];
+      for (int64_t yx = Far->RowIndex[y + gbegin]; yx < Far->RowIndex[y + gbegin + 1]; yx++) {
+        int64_t x = Comm[i].iLocal(Far->ColIndex[yx]);
         int64_t N = Basis[i].DimsLr[x];
-
-        std::vector<std::complex<double>> TMPX(N * nrhs, std::complex<double>(0., 0.));
-        std::vector<std::complex<double>> TMPB(M * nrhs, std::complex<double>(0., 0.));
-        std::complex<double> one(1., 0.), zero(0., 0.);
-        cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, nrhs, N, &one, Basis[i].R[x], Basis[i].Dims[x], rhsXoptr[i][x].first, rhsXoptr[i][x].second, &zero, &TMPX[0], N);
-        mat_vec_reference(eval, M, N, nrhs, &TMPB[0], M, &TMPX[0], N, Basis[i].ske_at_i(y + ibegin), Basis[i].ske_at_i(x));
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, nrhs, M, &one, Basis[i].R[y + ibegin], Basis[i].Dims[y + ibegin], &TMPB[0], M, &one, rhsBoptr[i][y + ibegin].first, rhsBoptr[i][y + ibegin].second);
+        mat_vec_reference(*EvalFunc, K, N, nrhs, rhsBoptr[i][y + ibegin].first, rhsBoptr[i][y + ibegin].second, 
+          rhsXoptr[i][x].first, rhsXoptr[i][x].second, Basis[i].ske_at_i(y + ibegin), Basis[i].ske_at_i(x));
       }
-  }
-  
-  for (int64_t i = 1; i <= Levels; i++) {
-    int64_t ibegin = Comm[i].oLocal();
-    int64_t iboxes = Comm[i].lenLocal();
-    for (int64_t j = 0; j < iboxes; j++) {
-      int64_t M = Basis[i].Dims[j + ibegin];
-      int64_t N = Basis[i].DimsLr[j + ibegin];
-      std::complex<double> one(1., 0.);
-      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, nrhs, N, &one, Basis[i].Uo[j + ibegin], M, rhsBoptr[i][j + ibegin].first, rhsBoptr[i][j + ibegin].second, &one, rhsBptr[i][j + ibegin], M);
+      int64_t M = Basis[i].Dims[y + ibegin];
+      cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, M, nrhs, K, &one, Basis[i].V[y + ibegin], M, 
+        rhsBoptr[i][y + ibegin].first, rhsBoptr[i][y + ibegin].second, &one, rhsBptr[i][y + ibegin], M);
     }
   }
 
   int64_t gbegin = Comm[Levels].oGlobal();
   for (int64_t y = 0; y < llen; y++)
-    for (int64_t yx = near.RowIndex[y + gbegin]; yx < near.RowIndex[y + gbegin + 1]; yx++) {
-      int64_t x = near.ColIndex[yx];
+    for (int64_t yx = Near->RowIndex[y + gbegin]; yx < Near->RowIndex[y + gbegin + 1]; yx++) {
+      int64_t x = Near->ColIndex[yx];
       int64_t x_loc = Comm[Levels].iLocal(x);
       int64_t M = Cells[y + gbegin].Body[1] - Cells[y + gbegin].Body[0];
       int64_t N = Cells[x].Body[1] - Cells[x].Body[0];
-      mat_vec_reference(eval, M, N, nrhs, rhsBptr[Levels][y + lbegin], M, rhsXptr[Levels][x_loc], N, &Bodies[3 * Cells[y + gbegin].Body[0]], &Bodies[3 * Cells[x].Body[0]]);
+      mat_vec_reference(*EvalFunc, M, N, nrhs, rhsBptr[Levels][y + lbegin], M, rhsXptr[Levels][x_loc], N, &Bodies[3 * Cells[y + gbegin].Body[0]], &Bodies[3 * Cells[x].Body[0]]);
     }
 
   Y = 0;
@@ -210,44 +179,39 @@ void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], int64_t 
   }
 }
 
-int64_t compute_basis(double epi, int64_t M, std::complex<double> A[], int64_t LDA, std::complex<double> R[], int64_t LDR, double Xbodies[]) {
+int64_t compute_basis(double epi, int64_t M, std::complex<double> A[], int64_t LDA, double Xbodies[]) {
   if (M > 0) {
     std::complex<double> one(1., 0.), zero(0., 0.);
-    std::vector<std::complex<double>> U(M * M, 0.);
+    std::vector<std::complex<double>> U(M * M);
     std::vector<double> S(M * 3);
     std::vector<int32_t> ipiv(M, 0);
 
-    LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, reinterpret_cast<lapack_complex_double*>(R), LDR, &ipiv[0], reinterpret_cast<lapack_complex_double*>(&U[0]));
-    matrixLaset('L', M - 1, M - 1, zero, zero, &R[1], LDR);
+    LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, reinterpret_cast<lapack_complex_double*>(A), LDA, &ipiv[0], reinterpret_cast<lapack_complex_double*>(&U[0]));
+    matrixLaset('L', M - 1, M - 1, zero, zero, &A[1], LDA);
     int64_t rank = 0;
-    double s0 = epi * std::sqrt(std::norm(R[0]));
-    while (rank < M && s0 <= std::sqrt(std::norm(R[rank * (LDR + 1)])))
+    double s0 = epi * std::sqrt(std::norm(A[0]));
+    while (rank < M && s0 <= std::sqrt(std::norm(A[rank * (LDA + 1)])))
       ++rank;
     
     if (rank > 0) {
       if (rank < M)
-        cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, R, LDR, &R[rank * LDR], LDR);
-      matrixLaset('F', rank, rank, zero, one, R, LDR);
+        cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, A, LDA, &A[rank * LDA], LDA);
+      matrixLaset('F', rank, rank, zero, one, A, LDA);
 
       for (int64_t i = 0; i < M; i++) {
         int64_t piv = (int64_t)ipiv[i] - 1;
-        std::copy(&R[i * LDR], &R[i * LDR + rank], &U[piv * M]);
+        std::copy(&A[i * LDA], &A[i * LDA + rank], &U[piv * M]);
         std::copy(&Xbodies[piv * 3], &Xbodies[piv * 3 + 3], &S[i * 3]);
       }
       std::copy(&S[0], &S[M * 3], Xbodies);
-
-      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasTrans, M, rank, M, &one, A, LDA, &U[0], M, &zero, R, LDR);
-      LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, rank, reinterpret_cast<lapack_complex_double*>(R), LDR, reinterpret_cast<lapack_complex_double*>(&U[0]));
-      LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'L', M, rank, reinterpret_cast<lapack_complex_double*>(R), LDR, reinterpret_cast<lapack_complex_double*>(A), LDA);
-      LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, rank, reinterpret_cast<lapack_complex_double*>(A), LDA, reinterpret_cast<lapack_complex_double*>(&U[0]));
-      matrixLaset('L', rank - 1, rank - 1, zero, zero, &R[1], LDR);
+      memcpy2d(A, &U[0], rank, M, LDA, M);
     }
     return rank;
   }
   return 0;
 }
 
-void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, const CSR& rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies) {
+void buildBasis(const Eval& eval, double epi, MatVecBasis basis[], const Cell* cells, const CSR& rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies) {
 
   for (int64_t l = levels; l >= 0; l--) {
     int64_t xlen = comm[l].lenNeighbors();
@@ -255,8 +219,7 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
     int64_t nodes = comm[l].lenLocal();
     basis[l].Dims = std::vector<int64_t>(xlen, 0);
     basis[l].DimsLr = std::vector<int64_t>(xlen, 0);
-    basis[l].Uo = std::vector<std::complex<double>*>(xlen);
-    basis[l].R = std::vector<std::complex<double>*>(xlen);
+    basis[l].V = std::vector<std::complex<double>*>(xlen);
     std::vector<std::tuple<int64_t, int64_t, int64_t>> celli(nodes);
 
     for (int64_t i = 0; i < nodes; i++) {
@@ -274,14 +237,12 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
     comm[l].neighbor_bcast(basis[l].Dims.data(), ones.data());
     comm[l].dup_bcast(basis[l].Dims.data(), xlen);
 
-    std::vector<int64_t> Usizes(xlen), Uoffsets(xlen + 1);
-    std::transform(basis[l].Dims.begin(), basis[l].Dims.end(), Usizes.begin(), [](const int64_t d) { return d * d; });
-    std::inclusive_scan(Usizes.begin(), Usizes.end(), Uoffsets.begin() + 1);
-    Uoffsets[0] = 0;
-    basis[l].Udata = std::vector<std::complex<double>>(Uoffsets[xlen], std::complex<double>(0., 0.));
-    basis[l].Rdata = std::vector<std::complex<double>>(Uoffsets[xlen], std::complex<double>(0., 0.));
-    std::transform(Uoffsets.begin(), Uoffsets.end(), basis[l].Uo.begin(), [&](const int64_t d) { return &basis[l].Udata[d]; });
-    std::transform(Uoffsets.begin(), Uoffsets.end(), basis[l].R.begin(), [&](const int64_t d) { return &basis[l].Rdata[d]; });
+    std::vector<int64_t> Vsizes(xlen), Voffsets(xlen + 1);
+    std::transform(basis[l].Dims.begin(), basis[l].Dims.end(), Vsizes.begin(), [](const int64_t d) { return d * d; });
+    std::inclusive_scan(Vsizes.begin(), Vsizes.end(), Voffsets.begin() + 1);
+    Voffsets[0] = 0;
+    basis[l].Vdata = std::vector<std::complex<double>>(Voffsets[xlen], std::complex<double>(0., 0.));
+    std::transform(Voffsets.begin(), Voffsets.end(), basis[l].V.begin(), [&](const int64_t d) { return &basis[l].Vdata[d]; });
 
     std::vector<int64_t> Msizes(xlen), Moffsets(xlen + 1);
     std::transform(basis[l].Dims.begin(), basis[l].Dims.end(), Msizes.begin(), [](const int64_t d) { return 3 * d; });
@@ -291,8 +252,7 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
 
     for (int64_t i = 0; i < nodes; i++) {
       int64_t dim = basis[l].Dims[i + ibegin];
-      std::complex<double>* matrixU = &basis[l].Udata[Uoffsets[i + ibegin]];
-      std::complex<double>* matrixR = &basis[l].Rdata[Uoffsets[i + ibegin]];
+      std::complex<double>* matrix = &basis[l].Vdata[Voffsets[i + ibegin]];
       double* ske = &basis[l].Mdata[Moffsets[i + ibegin]];
 
       int64_t ci = std::get<0>(celli[i]);
@@ -320,17 +280,14 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
         for (int64_t j = 0; j < clen; j++) {
           int64_t offset = std::accumulate(&basis[l + 1].DimsLr[childi], &basis[l + 1].DimsLr[childi + j], 0);
           int64_t len = basis[l + 1].DimsLr[childi + j];
-          memcpy2d(&matrixU[offset * (dim + 1)], basis[l + 1].R[childi + j], len, len, dim, basis[l + 1].Dims[childi + j]);
           const double* mbegin = basis[l + 1].ske_at_i(childi + j);
           std::copy(mbegin, &mbegin[len * 3], &ske[offset * 3]);
         }
-      else {
-        matrixLaset('F', dim, dim, std::complex<double>(0., 0.), std::complex<double>(1., 0.), matrixU, dim);
+      else
         std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
-      }
       
-      compute_AallT(eval, dim, ske, remote.size(), &lens[0], &remote[0], matrixR, dim);
-      int64_t rank = remote.size() > 0 ? compute_basis(epi, dim, matrixU, dim, matrixR, dim, ske) : 0;
+      compute_AallT(eval, dim, ske, remote.size(), &lens[0], &remote[0], matrix, dim);
+      int64_t rank = remote.size() > 0 ? compute_basis(epi, dim, matrix, dim, ske) : 0;
       basis[l].DimsLr[i + ibegin] = rank;
     }
 
@@ -338,10 +295,8 @@ void buildBasis(const Eval& eval, double epi, Base basis[], const Cell* cells, c
     comm[l].dup_bcast(basis[l].DimsLr.data(), xlen);
     comm[l].neighbor_bcast(basis[l].Mdata.data(), Msizes.data());
     comm[l].dup_bcast(basis[l].Mdata.data(), Moffsets[xlen]);
-    comm[l].neighbor_bcast(basis[l].Udata.data(), Usizes.data());
-    comm[l].dup_bcast(basis[l].Udata.data(), Uoffsets[xlen]);
-    comm[l].neighbor_bcast(basis[l].Rdata.data(), Usizes.data());
-    comm[l].dup_bcast(basis[l].Rdata.data(), Uoffsets[xlen]);
+    comm[l].neighbor_bcast(basis[l].Vdata.data(), Vsizes.data());
+    comm[l].dup_bcast(basis[l].Vdata.data(), Voffsets[xlen]);
   }
 }
 

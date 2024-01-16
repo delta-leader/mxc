@@ -5,7 +5,7 @@
 #include <vector>
 
 class CellComm;
-class Base;
+class MatVecBasis;
 class Matrix;
 
 class Cell {
