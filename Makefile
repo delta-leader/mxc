@@ -1,8 +1,8 @@
 
 
 CXX		= mpicxx -std=c++17
-CFLAGS	= -O3 -m64 -Wall -fopenmp -I. -I"${MKLROOT}/include"
-LDFLAGS	=  -L${MKLROOT}/lib -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
+CFLAGS	= -O3 -m64 -Wall -fopenmp -I. #-I"${MKLROOT}/include"
+LDFLAGS	= -lblas -llapacke #-L${MKLROOT}/lib -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
 
 ODIR	= ./obj
 LDIR	= ./lib
@@ -15,7 +15,7 @@ $(ODIR)/%.o: %.cpp $(DEPS)
 	$(CXX) -c -o $@ $< $(CFLAGS)
 
 main: $(OBJ)
-	$(CXX) -o $@ $^ $(CFLAGS) $(LIBS)
+	$(CXX) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 .PHONY: clean
 
