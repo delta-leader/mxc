@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <vector>
@@ -6,7 +5,6 @@
 #include <complex>
 
 class Eval;
-class Matrix;
 class CSR;
 class Cell;
 class CellComm;

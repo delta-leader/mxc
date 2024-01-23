@@ -6,7 +6,6 @@
 
 class CellComm;
 class MatVecBasis;
-class Matrix;
 
 class Cell {
 public:

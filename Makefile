@@ -1,14 +1,14 @@
 
 
-CXX		= mpicxx -std=c++17
+CXX		= mpic++ -std=c++17
 CFLAGS	= -O3 -m64 -Wall -fopenmp -I. #-I"${MKLROOT}/include"
 LDFLAGS	= -lblas -llapacke #-L${MKLROOT}/lib -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
 
 ODIR	= ./obj
 LDIR	= ./lib
 
-DEPS	= basis.hpp build_tree.hpp comm.hpp geometry.hpp kernel.hpp
-objs	= main.o basis.o build_tree.o comm.o kernel.o
+DEPS	= basis.hpp build_tree.hpp comm.hpp geometry.hpp kernel.hpp ulv.hpp
+objs	= main.o basis.o build_tree.o comm.o kernel.o ulv.o
 OBJ = $(patsubst %,$(ODIR)/%,$(objs))
 
 $(ODIR)/%.o: %.cpp $(DEPS)
@@ -20,4 +20,4 @@ main: $(OBJ)
 .PHONY: clean
 
 clean:
-	rm -f $(ODIR)/*.o *~ main $(INCDIR)/*~
+	rm -f $(ODIR)/*.o main

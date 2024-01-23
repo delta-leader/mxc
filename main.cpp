@@ -4,6 +4,7 @@
 #include <build_tree.hpp>
 #include <basis.hpp>
 #include <comm.hpp>
+#include <ulv.hpp>
 
 #include <random>
 
@@ -106,6 +107,8 @@ int main(int argc, char* argv[]) {
   std::cout << cerr << std::endl;
   std::cout << construct_time << ", " << construct_comm_time << std::endl;
   std::cout << matvec_time << ", " << matvec_comm_time << std::endl;
+
+  ULV ulv(basis[levels].Dims.data(), basis[levels].DimsLr.data(), cellNear, cell_comm[levels]);
 
   for (MPI_Comm& c : mpi_comms)
     MPI_Comm_free(&c);
