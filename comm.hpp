@@ -21,13 +21,12 @@ private:
   template<typename T> inline void dup_bast(T* data, int64_t len) const;
   template<typename T> inline void neighbor_bcast(T* data, const int64_t box_dims[]) const;
   template<typename T> inline void neighbor_reduce(T* data, const int64_t box_dims[]) const;
-  template<typename T> inline void neighbor_gather(const T* data_in, T* data_out, const int64_t box_dims[]) const;
 
 public:
   std::pair<double, double>* timer;
 
   CellComm() : Proc(-1), ProcBoxes(), Comm_box(), Comm_share(MPI_COMM_NULL), Comm_merge(MPI_COMM_NULL), timer(nullptr) {};
-  CellComm(int64_t P, const std::vector<int64_t>& Targets, int64_t cbegin, int64_t clen, int merge, int share, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
+  CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t clen, const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& cellFar, const CSR& cellNear, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
   
   int64_t iLocal(int64_t iglobal) const;
   int64_t iGlobal(int64_t ilocal) const;
@@ -35,7 +34,6 @@ public:
   int64_t oGlobal() const;
   int64_t lenLocal() const;
   int64_t lenNeighbors() const;
-  int64_t allToAllLength() const;
 
   void level_merge(std::complex<double>* data, int64_t len) const;
 
@@ -48,8 +46,6 @@ public:
   void neighbor_bcast(std::complex<double>* data, const int64_t box_dims[]) const;
 
   void neighbor_reduce(std::complex<double>* data, const int64_t box_dims[]) const;
-
-  void neighbor_gather(const std::complex<double>* data_in, std::complex<double>* data_out, const int64_t box_dims[]) const;
 
   void record_mpi() const;
 };

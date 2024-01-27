@@ -6,6 +6,7 @@
 #include <cmath>
 #include <algorithm>
 #include <array>
+#include <set>
 
 void get_bounds(const double* bodies, int64_t nbodies, double R[], double C[]) {
   double Xmin[3];
@@ -157,9 +158,7 @@ void getList(char NoF, std::vector<std::pair<int64_t, int64_t>>& rels, const Cel
 CSR::CSR(char NoF, int64_t ncells, const Cell* cells, double theta) {
   std::vector<std::pair<int64_t, int64_t>> LIL;
   getList(NoF, LIL, cells, 0, 0, theta);
-  std::sort(LIL.begin(), LIL.end(), 
-    [](const std::pair<int64_t, int64_t>& a, const std::pair<int64_t, int64_t>& b) -> bool 
-      { return ((a.first == b.first) && (a.second < b.second)) || (a.first < b.first); });
+  std::sort(LIL.begin(), LIL.end());
 
   int64_t len = LIL.size();
   RowIndex.resize(ncells + 1);
@@ -172,4 +171,24 @@ CSR::CSR(char NoF, int64_t ncells, const Cell* cells, double theta) {
     RowIndex[n] = std::distance(LIL.begin(), 
       std::find_if(LIL.begin() + RowIndex[n - 1], LIL.end(), 
         [=](const std::pair<int64_t, int64_t>& i) { return n <= i.first; }));
+}
+
+CSR::CSR(const CSR& A, const CSR& B) {
+  int64_t M = A.RowIndex.size() - 1;
+  RowIndex.resize(M + 1);
+  ColIndex.clear();
+  RowIndex[0] = 0;
+
+  for (int64_t y = 0; y < M; y++) {
+    std::set<int64_t> cols;
+    std::for_each(&A.ColIndex[A.RowIndex[y]], &A.ColIndex[A.RowIndex[y + 1]], [&](int64_t x) {
+      std::for_each(&B.ColIndex[B.RowIndex[x]], &B.ColIndex[B.RowIndex[x + 1]], [&](int64_t z) {
+        cols.insert(z);
+      });
+    });
+
+    for (std::set<int64_t>::iterator i = cols.begin(); i != cols.end(); i = std::next(i))
+      ColIndex.push_back(*i);
+    RowIndex[y + 1] = (int64_t)ColIndex.size();
+  }
 }

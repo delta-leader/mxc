@@ -5,14 +5,15 @@
 #include <complex>
 
 class CSR;
-class MatVecBasis;
+class Cell;
 class CellComm;
+class Eval;
+class MatVecBasis;
 
-class ULV {
+class Solver {
 public:
   std::vector<int64_t> Dims;
   std::vector<int64_t> DimsLr;
-  std::vector<int64_t> Ranks;
 
   std::vector<std::complex<double>*> Q;
   std::vector<std::complex<double>*> R;
@@ -29,7 +30,11 @@ public:
   std::vector<int64_t> FY;
   std::vector<std::complex<double>> Fdata;
 
-  ULV(const int64_t dims[], const int64_t dims_lr[], const CSR& Near, const CellComm& comm);
+  Solver(const int64_t dims[], const CSR& Near, const CellComm& comm);
+
+  void setData_leaf(const Eval& eval, const Cell cells[], const double bodies[], const CellComm& comm);
+
+  void setData_far(const Eval& eval, const MatVecBasis& basis, const CellComm& comm);
   
 };
 

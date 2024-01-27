@@ -4,7 +4,7 @@
 #include <build_tree.hpp>
 #include <basis.hpp>
 #include <comm.hpp>
-#include <ulv.hpp>
+#include <solver.hpp>
 
 #include <random>
 
@@ -108,7 +108,9 @@ int main(int argc, char* argv[]) {
   std::cout << construct_time << ", " << construct_comm_time << std::endl;
   std::cout << matvec_time << ", " << matvec_comm_time << std::endl;
 
-  ULV ulv(basis[levels].Dims.data(), basis[levels].DimsLr.data(), cellNear, cell_comm[levels]);
+  CSR cellFill(cellNear, cellNear);
+
+  //Solver solver(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
 
   for (MPI_Comm& c : mpi_comms)
     MPI_Comm_free(&c);
