@@ -24,6 +24,10 @@ int main(int argc, char* argv[]) {
   int64_t nrhs = 2;
   MPI_Comm world;
   MPI_Comm_dup(MPI_COMM_WORLD, &world);
+
+  int mpi_rank = 0, mpi_size = 1;
+  MPI_Comm_rank(world, &mpi_rank);
+  MPI_Comm_size(world, &mpi_size);
   
   //Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
@@ -64,8 +68,18 @@ int main(int argc, char* argv[]) {
   CSR cellFar('F', ncells, &cell[0], theta);
 
   std::pair<double, double> timer(0, 0);
-  std::vector<MPI_Comm> mpi_comms = buildComm(&cell_comm[0], ncells, &cell[0], cellFar, cellNear, levels, world);
+  std::vector<MPI_Comm> mpi_comms;
+  std::vector<std::pair<int64_t, int64_t>> mapping = getProcessMapping(mpi_size, &cell[0], ncells);
+  std::vector<int64_t> levelOffsets = getLevelOffsets(&cell[0], ncells);
+  
   for (int64_t i = 0; i <= levels; i++) {
+    int64_t ibegin = levelOffsets[i];
+    int64_t iend = levelOffsets[i + 1];
+    getLocalRange(ibegin, iend, mpi_rank, mapping);
+    
+    int64_t child = cell[ibegin].Child[0];
+    int64_t cend = cell[ibegin].Child[1];
+    cell_comm[i] = CellComm(ibegin, iend, child, cend, mapping, cellNear, cellFar, mpi_comms, world);
     cell_comm[i].timer = &timer;
   }
 
