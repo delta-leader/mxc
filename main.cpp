@@ -66,6 +66,7 @@ int main(int argc, char* argv[]) {
 
   CSR cellNear('N', ncells, &cell[0], theta);
   CSR cellFar('F', ncells, &cell[0], theta);
+  CSR cellFill(cellNear, cellNear);
 
   std::pair<double, double> timer(0, 0);
   std::vector<MPI_Comm> mpi_comms;
@@ -79,7 +80,7 @@ int main(int argc, char* argv[]) {
     
     int64_t child = cell[ibegin].Child[0];
     int64_t cend = cell[ibegin].Child[1];
-    cell_comm[i] = CellComm(ibegin, iend, child, cend, mapping, cellNear, cellFar, mpi_comms, world);
+    cell_comm[i] = CellComm(ibegin, iend, child, cend, mapping, cellNear, cellFill, cellFar, mpi_comms, world);
     cell_comm[i].timer = &timer;
   }
 
@@ -121,8 +122,6 @@ int main(int argc, char* argv[]) {
   std::cout << cerr << std::endl;
   std::cout << construct_time << ", " << construct_comm_time << std::endl;
   std::cout << matvec_time << ", " << matvec_comm_time << std::endl;
-
-  CSR cellFill(cellNear, cellNear);
 
   //Solver solver(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
 

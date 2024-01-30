@@ -12,10 +12,14 @@ class Cell;
 class CellComm {
 private:
   int64_t Proc;
+  int64_t ProcA2;
   std::vector<std::pair<int64_t, int64_t>> ProcBoxes;
+  std::vector<std::pair<int64_t, int64_t>> ProcBoxesA2;
   
   std::vector<std::pair<int, MPI_Comm>> CommBox;
-  MPI_Comm Comm_share, Comm_merge;
+  std::vector<std::pair<int, MPI_Comm>> CommBoxA2;
+  MPI_Comm Comm_share;
+  MPI_Comm Comm_merge;
 
   template<typename T> inline void level_merge(T* data, int64_t len) const;
   template<typename T> inline void dup_bast(T* data, int64_t len) const;
@@ -25,8 +29,9 @@ private:
 public:
   std::pair<double, double>* timer;
 
-  CellComm() : Proc(-1), ProcBoxes(), CommBox(), Comm_share(MPI_COMM_NULL), Comm_merge(MPI_COMM_NULL), timer(nullptr) {};
+  CellComm() : Proc(-1), ProcA2(-1), ProcBoxes(), ProcBoxesA2(), CommBox(), CommBoxA2(), Comm_share(MPI_COMM_NULL), Comm_merge(MPI_COMM_NULL), timer(nullptr) {};
   CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t clen, const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
+  CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Near2, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
   
   int64_t iLocal(int64_t iglobal) const;
   int64_t iGlobal(int64_t ilocal) const;
