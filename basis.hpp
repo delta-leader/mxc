@@ -10,12 +10,18 @@ class Cell;
 class CellComm;
 
 class ClusterBasis {
+private:
+  std::vector<double> Mdata;
+  std::vector<std::complex<double>> Vdata;
+
 public:
   std::vector<int64_t> Dims;
   std::vector<int64_t> DimsLr;
   std::vector<std::complex<double>*> V;
-  std::vector<double> Mdata;
-  std::vector<std::complex<double>> Vdata;
+  
+  ClusterBasis() {}
+  ClusterBasis(const Eval& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm);
+  ClusterBasis(const Eval& eval, double epi, const ClusterBasis& prev, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm, const CellComm& prev_comm);
 
   const double* ske_at_i(int64_t i) const;
 };
@@ -36,7 +42,3 @@ public:
 
   void operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) const;
 };
-
-void buildBasis(const Eval& eval, double epi, ClusterBasis basis[], const Cell* cells, const CSR& Near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies);
-
-void solveRelErr(double* err_out, const std::complex<double>* X, const std::complex<double>* ref, int64_t lenX);

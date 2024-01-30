@@ -8,6 +8,17 @@
 
 #include <random>
 
+void solveRelErr(double* err_out, const std::complex<double>* X, const std::complex<double>* ref, int64_t lenX) {
+  double err[2] = { 0., 0. };
+  for (int64_t i = 0; i < lenX; i++) {
+    std::complex<double> diff = X[i] - ref[i];
+    err[0] = err[0] + (diff.real() * diff.real());
+    err[1] = err[1] + (ref[i].real() * ref[i].real());
+  }
+  MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  *err_out = std::sqrt(err[0] / err[1]);
+}
+
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
@@ -89,7 +100,10 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double construct_time = MPI_Wtime(), construct_comm_time;
-  buildBasis(eval, epi, &basis[0], &cell[0], cellNear, levels, &cell_comm[0], &body[0], Nbody);
+
+  basis[levels] = ClusterBasis(eval, epi, &cell[0], cellNear, &body[0], Nbody, cell_comm[levels]);
+  for (int64_t l = levels - 1; l >= 0; l--)
+    basis[l] = ClusterBasis(eval, epi, basis[l + 1], &cell[0], cellNear, &body[0], Nbody, cell_comm[l], cell_comm[l + 1]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   construct_time = MPI_Wtime() - construct_time;
