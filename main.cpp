@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
     
     int64_t child = cell[ibegin].Child[0];
     int64_t cend = cell[ibegin].Child[1];
-    cell_comm[i] = CellComm(ibegin, iend, child, cend, mapping, cellNear, cellFill, cellFar, mpi_comms, world);
+    cell_comm[i] = CellComm(ibegin, iend, child, cend, mapping, cellNear, cellFar, mpi_comms, world);
     cell_comm[i].timer = &timer;
   }
 
