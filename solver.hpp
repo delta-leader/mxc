@@ -8,7 +8,7 @@ class CSR;
 class Cell;
 class CellComm;
 class Eval;
-class MatVecBasis;
+class ClusterBasis;
 
 class Solver {
 public:
@@ -34,7 +34,7 @@ public:
 
   void setData_leaf(const Eval& eval, const Cell cells[], const double bodies[], const CellComm& comm);
 
-  void setData_far(const Eval& eval, const MatVecBasis& basis, const CellComm& comm);
+  void setData_far(const Eval& eval, const ClusterBasis& basis, const CellComm& comm);
   
 };
 

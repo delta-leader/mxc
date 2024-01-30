@@ -89,6 +89,6 @@ void Solver::setData_leaf(const Eval& eval, const Cell cells[], const double bod
   }
 }
 
-void Solver::setData_far(const Eval& eval, const MatVecBasis& basis, const CellComm& comm) {
+void Solver::setData_far(const Eval& eval, const ClusterBasis& basis, const CellComm& comm) {
   
 }

@@ -31,11 +31,11 @@ void matrixLaset(char uplo, int64_t M, int64_t N, T alpha, T beta, T A[], int64_
     }
 }
 
-const double* MatVecBasis::ske_at_i(int64_t i) const {
+const double* ClusterBasis::ske_at_i(int64_t i) const {
   return Mdata.data() + 3 * std::accumulate(Dims.begin(), Dims.begin() + i, 0);
 }
 
-MatVec::MatVec(const Eval& eval, const MatVecBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& far, const CellComm comm[], int64_t levels) :
+MatVec::MatVec(const Eval& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& far, const CellComm comm[], int64_t levels) :
   EvalFunc(&eval), Basis(basis), Bodies(bodies), Cells(cells), Near(&near), Far(&far), Comm(comm), Levels(levels) {
 }
 
@@ -211,7 +211,7 @@ int64_t compute_basis(double epi, int64_t M, std::complex<double> A[], int64_t L
   return 0;
 }
 
-void buildBasis(const Eval& eval, double epi, MatVecBasis basis[], const Cell* cells, const CSR& rel_near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies) {
+void buildBasis(const Eval& eval, double epi, ClusterBasis basis[], const Cell* cells, const CSR& Near, int64_t levels, const CellComm* comm, const double* bodies, int64_t nbodies) {
 
   for (int64_t l = levels; l >= 0; l--) {
     int64_t xlen = comm[l].lenNeighbors();
@@ -260,8 +260,8 @@ void buildBasis(const Eval& eval, double epi, MatVecBasis basis[], const Cell* c
       std::vector<int64_t> lens;
 
       int64_t loc = 0;
-      for (int64_t c = rel_near.RowIndex[ci]; c < rel_near.RowIndex[ci + 1]; c++) {
-        int64_t cj = rel_near.ColIndex[c];
+      for (int64_t c = Near.RowIndex[ci]; c < Near.RowIndex[ci + 1]; c++) {
+        int64_t cj = Near.ColIndex[c];
         int64_t len = cells[cj].Body[0] - loc;
         if (len > 0) {
           remote.emplace_back(&bodies[loc * 3]);

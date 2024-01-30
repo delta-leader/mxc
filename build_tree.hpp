@@ -4,9 +4,6 @@
 #include <cstdint>
 #include <vector>
 
-class CellComm;
-class MatVecBasis;
-
 class Cell {
 public:
   int64_t Child[2], Body[2];

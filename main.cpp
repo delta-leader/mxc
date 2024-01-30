@@ -32,14 +32,14 @@ int main(int argc, char* argv[]) {
   //Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
-  Helmholtz3D eval(1.e-2, 1.);
+  Helmholtz3D eval(1.e-1, 1.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);
   std::vector<Cell> cell(ncells);
 
   std::vector<CellComm> cell_comm(levels + 1);
-  std::vector<MatVecBasis> basis(levels + 1);
+  std::vector<ClusterBasis> basis(levels + 1);
 
   if (fname == nullptr) {
     mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
     
     int64_t child = cell[ibegin].Child[0];
     int64_t cend = cell[ibegin].Child[1];
-    cell_comm[i] = CellComm(ibegin, iend, child, cend, mapping, cellNear, cellFar, mpi_comms, world);
+    cell_comm[i] = CellComm(ibegin, iend, child, cend, mapping, cellNear, cellFill, cellFar, mpi_comms, world);
     cell_comm[i].timer = &timer;
   }
 
