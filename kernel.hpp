@@ -64,7 +64,7 @@ public:
     if (d == 0.)
       return std::complex<double>(singularity, 0.);
     else
-      return std::complex<double>(std::cos(k * d) / d, std::sin(k * d) / d);
+      return std::exp(std::complex(0., -k * d)) / d;
   }
 };
 
