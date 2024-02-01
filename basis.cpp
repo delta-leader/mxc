@@ -60,78 +60,7 @@ void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], std::vec
   }
 }
 
-std::vector<std::pair<const double*, int64_t>> getRemote(int64_t ci, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies) {
-  std::vector<std::pair<const double*, int64_t>> remote;
-  int64_t loc = 0;
-  for (int64_t c = Near.RowIndex[ci]; c < Near.RowIndex[ci + 1]; c++) {
-    int64_t cj = Near.ColIndex[c];
-    int64_t len = cells[cj].Body[0] - loc;
-    if (len > 0)
-      remote.emplace_back(&bodies[loc * 3], len);
-    loc = cells[cj].Body[1];
-  }
-  if (loc < nbodies)
-    remote.emplace_back(&bodies[loc * 3], nbodies - loc);
-  return remote;
-}
-
-ClusterBasis::ClusterBasis(const Eval& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm) {
-  int64_t xlen = comm.lenNeighbors();
-  int64_t ibegin = comm.oLocal();
-  int64_t nodes = comm.lenLocal();
-  Dims = std::vector<int64_t>(xlen, 0);
-  DimsLr = std::vector<int64_t>(xlen, 0);
-  V = std::vector<std::complex<double>*>(xlen);
-
-  for (int64_t i = 0; i < xlen; i++) {
-    int64_t ci = comm.iGlobal(i);
-    Dims[i] = cells[ci].Body[1] - cells[ci].Body[0];
-  }
-
-  std::vector<int64_t> Vsizes(xlen), Voffsets(xlen + 1);
-  std::transform(Dims.begin(), Dims.end(), Vsizes.begin(), [](const int64_t d) { return d * d; });
-  std::inclusive_scan(Vsizes.begin(), Vsizes.end(), Voffsets.begin() + 1);
-  Voffsets[0] = 0;
-  Vdata = std::vector<std::complex<double>>(Voffsets[xlen], std::complex<double>(0., 0.));
-  std::transform(Voffsets.begin(), Voffsets.end(), V.begin(), [&](const int64_t d) { return &Vdata[d]; });
-
-  std::vector<int64_t> Msizes(xlen), Moffsets(xlen + 1);
-  std::transform(Dims.begin(), Dims.end(), Msizes.begin(), [](const int64_t d) { return 3 * d; });
-  std::inclusive_scan(Msizes.begin(), Msizes.end(), Moffsets.begin() + 1);
-  Moffsets[0] = 0;
-  Mdata = std::vector<double>(Moffsets[xlen], 0.);
-
-  for (int64_t i = 0; i < nodes; i++) {
-    int64_t dim = Dims[i + ibegin];
-    std::complex<double>* matrix = &Vdata[Voffsets[i + ibegin]];
-    double* ske = &Mdata[Moffsets[i + ibegin]];
-
-    int64_t ci = comm.iGlobal(i + ibegin);
-    std::vector<std::pair<const double*, int64_t>> remote = getRemote(ci, cells, Near, bodies, nbodies);
-
-    std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
-    if (remote.size() > 0) {
-      compute_AallT(eval, dim, ske, remote, matrix, dim);
-      LowRank lr(epi, dim, dim, matrix, dim, ske, 3);
-      int64_t rank = lr.Rank;
-      if (rank > 0) {
-        memcpy2d(matrix, &lr.V[0], rank, dim, dim, rank);
-        std::copy(lr.BodiesJ.begin(), lr.BodiesJ.end(), ske);
-      }
-      DimsLr[i + ibegin] = rank;
-    }
-  }
-
-  const std::vector<int64_t> ones(xlen, 1);
-  comm.neighbor_bcast(DimsLr.data(), ones.data());
-  comm.dup_bcast(DimsLr.data(), xlen);
-  comm.neighbor_bcast(Mdata.data(), Msizes.data());
-  comm.dup_bcast(Mdata.data(), Moffsets[xlen]);
-  comm.neighbor_bcast(Vdata.data(), Vsizes.data());
-  comm.dup_bcast(Vdata.data(), Voffsets[xlen]);
-}
-
-ClusterBasis::ClusterBasis(const Eval& eval, double epi, const ClusterBasis& prev_basis, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm, const CellComm& prev_comm) {
+ClusterBasis::ClusterBasis(const Eval& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
   int64_t xlen = comm.lenNeighbors();
   int64_t ibegin = comm.oLocal();
   int64_t nodes = comm.lenLocal();
@@ -143,7 +72,8 @@ ClusterBasis::ClusterBasis(const Eval& eval, double epi, const ClusterBasis& pre
     int64_t ci = comm.iGlobal(i + ibegin);
     int64_t childi = prev_comm.iLocal(cells[ci].Child[0]);
     int64_t clen = cells[ci].Child[1] - cells[ci].Child[0];
-    Dims[i + ibegin] = std::accumulate(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + clen], 0);
+    Dims[i + ibegin] = (0 <= childi && 0 < clen) ? 
+      std::accumulate(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + clen], 0) : cells[ci].Body[1] - cells[ci].Body[0];
   }
 
   const std::vector<int64_t> ones(xlen, 1);
@@ -171,8 +101,9 @@ ClusterBasis::ClusterBasis(const Eval& eval, double epi, const ClusterBasis& pre
     int64_t ci = comm.iGlobal(i + ibegin);
     int64_t childi = prev_comm.iLocal(cells[ci].Child[0]);
     int64_t clen = cells[ci].Child[1] - cells[ci].Child[0];
-    std::vector<std::pair<const double*, int64_t>> remote = getRemote(ci, cells, Near, bodies, nbodies);
 
+    if (clen <= 0)
+      std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
     for (int64_t j = 0; j < clen; j++) {
       int64_t offset = std::accumulate(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + j], 0);
       int64_t len = prev_basis.DimsLr[childi + j];
@@ -180,13 +111,25 @@ ClusterBasis::ClusterBasis(const Eval& eval, double epi, const ClusterBasis& pre
       std::copy(mbegin, &mbegin[len * 3], &ske[offset * 3]);
     }
 
+    std::vector<std::pair<const double*, int64_t>> remote;
+    int64_t loc = 0;
+    for (int64_t c = Near.RowIndex[ci]; c < Near.RowIndex[ci + 1]; c++) {
+      int64_t cj = Near.ColIndex[c];
+      int64_t len = cells[cj].Body[0] - loc;
+      if (len > 0)
+        remote.emplace_back(&bodies[loc * 3], len);
+      loc = cells[cj].Body[1];
+    }
+    if (loc < nbodies)
+      remote.emplace_back(&bodies[loc * 3], nbodies - loc);
+    
     if (remote.size() > 0) {
       compute_AallT(eval, dim, ske, remote, matrix, dim);
-      LowRank lr(epi, dim, dim, matrix, dim, ske, 3);
+      LowRank lr(epi, dim, dim, matrix, dim);
       int64_t rank = lr.Rank;
       if (rank > 0) {
         memcpy2d(matrix, &lr.V[0], rank, dim, dim, rank);
-        std::copy(lr.BodiesJ.begin(), lr.BodiesJ.end(), ske);
+        lr.SelectR(ske, ske, sizeof(double) * 3);
       }
       DimsLr[i + ibegin] = rank;
     }
