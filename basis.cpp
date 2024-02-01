@@ -3,6 +3,7 @@
 #include <build_tree.hpp>
 #include <comm.hpp>
 #include <kernel.hpp>
+#include <lowrank.hpp>
 
 #include <cblas.h>
 #include <lapacke.h>
@@ -59,38 +60,6 @@ void compute_AallT(const Eval& eval, int64_t M, const double Xbodies[], std::vec
   }
 }
 
-int64_t compute_basis(double epi, int64_t M, std::complex<double> A[], int64_t LDA, double Xbodies[]) {
-  if (M > 0) {
-    std::complex<double> one(1., 0.), zero(0., 0.);
-    std::vector<std::complex<double>> U(M * M);
-    std::vector<double> S(M * 3);
-    std::vector<int32_t> ipiv(M, 0);
-
-    LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, reinterpret_cast<lapack_complex_double*>(A), LDA, &ipiv[0], reinterpret_cast<lapack_complex_double*>(&U[0]));
-    matrixLaset('L', M - 1, M - 1, zero, zero, &A[1], LDA);
-    int64_t rank = 0;
-    double s0 = epi * std::sqrt(std::norm(A[0]));
-    while (rank < M && s0 <= std::sqrt(std::norm(A[rank * (LDA + 1)])))
-      ++rank;
-    
-    if (rank > 0) {
-      if (rank < M)
-        cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, A, LDA, &A[rank * LDA], LDA);
-      matrixLaset('F', rank, rank, zero, one, A, LDA);
-
-      for (int64_t i = 0; i < M; i++) {
-        int64_t piv = (int64_t)ipiv[i] - 1;
-        std::copy(&A[i * LDA], &A[i * LDA + rank], &U[piv * M]);
-        std::copy(&Xbodies[piv * 3], &Xbodies[piv * 3 + 3], &S[i * 3]);
-      }
-      std::copy(&S[0], &S[M * 3], Xbodies);
-      memcpy2d(A, &U[0], rank, M, LDA, M);
-    }
-    return rank;
-  }
-  return 0;
-}
-
 std::vector<std::pair<const double*, int64_t>> getRemote(int64_t ci, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies) {
   std::vector<std::pair<const double*, int64_t>> remote;
   int64_t loc = 0;
@@ -141,9 +110,16 @@ ClusterBasis::ClusterBasis(const Eval& eval, double epi, const Cell cells[], con
     std::vector<std::pair<const double*, int64_t>> remote = getRemote(ci, cells, Near, bodies, nbodies);
 
     std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
-    compute_AallT(eval, dim, ske, remote, matrix, dim);
-    int64_t rank = remote.size() > 0 ? compute_basis(epi, dim, matrix, dim, ske) : 0;
-    DimsLr[i + ibegin] = rank;
+    if (remote.size() > 0) {
+      compute_AallT(eval, dim, ske, remote, matrix, dim);
+      LowRank lr(epi, dim, dim, matrix, dim, ske, 3);
+      int64_t rank = lr.Rank;
+      if (rank > 0) {
+        memcpy2d(matrix, &lr.V[0], rank, dim, dim, rank);
+        std::copy(lr.BodiesJ.begin(), lr.BodiesJ.end(), ske);
+      }
+      DimsLr[i + ibegin] = rank;
+    }
   }
 
   const std::vector<int64_t> ones(xlen, 1);
@@ -203,10 +179,17 @@ ClusterBasis::ClusterBasis(const Eval& eval, double epi, const ClusterBasis& pre
       const double* mbegin = prev_basis.ske_at_i(childi + j);
       std::copy(mbegin, &mbegin[len * 3], &ske[offset * 3]);
     }
-    
-    compute_AallT(eval, dim, ske, remote, matrix, dim);
-    int64_t rank = remote.size() > 0 ? compute_basis(epi, dim, matrix, dim, ske) : 0;
-    DimsLr[i + ibegin] = rank;
+
+    if (remote.size() > 0) {
+      compute_AallT(eval, dim, ske, remote, matrix, dim);
+      LowRank lr(epi, dim, dim, matrix, dim, ske, 3);
+      int64_t rank = lr.Rank;
+      if (rank > 0) {
+        memcpy2d(matrix, &lr.V[0], rank, dim, dim, rank);
+        std::copy(lr.BodiesJ.begin(), lr.BodiesJ.end(), ske);
+      }
+      DimsLr[i + ibegin] = rank;
+    }
   }
 
   comm.neighbor_bcast(DimsLr.data(), ones.data());
