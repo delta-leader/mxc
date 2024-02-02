@@ -4,9 +4,11 @@
 #include <build_tree.hpp>
 #include <basis.hpp>
 #include <comm.hpp>
+#include <lowrank.hpp>
 #include <solver.hpp>
 
 #include <random>
+#include <algorithm>
 
 void solveRelErr(double* err_out, const std::complex<double>* X, const std::complex<double>* ref, int64_t lenX) {
   double err[2] = { 0., 0. };
@@ -26,7 +28,9 @@ int main(int argc, char* argv[]) {
   double theta = argc > 2 ? atof(argv[2]) : 1e0;
   int64_t leaf_size = argc > 3 ? atol(argv[3]) : 256;
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
-  const char* fname = argc > 5 ? argv[5] : nullptr;
+  int64_t rank = argc > 5 ? atol(argv[5]) : 100;
+  int64_t oversampling = argc > 6 ? atol(argv[6]) : 10;
+  const char* fname = argc > 7 ? argv[7] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   int64_t levels = (int64_t)log2((double)Nbody / leaf_size);
@@ -66,9 +70,14 @@ int main(int argc, char* argv[]) {
   }
 
   std::mt19937 gen(999);
-  std::uniform_real_distribution<> dis(0., 1.);
-  for (int64_t n = 0; n < (int64_t)Xbody.size(); ++n)
-    Xbody[n] = std::complex<double>(dis(gen), 0.);
+  std::uniform_real_distribution uniform_dist(0., 1.);
+  std::generate(Xbody.begin(), Xbody.end(), 
+    [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
+  
+  std::vector<std::complex<double>> random_matrix(Nbody * (rank + oversampling));
+  std::bernoulli_distribution bernoulli_dist(0.5);
+  std::generate(random_matrix.begin(), random_matrix.end(), 
+    [&]() { return std::complex<double>(-1 + ((int)bernoulli_dist(gen) << 1), 0.); });
 
   /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
   cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
@@ -95,21 +104,41 @@ int main(int argc, char* argv[]) {
     cell_comm[i].timer = &timer;
   }
 
-  int64_t llen = cell_comm[levels].lenLocal();
-  int64_t gbegin = cell_comm[levels].oGlobal();
+  std::vector<LowRank> lowrank;
+  lowrank.reserve(cellFar.ColIndex.size());
+  double h_construct_time = MPI_Wtime();
 
+  for (int64_t i = 0; i <= levels; i++) {
+    int64_t ibegin = levelOffsets[i];
+    int64_t iend = levelOffsets[i + 1];
+    getLocalRange(ibegin, iend, mpi_rank, mapping);
+
+    for (int64_t y = ibegin; y < iend; y++)
+      for (int64_t yx = cellFar.RowIndex[y]; yx < cellFar.RowIndex[y + 1]; yx++) {
+        int64_t x = cellFar.ColIndex[yx];
+        int64_t M = cell[y].Body[1] - cell[y].Body[0];
+        int64_t N = cell[x].Body[1] - cell[x].Body[0];
+        std::vector<std::complex<double>> A(M * (rank + oversampling));
+        mat_vec_reference(eval, M, N, rank + oversampling, &A[0], M, &random_matrix[0], N, &body[3 * cell[y].Body[0]], &body[3 * cell[x].Body[0]]);
+        lowrank.emplace_back(epi, M, rank + oversampling, &A[0], M);
+      }
+  }
+
+  h_construct_time = MPI_Wtime() - h_construct_time;
   MPI_Barrier(MPI_COMM_WORLD);
-  double construct_time = MPI_Wtime(), construct_comm_time;
+  double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
 
   basis[levels] = ClusterBasis(eval, epi, &cell[0], cellNear, &body[0], Nbody, cell_comm[levels], basis[levels], cell_comm[levels]);
   for (int64_t l = levels - 1; l >= 0; l--)
     basis[l] = ClusterBasis(eval, epi, &cell[0], cellNear, &body[0], Nbody, cell_comm[l], basis[l + 1], cell_comm[l + 1]);
 
   MPI_Barrier(MPI_COMM_WORLD);
-  construct_time = MPI_Wtime() - construct_time;
-  construct_comm_time = timer.first;
+  h2_construct_time = MPI_Wtime() - h2_construct_time;
+  h2_construct_comm_time = timer.first;
   timer.first = 0;
 
+  int64_t llen = cell_comm[levels].lenLocal();
+  int64_t gbegin = cell_comm[levels].oGlobal();
   int64_t body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
   int64_t lenX = body_local[1] - body_local[0];
   std::vector<std::complex<double>> X1(lenX * nrhs, std::complex<double>(0., 0.));
@@ -133,9 +162,12 @@ int main(int argc, char* argv[]) {
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX * nrhs);
 
-  std::cout << cerr << std::endl;
-  std::cout << construct_time << ", " << construct_comm_time << std::endl;
-  std::cout << matvec_time << ", " << matvec_comm_time << std::endl;
+  if (mpi_rank == 0) {
+    std::cout << "Err: " << cerr << std::endl;
+    std::cout << "H-Matrix: " << h_construct_time << std::endl;
+    std::cout << "H^2-Matrix: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
+    std::cout << "Matvec: " << matvec_time << ", " << matvec_comm_time << std::endl;
+  }
 
   //Solver solver(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
 
