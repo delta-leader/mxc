@@ -29,8 +29,7 @@ int main(int argc, char* argv[]) {
   int64_t leaf_size = argc > 3 ? atol(argv[3]) : 256;
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
   int64_t rank = argc > 5 ? atol(argv[5]) : 100;
-  int64_t oversampling = argc > 6 ? atol(argv[6]) : 10;
-  const char* fname = argc > 7 ? argv[7] : nullptr;
+  const char* fname = argc > 6 ? argv[6] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   int64_t levels = (int64_t)log2((double)Nbody / leaf_size);
@@ -73,11 +72,6 @@ int main(int argc, char* argv[]) {
   std::uniform_real_distribution uniform_dist(0., 1.);
   std::generate(Xbody.begin(), Xbody.end(), 
     [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
-  
-  std::vector<std::complex<double>> random_matrix(Nbody * (rank + oversampling));
-  std::bernoulli_distribution bernoulli_dist(0.5);
-  std::generate(random_matrix.begin(), random_matrix.end(), 
-    [&]() { return std::complex<double>(-1 + ((int)bernoulli_dist(gen) << 1), 0.); });
 
   /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
   cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
@@ -118,9 +112,9 @@ int main(int argc, char* argv[]) {
         int64_t x = cellFar.ColIndex[yx];
         int64_t M = cell[y].Body[1] - cell[y].Body[0];
         int64_t N = cell[x].Body[1] - cell[x].Body[0];
-        std::vector<std::complex<double>> A(M * (rank + oversampling));
-        mat_vec_reference(eval, M, N, rank + oversampling, &A[0], M, &random_matrix[0], N, &body[3 * cell[y].Body[0]], &body[3 * cell[x].Body[0]]);
-        lowrank.emplace_back(epi, M, rank + oversampling, &A[0], M);
+        std::vector<std::complex<double>> A(M * N);
+        gen_matrix(eval, M, N, &body[3 * cell[y].Body[0]], &body[3 * cell[x].Body[0]], &A[0], M);
+        lowrank.emplace_back(epi, M, N, rank, rank * 2, &A[0], M);
       }
   }
 
