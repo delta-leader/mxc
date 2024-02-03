@@ -63,7 +63,7 @@ int64_t aca_kernel(double epi, const Eval& eval, int64_t M, int64_t N, int64_t K
 
     Eigen::MatrixXcd Z_k = (Acol.transpose() * U_.leftCols(iters)) * (V_.topRows(iters) * Arow);
     nrm_k = Arow.norm() * Acol.norm();
-    nrm_z = std::sqrt(nrm_z + std::abs(Z_k(0, 0) * Z_k(0, 0) + nrm_k * nrm_k));
+    nrm_z = std::sqrt(nrm_z * nrm_z + 2 * std::abs(Z_k(0, 0)) + nrm_k * nrm_k);
     iters++;
 
     Irow(x) = 0;
