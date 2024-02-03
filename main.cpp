@@ -112,9 +112,10 @@ int main(int argc, char* argv[]) {
         int64_t x = cellFar.ColIndex[yx];
         int64_t M = cell[y].Body[1] - cell[y].Body[0];
         int64_t N = cell[x].Body[1] - cell[x].Body[0];
-        std::vector<std::complex<double>> A(M * N);
-        gen_matrix(eval, M, N, &body[3 * cell[y].Body[0]], &body[3 * cell[x].Body[0]], &A[0], M);
-        lowrank.emplace_back(epi, M, N, rank, rank * 2, &A[0], M);
+
+        std::vector<std::complex<double>> U(M * rank);
+        std::vector<std::complex<double>> V(rank * N);
+        aca_kernel(epi, eval, M, N, rank, &body[3 * cell[y].Body[0]], &body[3 * cell[x].Body[0]], &U[0], M, &V[0], rank);
       }
   }
 
