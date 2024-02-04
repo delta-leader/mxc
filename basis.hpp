@@ -34,8 +34,8 @@ public:
   std::vector<std::complex<double>*> V;
   
   ClusterBasis() {}
-  ClusterBasis(const Eval& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
-  
+  ClusterBasis(const Eval& eval, double epi, const Cell cells[], const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
+
   const double* ske_at_i(int64_t i) const;
 };
 

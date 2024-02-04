@@ -112,9 +112,9 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
 
-  basis[levels] = ClusterBasis(eval, epi, &cell[0], cellNear, &body[0], Nbody, cell_comm[levels], basis[levels], cell_comm[levels]);
+  basis[levels] = ClusterBasis(eval, epi, &cell[0], &body[0], wsa[levels], cell_comm[levels], basis[levels], cell_comm[levels]);
   for (int64_t l = levels - 1; l >= 0; l--)
-    basis[l] = ClusterBasis(eval, epi, &cell[0], cellNear, &body[0], Nbody, cell_comm[l], basis[l + 1], cell_comm[l + 1]);
+    basis[l] = ClusterBasis(eval, epi, &cell[0], &body[0], wsa[l], cell_comm[l], basis[l + 1], cell_comm[l + 1]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;

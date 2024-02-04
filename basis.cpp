@@ -15,7 +15,7 @@ WellSeparatedApproximation::WellSeparatedApproximation(const Eval& eval, double 
   lbegin(lbegin), lend(lend), M(lend - lbegin) {
   std::vector<std::vector<double>> Fbodies(lend - lbegin);
   for (int64_t i = upper.lbegin; i < upper.lend; i++)
-    for (int64_t c = cells[i].Body[0]; c < cells[i].Body[1]; c++)
+    for (int64_t c = cells[i].Child[0]; c < cells[i].Child[1]; c++)
       if (lbegin <= c && c < lend)
         M[c - lbegin] = std::vector<double>(upper.M[i - upper.lbegin].begin(), upper.M[i - upper.lbegin].end());
 
@@ -125,7 +125,7 @@ int64_t compute_basis(double epi, int64_t M, std::complex<double> A[], int64_t L
   return 0;
 }
 
-ClusterBasis::ClusterBasis(const Eval& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
+ClusterBasis::ClusterBasis(const Eval& eval, double epi, const Cell cells[], const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
   int64_t xlen = comm.lenNeighbors();
   int64_t ibegin = comm.oLocal();
   int64_t nodes = comm.lenLocal();
@@ -177,17 +177,10 @@ ClusterBasis::ClusterBasis(const Eval& eval, double epi, const Cell cells[], con
     }
 
     std::vector<std::pair<const double*, int64_t>> remote;
-    int64_t loc = 0;
-    for (int64_t c = Near.RowIndex[ci]; c < Near.RowIndex[ci + 1]; c++) {
-      int64_t cj = Near.ColIndex[c];
-      int64_t len = cells[cj].Body[0] - loc;
-      if (len > 0)
-        remote.emplace_back(&bodies[loc * 3], len);
-      loc = cells[cj].Body[1];
-    }
-    if (loc < nbodies)
-      remote.emplace_back(&bodies[loc * 3], nbodies - loc);
-    
+    int64_t fsize = wsa.fbodies_size_at_i(i);
+    if (fsize > 0)
+      remote.emplace_back(wsa.fbodies_at_i(i), fsize);
+
     compute_AallT(eval, dim, ske, remote, matrix, dim);
     int64_t rank = remote.size() > 0 ? compute_basis(epi, dim, matrix, dim, ske) : 0;
     DimsLr[i + ibegin] = rank;
