@@ -11,6 +11,40 @@
 #include <numeric>
 #include <cmath>
 
+WellSeparatedApproximation::WellSeparatedApproximation(const Eval& eval, double epi, int64_t rank, int64_t lbegin, int64_t lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
+  lbegin(lbegin), lend(lend), M(lend - lbegin) {
+  std::vector<std::vector<double>> Fbodies(lend - lbegin);
+  for (int64_t i = upper.lbegin; i < upper.lend; i++)
+    for (int64_t c = cells[i].Body[0]; c < cells[i].Body[1]; c++)
+      if (lbegin <= c && c < lend)
+        M[c - lbegin] = std::vector<double>(upper.M[i - upper.lbegin].begin(), upper.M[i - upper.lbegin].end());
+
+  for (int64_t y = lbegin; y < lend; y++) {
+    for (int64_t yx = Far.RowIndex[y]; yx < Far.RowIndex[y + 1]; yx++) {
+      int64_t x = Far.ColIndex[yx];
+      int64_t m = cells[y].Body[1] - cells[y].Body[0];
+      int64_t n = cells[x].Body[1] - cells[x].Body[0];
+      const double* Xbodies = &bodies[3 * cells[x].Body[0]];
+      const double* Ybodies = &bodies[3 * cells[y].Body[0]];
+
+      std::vector<int64_t> ipiv(rank);
+      int64_t K = interpolative_decomp_aca(epi, eval, n, m, rank, Xbodies, Ybodies, &ipiv[0], nullptr, 0);
+      std::vector<double> Fbodies(3 * K);
+      for (int64_t i = 0; i < K; i++)
+        std::copy(&Xbodies[3 * ipiv[i]], &Xbodies[3 * (ipiv[i] + 1)], &Fbodies[3 * i]);
+      M[y - lbegin].insert(M[y - lbegin].end(), Fbodies.begin(), Fbodies.end());
+    }
+  }
+}
+
+int64_t WellSeparatedApproximation::fbodies_size_at_i(int64_t i) const {
+  return 0 <= i && i < (int64_t)M.size() ? M[i].size() / 3 : 0;
+}
+
+const double* WellSeparatedApproximation::fbodies_at_i(int64_t i) const {
+  return 0 <= i && i < (int64_t)M.size() ? M[i].data() : nullptr;
+}
+
 template <typename T>
 void memcpy2d(T* dst, const T* src, int64_t rows, int64_t cols, int64_t ld_dst, int64_t ld_src) {
   if (rows == ld_dst && rows == ld_src)

@@ -9,6 +9,20 @@ class CSR;
 class Cell;
 class CellComm;
 
+class WellSeparatedApproximation {
+private:
+  int64_t lbegin;
+  int64_t lend;
+  std::vector<std::vector<double>> M;
+
+public:
+  WellSeparatedApproximation() : lbegin(0), lend(0) {}
+  WellSeparatedApproximation(const Eval& eval, double epi, int64_t rank, int64_t lbegin, int64_t lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper);
+
+  int64_t fbodies_size_at_i(int64_t i) const;
+  const double* fbodies_at_i(int64_t i) const;
+};
+
 class ClusterBasis {
 private:
   std::vector<double> Mdata;
@@ -20,8 +34,8 @@ public:
   std::vector<std::complex<double>*> V;
   
   ClusterBasis() {}
-  ClusterBasis(const Eval& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm, const ClusterBasis& prev, const CellComm& prev_comm);
-
+  ClusterBasis(const Eval& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], int64_t nbodies, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
+  
   const double* ske_at_i(int64_t i) const;
 };
 

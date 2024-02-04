@@ -98,25 +98,14 @@ int main(int argc, char* argv[]) {
     cell_comm[i].timer = &timer;
   }
 
-  std::vector<LowRank> lowrank;
-  lowrank.reserve(cellFar.ColIndex.size());
+  std::vector<WellSeparatedApproximation> wsa(levels + 1);
   double h_construct_time = MPI_Wtime();
 
-  for (int64_t i = 0; i <= levels; i++) {
-    int64_t ibegin = levelOffsets[i];
-    int64_t iend = levelOffsets[i + 1];
-    getLocalRange(ibegin, iend, mpi_rank, mapping);
-
-    for (int64_t y = ibegin; y < iend; y++)
-      for (int64_t yx = cellFar.RowIndex[y]; yx < cellFar.RowIndex[y + 1]; yx++) {
-        int64_t x = cellFar.ColIndex[yx];
-        int64_t M = cell[y].Body[1] - cell[y].Body[0];
-        int64_t N = cell[x].Body[1] - cell[x].Body[0];
-
-        std::vector<std::complex<double>> U(M * rank);
-        std::vector<int64_t> ipiv(rank);
-        interpolative_decomp_aca(epi, eval, M, N, rank, &body[3 * cell[y].Body[0]], &body[3 * cell[x].Body[0]], &ipiv[0], &U[0], M);
-      }
+  for (int64_t l = 1; l <= levels; l++) {
+    int64_t lbegin = levelOffsets[l];
+    int64_t lend = levelOffsets[l + 1];
+    getLocalRange(lbegin, lend, mpi_rank, mapping);
+    wsa[l] = WellSeparatedApproximation(eval, epi, rank, lbegin, lend, &cell[0], cellFar, &body[0], wsa[l - 1]);
   }
 
   h_construct_time = MPI_Wtime() - h_construct_time;
