@@ -71,6 +71,6 @@ public:
 
 void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda);
 
-int64_t aca_kernel(double epi, const Eval& eval, int64_t M, int64_t N, int64_t K, const double bi[], const double bj[], std::complex<double> U[], int64_t ldu, std::complex<double> V[], int64_t ldv);
+int64_t interpolative_decomp_aca(double epi, const Eval& eval, int64_t M, int64_t N, int64_t K, const double bi[], const double bj[], int64_t ipiv[], std::complex<double> U[], int64_t ldu);
 
 void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, int64_t nrhs, std::complex<double> B[], int64_t ldB, const std::complex<double> X[], int64_t ldX, const double ibodies[], const double jbodies[]);
