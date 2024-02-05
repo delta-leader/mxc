@@ -3,7 +3,6 @@
 #include <build_tree.hpp>
 #include <comm.hpp>
 #include <kernel.hpp>
-#include <lowrank.hpp>
 
 #include <cblas.h>
 #include <lapacke.h>
@@ -27,10 +26,12 @@ WellSeparatedApproximation::WellSeparatedApproximation(const Eval& eval, double 
       const double* Xbodies = &bodies[3 * cells[x].Body[0]];
       const double* Ybodies = &bodies[3 * cells[y].Body[0]];
 
-      std::vector<int64_t> ipiv(rank);
-      int64_t K = interpolative_decomp_aca(epi, eval, n, m, rank, Xbodies, Ybodies, &ipiv[0], nullptr, 0);
-      std::vector<double> Fbodies(3 * K);
-      for (int64_t i = 0; i < K; i++)
+      int64_t k = std::min(rank, std::min(m, n));
+      std::vector<int64_t> ipiv(k);
+      std::vector<std::complex<double>> U(m * k);
+      int64_t iters = interpolative_decomp_aca(.5 * epi, eval, n, m, k, Xbodies, Ybodies, &ipiv[0], &U[0], m);
+      std::vector<double> Fbodies(3 * iters);
+      for (int64_t i = 0; i < iters; i++)
         std::copy(&Xbodies[3 * ipiv[i]], &Xbodies[3 * (ipiv[i] + 1)], &Fbodies[3 * i]);
       M[y - lbegin].insert(M[y - lbegin].end(), Fbodies.begin(), Fbodies.end());
     }

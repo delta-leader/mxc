@@ -4,7 +4,6 @@
 #include <build_tree.hpp>
 #include <basis.hpp>
 #include <comm.hpp>
-#include <lowrank.hpp>
 #include <solver.hpp>
 
 #include <random>
