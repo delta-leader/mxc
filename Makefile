@@ -14,10 +14,10 @@ OBJ = $(patsubst %,$(ODIR)/%,$(objs))
 $(ODIR)/%.o: %.cpp $(DEPS)
 	$(CXX) -c -o $@ $< $(CFLAGS)
 
-main: $(OBJ)
+a.out: $(OBJ)
 	$(CXX) -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 .PHONY: clean
 
 clean:
-	rm -f $(ODIR)/*.o main
+	rm -f $(ODIR)/*.o a.out

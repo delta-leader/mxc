@@ -6,7 +6,7 @@
 #include <numeric>
 #include <array>
 
-void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda) {
+void gen_matrix(const MatrixAccessor& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
   const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * m]);
   const std::array<double, 3>* bj3 = reinterpret_cast<const std::array<double, 3>*>(bj);
@@ -22,7 +22,7 @@ void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const 
   });
 }
 
-int64_t interpolative_decomp_aca(double epi, const Eval& eval, int64_t M, int64_t N, int64_t K, const double bi[], const double bj[], int64_t ipiv[], std::complex<double> U[], int64_t ldu) {
+int64_t interpolative_decomp_aca(double epi, const MatrixAccessor& eval, int64_t M, int64_t N, int64_t K, const double bi[], const double bj[], int64_t ipiv[], std::complex<double> U[], int64_t ldu) {
   std::vector<std::complex<double>> V(K * N), L(K * K, std::complex<double>(0., 0.)), Wnrm(K), Vnrm(K);
   std::vector<std::complex<double>> Acol(M), Arow(N);
   std::vector<double> Rcol(M), Rrow(N);
@@ -87,7 +87,7 @@ int64_t interpolative_decomp_aca(double epi, const Eval& eval, int64_t M, int64_
 }
 
 
-void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, int64_t nrhs, std::complex<double> B[], int64_t ldB, const std::complex<double> X[], int64_t ldX, const double ibodies[], const double jbodies[]) {
+void mat_vec_reference(const MatrixAccessor& eval, int64_t M, int64_t N, int64_t nrhs, std::complex<double> B[], int64_t ldB, const std::complex<double> X[], int64_t ldX, const double ibodies[], const double jbodies[]) {
   constexpr int64_t size = 256;
   std::vector<std::complex<double>> A(size * size);
   std::complex<double> one(1., 0.);

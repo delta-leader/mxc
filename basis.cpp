@@ -10,7 +10,7 @@
 #include <numeric>
 #include <cmath>
 
-WellSeparatedApproximation::WellSeparatedApproximation(const Eval& eval, double epi, int64_t rank, int64_t lbegin, int64_t lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
+WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, int64_t rank, int64_t lbegin, int64_t lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
   lbegin(lbegin), lend(lend), M(lend - lbegin) {
   std::vector<std::vector<double>> Fbodies(lend - lbegin);
   for (int64_t i = upper.lbegin; i < upper.lend; i++)
@@ -46,7 +46,7 @@ const double* WellSeparatedApproximation::fbodies_at_i(int64_t i) const {
   return 0 <= i && i < (int64_t)M.size() ? M[i].data() : nullptr;
 }
 
-int64_t compute_basis(const Eval& eval, double epi, int64_t M, int64_t N, double Xbodies[], const double Fbodies[], std::complex<double> A[], int64_t LDA) {
+int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t N, double Xbodies[], const double Fbodies[], std::complex<double> A[], int64_t LDA) {
   int64_t K = std::max(M, N);
   std::complex<double> one(1., 0.), zero(0., 0.);
   std::vector<std::complex<double>> B(M * K);
@@ -82,7 +82,7 @@ int64_t compute_basis(const Eval& eval, double epi, int64_t M, int64_t N, double
   return rank;
 }
 
-ClusterBasis::ClusterBasis(const Eval& eval, double epi, const Cell cells[], const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
+ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
   int64_t xlen = comm.lenNeighbors();
   int64_t ibegin = comm.oLocal();
   int64_t nodes = comm.lenLocal();
@@ -151,7 +151,7 @@ const double* ClusterBasis::ske_at_i(int64_t i) const {
   return Mdata.data() + 3 * std::accumulate(Dims.begin(), Dims.begin() + i, 0);
 }
 
-MatVec::MatVec(const Eval& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& far, const CellComm comm[], int64_t levels) :
+MatVec::MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& far, const CellComm comm[], int64_t levels) :
   EvalFunc(&eval), Basis(basis), Bodies(bodies), Cells(cells), Near(&near), Far(&far), Comm(comm), Levels(levels) {
 }
 

@@ -4,12 +4,12 @@
 #include <complex>
 #include <cmath>
 
-class Eval {
+class MatrixAccessor {
 public:
   virtual std::complex<double> operator()(double d) const = 0;
 };
 
-class Laplace3D : public Eval {
+class Laplace3D : public MatrixAccessor {
 public:
   double singularity;
   Laplace3D (double s) : singularity(1. / s) {}
@@ -21,7 +21,7 @@ public:
   }
 };
 
-class Yukawa3D : public Eval {
+class Yukawa3D : public MatrixAccessor {
 public:
   double singularity, alpha;
   Yukawa3D (double s, double a) : singularity(1. / s), alpha(a) {}
@@ -33,7 +33,7 @@ public:
   }
 };
 
-class Gaussian : public Eval {
+class Gaussian : public MatrixAccessor {
 public:
   double alpha;
   Gaussian (double a) : alpha(1. / (a * a)) {}
@@ -42,20 +42,7 @@ public:
   }
 };
 
-class Helmholtz2D : public Eval {
-public:
-  double k;
-  double singularity;
-  Helmholtz2D(double wave_number, double s) : k(wave_number), singularity(1. / s) {}
-  std::complex<double> operator()(double d) const override {
-    if (d == 0.)
-      return std::complex<double>(singularity, 0.);
-    else
-      return std::complex<double>(std::cyl_bessel_j(0, k * d), std::cyl_neumann(0, k * d));
-  }
-};
-
-class Helmholtz3D : public Eval {
+class Helmholtz3D : public MatrixAccessor {
 public:
   double k;
   double singularity;
@@ -69,8 +56,8 @@ public:
 };
 
 
-void gen_matrix(const Eval& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda);
+void gen_matrix(const MatrixAccessor& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda);
 
-int64_t interpolative_decomp_aca(double epi, const Eval& eval, int64_t M, int64_t N, int64_t K, const double bi[], const double bj[], int64_t ipiv[], std::complex<double> U[], int64_t ldu);
+int64_t interpolative_decomp_aca(double epi, const MatrixAccessor& eval, int64_t M, int64_t N, int64_t K, const double bi[], const double bj[], int64_t ipiv[], std::complex<double> U[], int64_t ldu);
 
-void mat_vec_reference(const Eval& eval, int64_t M, int64_t N, int64_t nrhs, std::complex<double> B[], int64_t ldB, const std::complex<double> X[], int64_t ldX, const double ibodies[], const double jbodies[]);
+void mat_vec_reference(const MatrixAccessor& eval, int64_t M, int64_t N, int64_t nrhs, std::complex<double> B[], int64_t ldB, const std::complex<double> X[], int64_t ldX, const double ibodies[], const double jbodies[]);

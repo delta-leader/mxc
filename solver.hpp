@@ -7,7 +7,7 @@
 class CSR;
 class Cell;
 class CellComm;
-class Eval;
+class MatrixAccessor;
 class ClusterBasis;
 
 class Solver {
@@ -32,9 +32,9 @@ public:
 
   Solver(const int64_t dims[], const CSR& Near, const CellComm& comm);
 
-  void setData_leaf(const Eval& eval, const Cell cells[], const double bodies[], const CellComm& comm);
+  void setData_leaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm);
 
-  void setData_far(const Eval& eval, const ClusterBasis& basis, const CellComm& comm);
+  void setData_far(const MatrixAccessor& eval, const ClusterBasis& basis, const CellComm& comm);
   
 };
 

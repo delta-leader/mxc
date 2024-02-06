@@ -81,7 +81,7 @@ Solver::Solver(const int64_t dims[], const CSR& Near, const CellComm& comm) {
   std::transform(offset_a.begin(), offset_a.begin() + fill_locs.size(), F.begin(), [&](int64_t i) { return &Fdata[i]; });
 }
 
-void Solver::setData_leaf(const Eval& eval, const Cell cells[], const double bodies[], const CellComm& comm) {
+void Solver::setData_leaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm) {
   for (int64_t i = 0; i < (int64_t)A.size(); i++) {
     int64_t y = Y[i];
     int64_t x = X[i];
@@ -89,6 +89,6 @@ void Solver::setData_leaf(const Eval& eval, const Cell cells[], const double bod
   }
 }
 
-void Solver::setData_far(const Eval& eval, const ClusterBasis& basis, const CellComm& comm) {
+void Solver::setData_far(const MatrixAccessor& eval, const ClusterBasis& basis, const CellComm& comm) {
   
 }
