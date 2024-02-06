@@ -71,7 +71,8 @@ int64_t interpolative_decomp_aca(double epi, const Eval& eval, int64_t M, int64_
 
     cblas_zgemv(CblasColMajor, CblasTrans, M, iters, &one, &U[0], ldu, &Acol[0], 1, &zero, &Wnrm[0], 1);
     cblas_zgemv(CblasColMajor, CblasTrans, N, iters, &one, &V[0], N, &Arow[0], 1, &zero, &Vnrm[0], 1);
-    std::complex<double> Z_k = cblas_zdotc(iters, &Wnrm[0], 1, &Vnrm[0], 1);
+    std::complex<double> Z_k = std::transform_reduce(&Wnrm[0], &Wnrm[iters], &Vnrm[0], std::complex<double>(0., 0.), 
+      std::plus<std::complex<double>>(), std::multiplies<std::complex<double>>());
     nrm_k = cblas_dznrm2(M, &Acol[0], 1) * cblas_dznrm2(N, &Arow[0], 1);
     nrm_z = std::sqrt(nrm_z * nrm_z + 2 * std::abs(Z_k) + nrm_k * nrm_k);
     iters++;
