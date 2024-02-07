@@ -30,7 +30,6 @@ public:
   std::pair<double, double>* timer;
 
   CellComm() : Proc(-1), ProcA2(-1), ProcBoxes(), ProcBoxesA2(), CommBox(), CommBoxA2(), Comm_share(MPI_COMM_NULL), Comm_merge(MPI_COMM_NULL), timer(nullptr) {};
-  CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t clen, const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
   CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Near2, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
   
   int64_t iLocal(int64_t iglobal) const;
