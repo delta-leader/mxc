@@ -66,28 +66,26 @@ MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& unique_comms, int color, i
   return comm;
 }
 
-CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) {
+CellComm::CellComm(int64_t lbegin, int64_t lend, const Cell cells[], const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
 
-  int64_t p = ProcMapping[lbegin].first;
-  int64_t lenp = ProcMapping[lbegin].second - p;
+  int64_t pbegin = lbegin, pend = lend;
+  getLocalRange(pbegin, pend, mpi_rank, ProcMapping);
+  int64_t p = ProcMapping[pbegin].first;
+  int64_t lenp = ProcMapping[pbegin].second - p;
 
-  std::vector<int64_t> ProcTargets;
-  for (int64_t i = 0; i < (int64_t)mpi_size; i++) {
-    std::set<int64_t> cols;
-    cols.insert(Near.ColIndex.begin() + Near.RowIndex[lbegin], Near.ColIndex.begin() + Near.RowIndex[lend]);
-    cols.insert(Far.ColIndex.begin() + Far.RowIndex[lbegin], Far.ColIndex.begin() + Far.RowIndex[lend]);
-    
-    if (cols.size() > 0 && (cols.end() != std::find_if(cols.begin(), cols.end(), [&](const int64_t col) { return ProcMapping[col].first == i; })))
-      ProcTargets.emplace_back(i);
-  }
+  std::set<int64_t> cols, cols_p;
+  cols.insert(Near.ColIndex.begin() + Near.RowIndex[pbegin], Near.ColIndex.begin() + Near.RowIndex[pend]);
+  cols.insert(Far.ColIndex.begin() + Far.RowIndex[pbegin], Far.ColIndex.begin() + Far.RowIndex[pend]);
+  std::for_each(cols.begin(), cols.end(), [&](int64_t col) { cols_p.insert(ProcMapping[col].first); });
+
+  std::vector<int64_t> ProcTargets(cols_p.begin(), cols_p.end());
   Proc = std::distance(ProcTargets.begin(), std::find(ProcTargets.begin(), ProcTargets.end(), p));
   ProcBoxes = std::vector<std::pair<int64_t, int64_t>>(ProcTargets.size());
   ProcBoxesNeighbors = std::vector<std::vector<std::pair<int64_t, int64_t>>>(ProcTargets.size());
   CommBox = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? ProcTargets.size() : 0);
-  ProcBoxes[Proc] = std::make_pair(lbegin, lend - lbegin);
 
   int64_t k = 0;
   for (int i = 0; i < mpi_size; i++) {
@@ -99,17 +97,26 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, c
         MPI_Comm_rank(comm, &root);
       MPI_Allreduce(MPI_IN_PLACE, &root, 1, MPI_INT, MPI_SUM, comm);
       CommBox[k] = std::make_pair(root, comm);
-      MPI_Bcast(&ProcBoxes[k], sizeof(std::pair<int64_t, int64_t>), MPI_BYTE, root, comm);
     }
   }
 
+  int64_t cbegin = cells[pbegin].Child[0];
+  int64_t cend = cells[pbegin].Child[1];
   int color_merge = (lenp > 1 && cbegin >= 0 && cend >= 0) && (&ProcMapping[cend] != std::find_if(&ProcMapping[cbegin], &ProcMapping[cend], 
     [=](const std::pair<int64_t, int64_t>& a) { return a.first == (int64_t)mpi_rank; })) ? p : MPI_UNDEFINED;
   Comm_merge = MPI_Comm_split_unique(unique_comms, color_merge, mpi_rank, world);
   Comm_share = MPI_Comm_split_unique(unique_comms, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 
-  if (Comm_share != MPI_COMM_NULL)
-    MPI_Bcast(&ProcBoxes[0], sizeof(std::pair<int64_t, int64_t>) * ProcBoxes.size(), MPI_BYTE, 0, Comm_share);
+  for (int64_t i = 0; i < (int64_t)ProcTargets.size(); i++) {
+    int64_t ibegin = lbegin, iend = lend;
+    getLocalRange(ibegin, iend, ProcTargets[i], ProcMapping);
+    ProcBoxes[i] = std::make_pair(ibegin, iend - ibegin);
+
+    std::set<int64_t> icols, icols_p;
+    icols.insert(Near.ColIndex.begin() + Near.RowIndex[ibegin], Near.ColIndex.begin() + Near.RowIndex[iend]);
+    icols.insert(Far.ColIndex.begin() + Far.RowIndex[ibegin], Far.ColIndex.begin() + Far.RowIndex[iend]);
+    std::for_each(icols.begin(), icols.end(), [&](int64_t col) { icols_p.insert(ProcMapping[col].first); });
+  }
 }
 
 int64_t CellComm::iLocal(int64_t iglobal) const {

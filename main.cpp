@@ -86,13 +86,7 @@ int main(int argc, char* argv[]) {
   std::vector<int64_t> levelOffsets = getLevelOffsets(&cell[0], ncells);
   
   for (int64_t i = 0; i <= levels; i++) {
-    int64_t ibegin = levelOffsets[i];
-    int64_t iend = levelOffsets[i + 1];
-    getLocalRange(ibegin, iend, mpi_rank, mapping);
-    
-    int64_t child = cell[ibegin].Child[0];
-    int64_t cend = cell[ibegin].Child[1];
-    cell_comm[i] = CellComm(ibegin, iend, child, cend, mapping, cellNear, cellFar, mpi_comms, world);
+    cell_comm[i] = CellComm(levelOffsets[i], levelOffsets[i + 1], &cell[0], mapping, cellNear, cellFar, mpi_comms, world);
     cell_comm[i].timer = &timer;
   }
 
