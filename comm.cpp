@@ -66,7 +66,7 @@ MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& unique_comms, int color, i
   return comm;
 }
 
-CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Near2, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) {
+CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
@@ -74,7 +74,7 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, c
   int64_t p = ProcMapping[lbegin].first;
   int64_t lenp = ProcMapping[lbegin].second - p;
 
-  std::vector<int64_t> ProcTargets, ProcTargetsA2;
+  std::vector<int64_t> ProcTargets;
   for (int64_t i = 0; i < (int64_t)mpi_size; i++) {
     std::set<int64_t> cols;
     cols.insert(Near.ColIndex.begin() + Near.RowIndex[lbegin], Near.ColIndex.begin() + Near.RowIndex[lend]);
@@ -82,58 +82,34 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, c
     
     if (cols.size() > 0 && (cols.end() != std::find_if(cols.begin(), cols.end(), [&](const int64_t col) { return ProcMapping[col].first == i; })))
       ProcTargets.emplace_back(i);
-
-    cols.insert(Near2.ColIndex.begin() + Near2.RowIndex[lbegin], Near2.ColIndex.begin() + Near2.RowIndex[lend]);
-    if (cols.size() > 0 && (cols.end() != std::find_if(cols.begin(), cols.end(), [&](const int64_t col) { return ProcMapping[col].first == i; })))
-      ProcTargetsA2.emplace_back(i);
   }
   Proc = std::distance(ProcTargets.begin(), std::find(ProcTargets.begin(), ProcTargets.end(), p));
   ProcBoxes = std::vector<std::pair<int64_t, int64_t>>(ProcTargets.size());
-  CommBox = std::vector<std::pair<int, MPI_Comm>>();
-  ProcA2 = std::distance(ProcTargetsA2.begin(), std::find(ProcTargetsA2.begin(), ProcTargetsA2.end(), p));
-  ProcBoxesA2 = std::vector<std::pair<int64_t, int64_t>>(ProcTargetsA2.size());
-  CommBoxA2 = std::vector<std::pair<int, MPI_Comm>>();
+  ProcBoxesNeighbors = std::vector<std::vector<std::pair<int64_t, int64_t>>>(ProcTargets.size());
+  CommBox = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? ProcTargets.size() : 0);
+  ProcBoxes[Proc] = std::make_pair(lbegin, lend - lbegin);
 
-  std::vector<int64_t>::iterator iter = ProcTargets.begin(), iterA2 = ProcTargetsA2.begin();
+  int64_t k = 0;
   for (int i = 0; i < mpi_size; i++) {
-    iter = std::find_if(iter, ProcTargets.end(), [=](int64_t a) { return (int64_t)i <= a; });
-    iterA2 = std::find_if(iterA2, ProcTargetsA2.end(), [=](int64_t a) { return (int64_t)i <= a; });
-    MPI_Comm comm = MPI_Comm_split_unique(unique_comms, (p == mpi_rank && iter != ProcTargets.end() && *iter == i) ? 1 : MPI_UNDEFINED, mpi_rank, world);
+    k = std::distance(ProcTargets.begin(), std::find_if(ProcTargets.begin() + k, ProcTargets.end(), [=](int64_t a) { return (int64_t)i <= a; }));
+    MPI_Comm comm = MPI_Comm_split_unique(unique_comms, (p == mpi_rank && k != (int64_t)ProcTargets.size() && ProcTargets[k] == i) ? 1 : MPI_UNDEFINED, mpi_rank, world);
     if (comm != MPI_COMM_NULL) {
       int root = 0;
       if (i == mpi_rank)
         MPI_Comm_rank(comm, &root);
       MPI_Allreduce(MPI_IN_PLACE, &root, 1, MPI_INT, MPI_SUM, comm);
-      CommBox.emplace_back(root, comm);
-    }
-
-    comm = MPI_Comm_split_unique(unique_comms, (p == mpi_rank && iterA2 != ProcTargetsA2.end() && *iterA2 == i) ? 1 : MPI_UNDEFINED, mpi_rank, world);
-    if (comm != MPI_COMM_NULL) {
-      int root = 0;
-      if (i == mpi_rank)
-        MPI_Comm_rank(comm, &root);
-      MPI_Allreduce(MPI_IN_PLACE, &root, 1, MPI_INT, MPI_SUM, comm);
-      CommBoxA2.emplace_back(root, comm);
+      CommBox[k] = std::make_pair(root, comm);
+      MPI_Bcast(&ProcBoxes[k], sizeof(std::pair<int64_t, int64_t>), MPI_BYTE, root, comm);
     }
   }
-
-  ProcBoxes[Proc] = std::make_pair(lbegin, lend - lbegin);
-  for (int64_t i = 0; i < (int64_t)CommBox.size(); i++)
-    MPI_Bcast(&ProcBoxes[i], sizeof(std::pair<int64_t, int64_t>), MPI_BYTE, CommBox[i].first, CommBox[i].second);
-  
-  ProcBoxesA2[Proc] = std::make_pair(lbegin, lend - lbegin);
-  for (int64_t i = 0; i < (int64_t)CommBoxA2.size(); i++)
-    MPI_Bcast(&ProcBoxesA2[i], sizeof(std::pair<int64_t, int64_t>), MPI_BYTE, CommBoxA2[i].first, CommBoxA2[i].second);
 
   int color_merge = (lenp > 1 && cbegin >= 0 && cend >= 0) && (&ProcMapping[cend] != std::find_if(&ProcMapping[cbegin], &ProcMapping[cend], 
     [=](const std::pair<int64_t, int64_t>& a) { return a.first == (int64_t)mpi_rank; })) ? p : MPI_UNDEFINED;
   Comm_merge = MPI_Comm_split_unique(unique_comms, color_merge, mpi_rank, world);
   Comm_share = MPI_Comm_split_unique(unique_comms, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 
-  if (Comm_share != MPI_COMM_NULL) {
+  if (Comm_share != MPI_COMM_NULL)
     MPI_Bcast(&ProcBoxes[0], sizeof(std::pair<int64_t, int64_t>) * ProcBoxes.size(), MPI_BYTE, 0, Comm_share);
-    MPI_Bcast(&ProcBoxesA2[0], sizeof(std::pair<int64_t, int64_t>) * ProcBoxesA2.size(), MPI_BYTE, 0, Comm_share);
-  }
 }
 
 int64_t CellComm::iLocal(int64_t iglobal) const {
@@ -159,32 +135,6 @@ int64_t CellComm::lenLocal() const {
 
 int64_t CellComm::lenNeighbors() const {
   return std::accumulate(ProcBoxes.begin(), ProcBoxes.end(), 0,
-    [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
-}
-
-int64_t CellComm::iLocalA2(int64_t iglobal) const {
-  return pnx_to_local(global_to_pnx(iglobal, ProcBoxesA2), ProcBoxesA2);
-}
-
-int64_t CellComm::iGlobalA2(int64_t ilocal) const {
-  return pnx_to_global(local_to_pnx(ilocal, ProcBoxesA2), ProcBoxesA2);
-}
-
-int64_t CellComm::oLocalA2() const {
-  return (ProcA2 >= 0 && ProcA2 < (int64_t)ProcBoxesA2.size()) ? std::accumulate(ProcBoxesA2.begin(), ProcBoxesA2.begin() + ProcA2, 0,
-    [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; }) : -1;
-}
-
-int64_t CellComm::oGlobalA2() const {
-  return (ProcA2 >= 0 && ProcA2 < (int64_t)ProcBoxesA2.size()) ? ProcBoxesA2[ProcA2].first : -1;
-}
-
-int64_t CellComm::lenLocalA2() const {
-  return (ProcA2 >= 0 && ProcA2 < (int64_t)ProcBoxesA2.size()) ? ProcBoxesA2[ProcA2].second : -1;
-}
-
-int64_t CellComm::lenNeighborsA2() const {
-  return std::accumulate(ProcBoxesA2.begin(), ProcBoxesA2.end(), 0,
     [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
 }
 
