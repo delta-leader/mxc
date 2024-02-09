@@ -89,10 +89,10 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, c
   }
   Proc = std::distance(ProcTargets.begin(), std::find(ProcTargets.begin(), ProcTargets.end(), p));
   ProcBoxes = std::vector<std::pair<int64_t, int64_t>>(ProcTargets.size());
-  CommBox = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? ProcTargets.size() : 0);
+  CommBox = std::vector<std::pair<int, MPI_Comm>>();
   ProcA2 = std::distance(ProcTargetsA2.begin(), std::find(ProcTargetsA2.begin(), ProcTargetsA2.end(), p));
   ProcBoxesA2 = std::vector<std::pair<int64_t, int64_t>>(ProcTargetsA2.size());
-  CommBoxA2 = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? ProcTargetsA2.size() : 0);
+  CommBoxA2 = std::vector<std::pair<int, MPI_Comm>>();
 
   std::vector<int64_t>::iterator iter = ProcTargets.begin(), iterA2 = ProcTargetsA2.begin();
   for (int i = 0; i < mpi_size; i++) {
@@ -104,7 +104,7 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, c
       if (i == mpi_rank)
         MPI_Comm_rank(comm, &root);
       MPI_Allreduce(MPI_IN_PLACE, &root, 1, MPI_INT, MPI_SUM, comm);
-      CommBox[std::distance(ProcTargets.begin(), iter)] = std::make_pair(root, comm);
+      CommBox.emplace_back(root, comm);
     }
 
     comm = MPI_Comm_split_unique(unique_comms, (p == mpi_rank && iterA2 != ProcTargetsA2.end() && *iterA2 == i) ? 1 : MPI_UNDEFINED, mpi_rank, world);
@@ -113,7 +113,7 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, int64_t cbegin, int64_t cend, c
       if (i == mpi_rank)
         MPI_Comm_rank(comm, &root);
       MPI_Allreduce(MPI_IN_PLACE, &root, 1, MPI_INT, MPI_SUM, comm);
-      CommBoxA2[std::distance(ProcTargetsA2.begin(), iterA2)] = std::make_pair(root, comm);
+      CommBoxA2.emplace_back(root, comm);
     }
   }
 
