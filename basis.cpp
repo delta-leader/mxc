@@ -10,9 +10,9 @@
 #include <numeric>
 #include <cmath>
 
-WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, int64_t rank, int64_t lbegin, int64_t lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
-  lbegin(lbegin), lend(lend), M(lend - lbegin) {
-  std::vector<std::vector<double>> Fbodies(lend - lbegin);
+WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, int64_t rank, int64_t lbegin, int64_t len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
+  lbegin(lbegin), lend(lbegin + len), M(len) {
+  std::vector<std::vector<double>> Fbodies(len);
   for (int64_t i = upper.lbegin; i < upper.lend; i++)
     for (int64_t c = cells[i].Child[0]; c < cells[i].Child[1]; c++)
       if (lbegin <= c && c < lend)

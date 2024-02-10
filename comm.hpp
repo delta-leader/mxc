@@ -36,13 +36,6 @@ public:
   int64_t lenLocal() const;
   int64_t lenNeighbors() const;
 
-  int64_t iLocalA2(int64_t iglobal) const;
-  int64_t iGlobalA2(int64_t ilocal) const;
-  int64_t oLocalA2() const;
-  int64_t oGlobalA2() const;
-  int64_t lenLocalA2() const;
-  int64_t lenNeighborsA2() const;
-
   void level_merge(std::complex<double>* data, int64_t len) const;
 
   void dup_bcast(int64_t* data, int64_t len) const;

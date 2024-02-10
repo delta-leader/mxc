@@ -71,29 +71,51 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, const Cell cells[], const std::
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
 
-  int64_t pbegin = lbegin, pend = lend;
-  getLocalRange(pbegin, pend, mpi_rank, ProcMapping);
-  int64_t p = ProcMapping[pbegin].first;
-  int64_t lenp = ProcMapping[pbegin].second - p;
+  std::vector<std::pair<int64_t, int64_t>> Mapping(mpi_size);
+  for (int64_t i = 0; i < (int64_t)mpi_size; i++) {
+    int64_t pbegin = lbegin, pend = lend;
+    getLocalRange(pbegin, pend, i, ProcMapping);
+    Mapping[i] = std::make_pair(pbegin, pend);
+  }
 
+  int64_t pbegin = Mapping[mpi_rank].first;
+  int64_t pend = Mapping[mpi_rank].second;
+  int64_t p = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_size], Mapping[mpi_rank]));
+  int64_t lenp = std::distance(&Mapping[p], 
+    std::find_if_not(&Mapping[p], &Mapping[mpi_size], [&](std::pair<int64_t, int64_t> i) { return i == Mapping[mpi_rank]; }));
+
+  auto col_to_mpi_rank = [&](int64_t col) { return std::distance(&Mapping[0], std::find_if(&Mapping[0], &Mapping[mpi_size], 
+    [&](std::pair<int64_t, int64_t> i) { return i.first <= col && col < i.second; })); };
   std::set<int64_t> cols;
-  std::for_each(Near.ColIndex.begin() + Near.RowIndex[pbegin], Near.ColIndex.begin() + Near.RowIndex[pend], [&](int64_t col) { cols.insert(ProcMapping[col].first); });
-  std::for_each(Far.ColIndex.begin() + Far.RowIndex[pbegin], Far.ColIndex.begin() + Far.RowIndex[pend], [&](int64_t col) { cols.insert(ProcMapping[col].first); });
+  std::for_each(Near.ColIndex.begin() + Near.RowIndex[pbegin], Near.ColIndex.begin() + Near.RowIndex[pend], [&](int64_t col) { cols.insert(col_to_mpi_rank(col)); });
+  std::for_each(Far.ColIndex.begin() + Far.RowIndex[pbegin], Far.ColIndex.begin() + Far.RowIndex[pend], [&](int64_t col) { cols.insert(col_to_mpi_rank(col)); });
 
-  std::vector<int64_t> ProcTargets(cols.begin(), cols.end());
-  Proc = std::distance(ProcTargets.begin(), std::find(ProcTargets.begin(), ProcTargets.end(), p));
-  Boxes = std::vector<std::vector<std::pair<int64_t, int64_t>>>(ProcTargets.size());
-  NeighborComm = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? ProcTargets.size() : 0);
+  std::vector<int64_t> NeighborRanks(cols.begin(), cols.end());
+  Proc = std::distance(NeighborRanks.begin(), std::find(NeighborRanks.begin(), NeighborRanks.end(), p));
+  Boxes = std::vector<std::vector<std::pair<int64_t, int64_t>>>(NeighborRanks.size());
+  NeighborComm = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? NeighborRanks.size() : 0);
+
+  for (int64_t i = 0; i < (int64_t)NeighborRanks.size(); i++) {
+    int64_t ibegin = Mapping[NeighborRanks[i]].first;
+    int64_t iend = Mapping[NeighborRanks[i]].second;
+    std::set<int64_t> icols;
+    std::for_each(Near.ColIndex.begin() + Near.RowIndex[ibegin], Near.ColIndex.begin() + Near.RowIndex[iend], [&](int64_t col) { icols.insert(col_to_mpi_rank(col)); });
+    std::for_each(Far.ColIndex.begin() + Far.RowIndex[ibegin], Far.ColIndex.begin() + Far.RowIndex[iend], [&](int64_t col) { icols.insert(col_to_mpi_rank(col)); });
+
+    Boxes[i] = std::vector<std::pair<int64_t, int64_t>>(icols.size());
+    std::transform(icols.begin(), icols.end(), Boxes[i].begin(), 
+      [&](int64_t rank) { return std::make_pair(Mapping[rank].first, Mapping[rank].second - Mapping[rank].first); });
+
+    if (p == mpi_rank)
+      NeighborComm[i].first = std::distance(icols.begin(), std::find(icols.begin(), icols.end(), NeighborRanks[i]));
+  }
 
   int64_t k = 0;
   for (int i = 0; i < mpi_size; i++) {
-    k = std::distance(ProcTargets.begin(), std::find_if(ProcTargets.begin() + k, ProcTargets.end(), [=](int64_t a) { return (int64_t)i <= a; }));
-    MPI_Comm comm = MPI_Comm_split_unique(unique_comms, (p == mpi_rank && k != (int64_t)ProcTargets.size() && ProcTargets[k] == i) ? 1 : MPI_UNDEFINED, mpi_rank, world);
-    if (comm != MPI_COMM_NULL) {
-      int root; MPI_Comm_rank(comm, &root);
-      NeighborComm[k] = std::make_pair(i == mpi_rank ? root : 0, comm);
-      MPI_Allreduce(MPI_IN_PLACE, &NeighborComm[k].first, 1, MPI_INT, MPI_SUM, comm);
-    }
+    k = std::distance(NeighborRanks.begin(), std::find_if(NeighborRanks.begin() + k, NeighborRanks.end(), [=](int64_t a) { return (int64_t)i <= a; }));
+    MPI_Comm comm = MPI_Comm_split_unique(unique_comms, (p == mpi_rank && k != (int64_t)NeighborRanks.size() && NeighborRanks[k] == i) ? 1 : MPI_UNDEFINED, mpi_rank, world);
+    if (comm != MPI_COMM_NULL)
+      NeighborComm[k].second = comm;
   }
 
   int64_t cbegin = cells[pbegin].Child[0];
@@ -102,23 +124,6 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, const Cell cells[], const std::
     [=](const std::pair<int64_t, int64_t>& a) { return a.first == (int64_t)mpi_rank; })) ? p : MPI_UNDEFINED;
   MergeComm = MPI_Comm_split_unique(unique_comms, color_merge, mpi_rank, world);
   DupComm = MPI_Comm_split_unique(unique_comms, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
-
-  for (int64_t i = 0; i < (int64_t)ProcTargets.size(); i++) {
-    int64_t ibegin = lbegin, iend = lend;
-    std::set<int64_t> icols;
-    getLocalRange(ibegin, iend, ProcTargets[i], ProcMapping);
-    std::for_each(Near.ColIndex.begin() + Near.RowIndex[ibegin], Near.ColIndex.begin() + Near.RowIndex[iend], [&](int64_t col) { icols.insert(ProcMapping[col].first); });
-    std::for_each(Far.ColIndex.begin() + Far.RowIndex[ibegin], Far.ColIndex.begin() + Far.RowIndex[iend], [&](int64_t col) { icols.insert(ProcMapping[col].first); });
-
-    Boxes[i] = std::vector<std::pair<int64_t, int64_t>>(icols.size());
-    std::set<int64_t>::iterator iter = icols.begin();
-    for (int64_t j = 0; j < (int64_t)icols.size(); j++) {
-      int64_t jbegin = lbegin, jend = lend;
-      getLocalRange(jbegin, jend, *iter, ProcMapping);
-      Boxes[i][j] = std::make_pair(jbegin, jend - jbegin);
-      iter = std::next(iter);
-    }
-  }
 }
 
 int64_t CellComm::iLocal(int64_t iglobal) const {

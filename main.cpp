@@ -44,8 +44,8 @@ int main(int argc, char* argv[]) {
   
   //Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
-  //Gaussian eval(8);
-  Helmholtz3D eval(1.e-1, 1.);
+  Gaussian eval(8);
+  //Helmholtz3D eval(1.e-1, 1.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);
@@ -93,13 +93,9 @@ int main(int argc, char* argv[]) {
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   double h_construct_time = MPI_Wtime();
 
-  for (int64_t l = 1; l <= levels; l++) {
-    int64_t lbegin = levelOffsets[l];
-    int64_t lend = levelOffsets[l + 1];
-    getLocalRange(lbegin, lend, mpi_rank, mapping);
-    wsa[l] = WellSeparatedApproximation(eval, epi, rank, lbegin, lend, &cell[0], cellFar, &body[0], wsa[l - 1]);
-  }
-
+  for (int64_t l = 1; l <= levels; l++)
+    wsa[l] = WellSeparatedApproximation(eval, epi, rank, cell_comm[l].oGlobal(), cell_comm[l].lenLocal(), &cell[0], cellFar, &body[0], wsa[l - 1]);
+  
   h_construct_time = MPI_Wtime() - h_construct_time;
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
