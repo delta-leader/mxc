@@ -173,7 +173,7 @@ std::vector<std::pair<int64_t, int64_t>> getProcessMapping(int64_t mpi_size, con
       }
     }
   }
-  return mapping;  
+  return mapping;
 }
 
 void getLocalRange(int64_t& level_begin, int64_t& level_end, int64_t mpi_rank, const std::vector<std::pair<int64_t, int64_t>>& mapping) {

@@ -66,6 +66,30 @@ MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& unique_comms, int color, i
   return comm;
 }
 
+void getNextLevelMapping(std::pair<int64_t, int64_t> Mapping[], const Cell cells[], int64_t mpi_size) {
+  int64_t p = 0;
+  std::vector<std::pair<int64_t, int64_t>> MappingNext(mpi_size, std::make_pair(-1, -1));
+
+  while (p < mpi_size) {
+    int64_t lenP = std::distance(&Mapping[p], std::find_if_not(&Mapping[p], &Mapping[mpi_size], 
+      [&](std::pair<int64_t, int64_t> a) { return a == Mapping[p]; }));
+    int64_t pbegin = Mapping[p].first;
+    int64_t pend = Mapping[p].second;
+    int64_t child = cells[pbegin].Child[0];
+    int64_t lenC = cells[pend - 1].Child[1] - child;
+
+    if (child >= 0 && lenC > 0)
+      for (int64_t j = 0; j < lenP; j++) {
+        int64_t c0 = j * lenC / lenP;
+        int64_t c1 = (j + 1) * lenC / lenP;
+        c1 = std::max(c1, c0 + 1);
+        MappingNext[p + j] = std::make_pair(child + c0, child + c1);
+      }
+    p += lenP;
+  }
+  std::copy(MappingNext.begin(), MappingNext.end(), Mapping);
+}
+
 CellComm::CellComm(int64_t lbegin, int64_t lend, const Cell cells[], const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);

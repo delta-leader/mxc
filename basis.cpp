@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <limits>
 
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, int64_t rank, int64_t lbegin, int64_t len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
   lbegin(lbegin), lend(lbegin + len), M(len) {
@@ -64,8 +65,9 @@ int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t
   LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, Bptr, K, &jpiv[0], Tptr);
   int64_t rank = 0;
   double s0 = epi * std::abs(B[0]);
-  while (rank < M && 0. < s0 && s0 <= std::abs(B[(rank + 1) * (K + 1)]))
-    ++rank;
+  if (std::numeric_limits<double>::min() < s0)
+    while (rank < M && s0 <= std::abs(B[rank * (K + 1)]))
+      ++rank;
   
   if (rank > 0) {
     if (rank < M)
