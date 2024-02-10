@@ -64,7 +64,7 @@ int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t
   LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, Bptr, K, &jpiv[0], Tptr);
   int64_t rank = 0;
   double s0 = epi * std::abs(B[0]);
-  while (rank < M && s0 <= std::abs(B[rank * (K + 1)]))
+  while (rank < M && 0. < s0 && s0 <= std::abs(B[(rank + 1) * (K + 1)]))
     ++rank;
   
   if (rank > 0) {
