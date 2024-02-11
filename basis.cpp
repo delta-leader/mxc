@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
-#include <limits>
 
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, int64_t rank, int64_t lbegin, int64_t len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
   lbegin(lbegin), lend(lbegin + len), M(len) {

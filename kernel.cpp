@@ -32,6 +32,9 @@ int64_t interpolative_decomp_aca(double epi, const MatrixAccessor& eval, int64_t
   std::transform(Acol.begin(), Acol.end(), Rcol.begin(), [](std::complex<double> c) { return std::abs(c); });
   int64_t x = 0;
   int64_t y = std::distance(Rcol.begin(), std::max_element(Rcol.begin(), Rcol.end()));
+  if (std::abs(Acol[y]) < std::numeric_limits<double>::min())
+    return 0;
+  
   std::complex<double> div = 1. / Acol[y];
   std::transform(Acol.begin(), Acol.end(), Acol.begin(), [=](std::complex<double> c) { return c * div; });
 
@@ -50,7 +53,7 @@ int64_t interpolative_decomp_aca(double epi, const MatrixAccessor& eval, int64_t
 
   std::complex<double> zero(0., 0.), one(1., 0.), minus_one(-1., 0.);
   int64_t iters = 1;
-  while (iters < K && epi * nrm_z <= nrm_k) {
+  while (iters < K && std::numeric_limits<double>::min() < nrm_z && epi * nrm_z <= nrm_k) {
     gen_matrix(eval, M, 1, bi, &bj[x * 3], &Acol[0], M);
     cblas_zgemv(CblasColMajor, CblasNoTrans, M, iters, &minus_one, &U[0], ldu, &V[x], N, &one, &Acol[0], 1);
 
