@@ -44,8 +44,8 @@ int main(int argc, char* argv[]) {
   
   //Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
-  Gaussian eval(8);
-  //Helmholtz3D eval(1.e-1, 1.);
+  //Gaussian eval(8);
+  Helmholtz3D eval(1.e-1, 1.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);
@@ -82,11 +82,10 @@ int main(int argc, char* argv[]) {
 
   std::pair<double, double> timer(0, 0);
   std::vector<MPI_Comm> mpi_comms;
-  std::vector<std::pair<int64_t, int64_t>> mapping = getProcessMapping(mpi_size, &cell[0], ncells);
-  std::vector<int64_t> levelOffsets = getLevelOffsets(&cell[0], ncells);
+  std::vector<std::pair<int64_t, int64_t>> mapping(mpi_size, std::make_pair(0, 1));
   
   for (int64_t i = 0; i <= levels; i++) {
-    cell_comm[i] = CellComm(levelOffsets[i], levelOffsets[i + 1], &cell[0], mapping, cellNear, cellFar, mpi_comms, world);
+    cell_comm[i] = CellComm(&cell[0], &mapping[0], cellNear, cellFar, mpi_comms, world);
     cell_comm[i].timer = &timer;
   }
 

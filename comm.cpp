@@ -90,26 +90,19 @@ void getNextLevelMapping(std::pair<int64_t, int64_t> Mapping[], const Cell cells
   std::copy(MappingNext.begin(), MappingNext.end(), Mapping);
 }
 
-CellComm::CellComm(int64_t lbegin, int64_t lend, const Cell cells[], const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) {
+CellComm::CellComm(const Cell cells[], std::pair<int64_t, int64_t> Mapping[], const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
 
-  std::vector<std::pair<int64_t, int64_t>> Mapping(mpi_size);
-  for (int64_t i = 0; i < (int64_t)mpi_size; i++) {
-    int64_t pbegin = lbegin, pend = lend;
-    getLocalRange(pbegin, pend, i, ProcMapping);
-    Mapping[i] = std::make_pair(pbegin, pend);
-  }
-
   int64_t pbegin = Mapping[mpi_rank].first;
   int64_t pend = Mapping[mpi_rank].second;
-  int64_t p = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_size], Mapping[mpi_rank]));
+  int64_t p = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_rank], Mapping[mpi_rank]));
   int64_t lenp = std::distance(&Mapping[p], 
     std::find_if_not(&Mapping[p], &Mapping[mpi_size], [&](std::pair<int64_t, int64_t> i) { return i == Mapping[mpi_rank]; }));
 
   auto col_to_mpi_rank = [&](int64_t col) { return std::distance(&Mapping[0], std::find_if(&Mapping[0], &Mapping[mpi_size], 
-    [&](std::pair<int64_t, int64_t> i) { return i.first <= col && col < i.second; })); };
+    [=](std::pair<int64_t, int64_t> i) { return i.first <= col && col < i.second; })); };
   std::set<int64_t> cols;
   std::for_each(Near.ColIndex.begin() + Near.RowIndex[pbegin], Near.ColIndex.begin() + Near.RowIndex[pend], [&](int64_t col) { cols.insert(col_to_mpi_rank(col)); });
   std::for_each(Far.ColIndex.begin() + Far.RowIndex[pbegin], Far.ColIndex.begin() + Far.RowIndex[pend], [&](int64_t col) { cols.insert(col_to_mpi_rank(col)); });
@@ -142,11 +135,9 @@ CellComm::CellComm(int64_t lbegin, int64_t lend, const Cell cells[], const std::
       NeighborComm[k].second = comm;
   }
 
-  int64_t cbegin = cells[pbegin].Child[0];
-  int64_t cend = cells[pbegin].Child[1];
-  int color_merge = (lenp > 1 && cbegin >= 0 && cend >= 0) && (&ProcMapping[cend] != std::find_if(&ProcMapping[cbegin], &ProcMapping[cend], 
-    [=](const std::pair<int64_t, int64_t>& a) { return a.first == (int64_t)mpi_rank; })) ? p : MPI_UNDEFINED;
-  MergeComm = MPI_Comm_split_unique(unique_comms, color_merge, mpi_rank, world);
+  getNextLevelMapping(&Mapping[0], cells, mpi_size);
+  int64_t p_next = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_rank], Mapping[mpi_rank]));
+  MergeComm = MPI_Comm_split_unique(unique_comms, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
   DupComm = MPI_Comm_split_unique(unique_comms, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 }
 

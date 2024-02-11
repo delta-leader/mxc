@@ -142,49 +142,6 @@ void buildTreeBuckets(Cell* cells, const double* bodies, const int64_t buckets[]
   }
 }
 
-std::vector<int64_t> getLevelOffsets(const Cell cells[], int64_t ncells) {
-  std::vector<int64_t> offsets;
-  int64_t i = 0;
-  while(0 <= i && i < ncells) {
-    offsets.emplace_back(i);
-    i = cells[i].Child[0];
-  }
-  offsets.emplace_back(ncells);
-  return offsets;
-}
-
-std::vector<std::pair<int64_t, int64_t>> getProcessMapping(int64_t mpi_size, const Cell cells[], int64_t ncells) {
-  std::vector<std::pair<int64_t, int64_t>> mapping(ncells);
-  mapping[0] = std::make_pair(0, mpi_size);
-
-  for (int64_t i = 0; i < ncells; i++) {
-    int64_t child = cells[i].Child[0];
-    int64_t lenC = cells[i].Child[1] - child;
-    int64_t lenP = mapping[i].second - mapping[i].first;
-    int64_t p = mapping[i].first;
-    
-    if (child >= 0 && lenC > 0) {
-      double divP = (double)lenP / (double)lenC;
-      for (int64_t j = 0; j < lenC; j++) {
-        int64_t p0 = j == 0 ? 0 : (int64_t)std::floor(j * divP);
-        int64_t p1 = j == (lenC - 1) ? lenP : (int64_t)std::floor((j + 1) * divP);
-        p1 = std::max(p1, p0 + 1);
-        mapping[child + j] = std::make_pair(p + p0, p + p1);
-      }
-    }
-  }
-  return mapping;
-}
-
-void getLocalRange(int64_t& level_begin, int64_t& level_end, int64_t mpi_rank, const std::vector<std::pair<int64_t, int64_t>>& mapping) {
-  int64_t pbegin = std::distance(mapping.begin(), std::find_if(mapping.begin() + level_begin, mapping.begin() + level_end, 
-    [=](const std::pair<int64_t, int64_t>& p) { return p.first <= mpi_rank && mpi_rank < p.second; }));
-  int64_t pend = std::distance(mapping.begin(), std::find_if_not(mapping.begin() + pbegin, mapping.begin() + level_end, 
-    [=](const std::pair<int64_t, int64_t>& p) { return p.first <= mpi_rank && mpi_rank < p.second; }));
-  level_begin = pbegin;
-  level_end = pend;
-}
-
 void getList(char NoF, std::vector<std::pair<int64_t, int64_t>>& rels, const Cell cells[], int64_t i, int64_t j, double theta) {
   int admis = admis_check(theta, cells[i].C, cells[j].C, cells[i].R, cells[j].R);
   int write_far = NoF == 'F' || NoF == 'f';

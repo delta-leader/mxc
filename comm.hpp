@@ -27,7 +27,7 @@ public:
   std::pair<double, double>* timer;
 
   CellComm() : Proc(-1), Boxes(), NeighborComm(), DupComm(MPI_COMM_NULL), MergeComm(MPI_COMM_NULL), timer(nullptr) {};
-  CellComm(int64_t lbegin, int64_t lend, const Cell cells[], const std::vector<std::pair<int64_t, int64_t>>& ProcMapping, const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
+  CellComm(const Cell cells[], std::pair<int64_t, int64_t> Mapping[], const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
   
   int64_t iLocal(int64_t iglobal) const;
   int64_t iGlobal(int64_t ilocal) const;
