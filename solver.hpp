@@ -5,36 +5,19 @@
 #include <complex>
 
 class CSR;
-class Cell;
 class CellComm;
-class MatrixAccessor;
-class ClusterBasis;
 
-class Solver {
-public:
-  std::vector<int64_t> Dims;
-  std::vector<int64_t> DimsLr;
-
-  std::vector<std::complex<double>*> Q;
-  std::vector<std::complex<double>*> R;
-  std::vector<std::complex<double>> Qdata;
-  std::vector<std::complex<double>> Rdata;
-
-  std::vector<std::complex<double>*> A;
-  std::vector<int64_t> X;
-  std::vector<int64_t> Y;
+class BlockSparseMatrix {
+private:
   std::vector<std::complex<double>> Adata;
+  std::vector<int64_t> blocksOnRow;
+  std::vector<int64_t> elementsOnRow;
 
-  std::vector<std::complex<double>*> F;
-  std::vector<int64_t> FX;
-  std::vector<int64_t> FY;
-  std::vector<std::complex<double>> Fdata;
+public:
+  std::vector<int64_t> M;
+  std::vector<int64_t> N;
+  std::vector<const std::complex<double>*> A;
 
-  Solver(const int64_t dims[], const CSR& Near, const CellComm& comm);
-
-  void setData_leaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm);
-
-  void setData_far(const MatrixAccessor& eval, const ClusterBasis& basis, const CellComm& comm);
-  
+  BlockSparseMatrix(const int64_t Dims[], const CSR& csr, const CellComm& comm);
 };
 

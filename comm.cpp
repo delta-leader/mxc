@@ -150,10 +150,6 @@ int64_t CellComm::iLocal(int64_t iglobal) const {
   return 0 <= Proc ? pnx_to_local(global_to_pnx(iglobal, &Boxes[BoxOffsets[Proc]], len), &Boxes[BoxOffsets[Proc]], len) : -1;
 }
 
-int64_t CellComm::iNeighbors(int64_t iglobal) const {
-  return 0 <= Proc ? pnx_to_local(global_to_pnx(iglobal, &Boxes[0], BoxOffsets.back()), &Boxes[0], BoxOffsets.back()) : -1;
-}
-
 int64_t CellComm::iGlobal(int64_t ilocal) const {
     int64_t len = BoxOffsets[Proc + 1] - BoxOffsets[Proc];
   return 0 <= Proc ? pnx_to_global(local_to_pnx(ilocal, &Boxes[BoxOffsets[Proc]], len), &Boxes[BoxOffsets[Proc]], len) : -1;
@@ -175,11 +171,6 @@ int64_t CellComm::lenLocal() const {
 int64_t CellComm::lenNeighbors() const {
   return 0 <= Proc ? std::accumulate(Boxes.begin() + BoxOffsets[Proc], Boxes.begin() + BoxOffsets[Proc + 1], 0,
     [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; }) : 0; 
-}
-
-int64_t CellComm::lenNeighborOfNeighbors() const {
-  return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.end(), 0,
-    [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; }) : 0;
 }
 
 template<typename T> inline MPI_Datatype get_mpi_datatype() {

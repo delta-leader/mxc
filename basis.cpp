@@ -109,14 +109,14 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   std::inclusive_scan(Vsizes.begin(), Vsizes.end(), Voffsets.begin() + 1);
   Voffsets[0] = 0;
   Vdata = std::vector<std::complex<double>>(Voffsets[xlen], std::complex<double>(0., 0.));
-  std::transform(Voffsets.begin(), Voffsets.end(), V.begin(), [&](const int64_t d) { return &Vdata[d]; });
+  std::transform(Voffsets.begin(), Voffsets.begin() + xlen, V.begin(), [&](const int64_t d) { return &Vdata[d]; });
 
   std::vector<int64_t> Msizes(xlen), Moffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), Msizes.begin(), [](const int64_t d) { return 3 * d; });
   std::inclusive_scan(Msizes.begin(), Msizes.end(), Moffsets.begin() + 1);
   Moffsets[0] = 0;
   Mdata = std::vector<double>(Moffsets[xlen], 0.);
-  std::transform(Moffsets.begin(), Moffsets.end(), M.begin(), [&](const int64_t d) { return &Mdata[d]; });
+  std::transform(Moffsets.begin(), Moffsets.begin() + xlen, M.begin(), [&](const int64_t d) { return &Mdata[d]; });
 
   for (int64_t i = 0; i < nodes; i++) {
     int64_t dim = Dims[i + ibegin];

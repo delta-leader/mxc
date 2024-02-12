@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Matvec: " << matvec_time << ", " << matvec_comm_time << std::endl;
   }
 
-  //Solver solver(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
+  BlockSparseMatrix matrix(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
 
   for (MPI_Comm& c : mpi_comms)
     MPI_Comm_free(&c);
