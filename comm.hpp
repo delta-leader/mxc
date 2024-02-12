@@ -12,7 +12,6 @@ class Cell;
 class CellComm {
 private:
   int64_t Proc;
-  std::vector<int64_t> BoxOffsets;
   std::vector<std::pair<int64_t, int64_t>> Boxes;
   
   std::vector<std::pair<int, MPI_Comm>> NeighborComm;
