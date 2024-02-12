@@ -12,7 +12,8 @@ class Cell;
 class CellComm {
 private:
   int64_t Proc;
-  std::vector<std::vector<std::pair<int64_t, int64_t>>> Boxes;
+  std::vector<int64_t> BoxOffsets;
+  std::vector<std::pair<int64_t, int64_t>> Boxes;
   
   std::vector<std::pair<int, MPI_Comm>> NeighborComm;
   MPI_Comm DupComm;
@@ -30,11 +31,13 @@ public:
   CellComm(const Cell cells[], std::pair<int64_t, int64_t> Mapping[], const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world);
   
   int64_t iLocal(int64_t iglobal) const;
+  int64_t iNeighbors(int64_t iglobal) const;
   int64_t iGlobal(int64_t ilocal) const;
   int64_t oLocal() const;
   int64_t oGlobal() const;
   int64_t lenLocal() const;
   int64_t lenNeighbors() const;
+  int64_t lenNeighborOfNeighbors() const;
 
   void level_merge(std::complex<double>* data, int64_t len) const;
 

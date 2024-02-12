@@ -89,14 +89,15 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   int64_t nodes = comm.lenLocal();
   Dims = std::vector<int64_t>(xlen, 0);
   DimsLr = std::vector<int64_t>(xlen, 0);
-  V = std::vector<std::complex<double>*>(xlen);
+  M = std::vector<const double*>(xlen);
+  V = std::vector<const std::complex<double>*>(xlen);
 
   for (int64_t i = 0; i < nodes; i++) {
     int64_t ci = comm.iGlobal(i + ibegin);
     int64_t childi = prev_comm.iLocal(cells[ci].Child[0]);
     int64_t clen = cells[ci].Child[1] - cells[ci].Child[0];
     Dims[i + ibegin] = (0 <= childi && 0 < clen) ? 
-      std::accumulate(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + clen], 0) : cells[ci].Body[1] - cells[ci].Body[0];
+      std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + clen], 0) : cells[ci].Body[1] - cells[ci].Body[0];
   }
 
   const std::vector<int64_t> ones(xlen, 1);
@@ -115,6 +116,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   std::inclusive_scan(Msizes.begin(), Msizes.end(), Moffsets.begin() + 1);
   Moffsets[0] = 0;
   Mdata = std::vector<double>(Moffsets[xlen], 0.);
+  std::transform(Moffsets.begin(), Moffsets.end(), M.begin(), [&](const int64_t d) { return &Mdata[d]; });
 
   for (int64_t i = 0; i < nodes; i++) {
     int64_t dim = Dims[i + ibegin];
@@ -128,9 +130,9 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
     if (clen <= 0)
       std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
     for (int64_t j = 0; j < clen; j++) {
-      int64_t offset = std::accumulate(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + j], 0);
+      int64_t offset = std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + j], 0);
       int64_t len = prev_basis.DimsLr[childi + j];
-      const double* mbegin = prev_basis.ske_at_i(childi + j);
+      const double* mbegin = prev_basis.M[childi + j];
       std::copy(mbegin, &mbegin[len * 3], &ske[offset * 3]);
     }
 
@@ -146,10 +148,6 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   comm.dup_bcast(Mdata.data(), Moffsets[xlen]);
   comm.neighbor_bcast(Vdata.data(), Vsizes.data());
   comm.dup_bcast(Vdata.data(), Voffsets[xlen]);
-}
-
-const double* ClusterBasis::ske_at_i(int64_t i) const {
-  return Mdata.data() + 3 * std::accumulate(Dims.begin(), Dims.begin() + i, 0);
 }
 
 MatVec::MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& far, const CellComm comm[], int64_t levels) :
@@ -221,7 +219,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
 
     std::vector<int64_t> lens(xlen);
     std::transform(Basis[i].Dims.begin(), Basis[i].Dims.end(), lens.begin(), [=](const int64_t& i) { return i * nrhs; });
-    int64_t lenI = nrhs * std::accumulate(&Basis[i].Dims[0], &Basis[i].Dims[xlen], 0);
+    int64_t lenI = nrhs * std::reduce(&Basis[i].Dims[0], &Basis[i].Dims[xlen], 0);
     Comm[i].level_merge(rhsX[i].data(), lenI);
     Comm[i].neighbor_bcast(rhsX[i].data(), lens.data());
     Comm[i].dup_bcast(rhsX[i].data(), lenI);
@@ -251,7 +249,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
         int64_t x = Comm[i].iLocal(Far->ColIndex[yx]);
         int64_t N = Basis[i].DimsLr[x];
         mat_vec_reference(*EvalFunc, K, N, nrhs, rhsBoptr[i][y + ibegin].first, rhsBoptr[i][y + ibegin].second, 
-          rhsXoptr[i][x].first, rhsXoptr[i][x].second, Basis[i].ske_at_i(y + ibegin), Basis[i].ske_at_i(x));
+          rhsXoptr[i][x].first, rhsXoptr[i][x].second, Basis[i].M[y + ibegin], Basis[i].M[x]);
       }
       int64_t M = Basis[i].Dims[y + ibegin];
       if (M > 0 && K > 0)

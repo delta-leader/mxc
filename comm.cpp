@@ -7,48 +7,6 @@
 #include <numeric>
 #include <cmath>
 
-std::pair<int64_t, int64_t> local_to_pnx(int64_t ilocal, const std::vector<std::pair<int64_t, int64_t>>& ProcBoxes) {
-  int64_t iter = 0;
-  while (iter < (int64_t)ProcBoxes.size() && ProcBoxes[iter].second <= ilocal) {
-    ilocal = ilocal - ProcBoxes[iter].second;
-    iter = iter + 1;
-  }
-  if (0 <= ilocal && iter < (int64_t)ProcBoxes.size())
-    return std::make_pair(iter, ilocal);
-  else
-    return std::make_pair(-1, -1);
-}
-
-std::pair<int64_t, int64_t> global_to_pnx(int64_t iglobal, const std::vector<std::pair<int64_t, int64_t>>& ProcBoxes) {
-  int64_t iter = 0;
-  while (iter < (int64_t)ProcBoxes.size() && (ProcBoxes[iter].first + ProcBoxes[iter].second) <= iglobal)
-    iter = iter + 1;
-  if (iter < (int64_t)ProcBoxes.size() && ProcBoxes[iter].first <= iglobal)
-    return std::make_pair(iter, iglobal - ProcBoxes[iter].first);
-  else
-    return std::make_pair(-1, -1);
-}
-
-int64_t pnx_to_local(std::pair<int64_t, int64_t> pnx, const std::vector<std::pair<int64_t, int64_t>>& ProcBoxes) {
-  if (pnx.first >= 0 && pnx.first < (int64_t)ProcBoxes.size() && pnx.second >= 0) {
-    int64_t iter = 0, slen = 0;
-    while (iter < pnx.first) {
-      slen = slen + ProcBoxes[iter].second;
-      iter = iter + 1;
-    }
-    return pnx.second + slen;
-  }
-  else
-    return -1;
-}
-
-int64_t pnx_to_global(std::pair<int64_t, int64_t> pnx, const std::vector<std::pair<int64_t, int64_t>>& ProcBoxes) {
-  if (pnx.first >= 0 && pnx.first < (int64_t)ProcBoxes.size() && pnx.second >= 0)
-    return pnx.second + ProcBoxes[pnx.first].first;
-  else
-    return -1;
-}
-
 MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& unique_comms, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
   MPI_Comm_split(world, color, mpi_rank, &comm);
@@ -109,9 +67,11 @@ CellComm::CellComm(const Cell cells[], std::pair<int64_t, int64_t> Mapping[], co
 
   std::vector<int64_t> NeighborRanks(cols.begin(), cols.end());
   Proc = std::distance(NeighborRanks.begin(), std::find(NeighborRanks.begin(), NeighborRanks.end(), p));
-  Boxes = std::vector<std::vector<std::pair<int64_t, int64_t>>>(NeighborRanks.size());
   NeighborComm = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? NeighborRanks.size() : 0);
+  BoxOffsets = std::vector<int64_t>(NeighborRanks.size() + 1);
+  BoxOffsets[0] = 0;
 
+  std::vector<std::pair<int64_t, int64_t>> BoxesVector;
   for (int64_t i = 0; i < (int64_t)NeighborRanks.size(); i++) {
     int64_t ibegin = Mapping[NeighborRanks[i]].first;
     int64_t iend = Mapping[NeighborRanks[i]].second;
@@ -119,13 +79,15 @@ CellComm::CellComm(const Cell cells[], std::pair<int64_t, int64_t> Mapping[], co
     std::for_each(Near.ColIndex.begin() + Near.RowIndex[ibegin], Near.ColIndex.begin() + Near.RowIndex[iend], [&](int64_t col) { icols.insert(col_to_mpi_rank(col)); });
     std::for_each(Far.ColIndex.begin() + Far.RowIndex[ibegin], Far.ColIndex.begin() + Far.RowIndex[iend], [&](int64_t col) { icols.insert(col_to_mpi_rank(col)); });
 
-    Boxes[i] = std::vector<std::pair<int64_t, int64_t>>(icols.size());
-    std::transform(icols.begin(), icols.end(), Boxes[i].begin(), 
+    BoxOffsets[i + 1] = BoxOffsets[i] + icols.size();
+    BoxesVector.resize(BoxOffsets[i + 1]);
+    std::transform(icols.begin(), icols.end(), BoxesVector.begin() + BoxOffsets[i], 
       [&](int64_t rank) { return std::make_pair(Mapping[rank].first, Mapping[rank].second - Mapping[rank].first); });
 
     if (p == mpi_rank)
       NeighborComm[i].first = std::distance(icols.begin(), std::find(icols.begin(), icols.end(), NeighborRanks[i]));
   }
+  Boxes = std::vector<std::pair<int64_t, int64_t>>(BoxesVector.begin(), BoxesVector.end());
 
   int64_t k = 0;
   for (int i = 0; i < mpi_size; i++) {
@@ -141,31 +103,83 @@ CellComm::CellComm(const Cell cells[], std::pair<int64_t, int64_t> Mapping[], co
   DupComm = MPI_Comm_split_unique(unique_comms, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 }
 
+std::pair<int64_t, int64_t> local_to_pnx(int64_t ilocal, const std::pair<int64_t, int64_t> ProcBoxes[], int64_t size) {
+  int64_t iter = 0;
+  while (iter < size && ProcBoxes[iter].second <= ilocal) {
+    ilocal = ilocal - ProcBoxes[iter].second;
+    iter = iter + 1;
+  }
+  if (0 <= ilocal && iter < size)
+    return std::make_pair(iter, ilocal);
+  else
+    return std::make_pair(-1, -1);
+}
+
+std::pair<int64_t, int64_t> global_to_pnx(int64_t iglobal, const std::pair<int64_t, int64_t> ProcBoxes[], int64_t size) {
+  int64_t iter = 0;
+  while (iter < size && (ProcBoxes[iter].first + ProcBoxes[iter].second) <= iglobal)
+    iter = iter + 1;
+  if (iter < size && ProcBoxes[iter].first <= iglobal)
+    return std::make_pair(iter, iglobal - ProcBoxes[iter].first);
+  else
+    return std::make_pair(-1, -1);
+}
+
+int64_t pnx_to_local(std::pair<int64_t, int64_t> pnx, const std::pair<int64_t, int64_t> ProcBoxes[], int64_t size) {
+  if (pnx.first >= 0 && pnx.first < size && pnx.second >= 0) {
+    int64_t iter = 0, slen = 0;
+    while (iter < pnx.first) {
+      slen = slen + ProcBoxes[iter].second;
+      iter = iter + 1;
+    }
+    return pnx.second + slen;
+  }
+  else
+    return -1;
+}
+
+int64_t pnx_to_global(std::pair<int64_t, int64_t> pnx, const std::pair<int64_t, int64_t> ProcBoxes[], int64_t size) {
+  if (pnx.first >= 0 && pnx.first < size && pnx.second >= 0)
+    return pnx.second + ProcBoxes[pnx.first].first;
+  else
+    return -1;
+}
+
 int64_t CellComm::iLocal(int64_t iglobal) const {
-  return pnx_to_local(global_to_pnx(iglobal, Boxes[Proc]), Boxes[Proc]);
+  int64_t len = BoxOffsets[Proc + 1] - BoxOffsets[Proc];
+  return 0 <= Proc ? pnx_to_local(global_to_pnx(iglobal, &Boxes[BoxOffsets[Proc]], len), &Boxes[BoxOffsets[Proc]], len) : -1;
+}
+
+int64_t CellComm::iNeighbors(int64_t iglobal) const {
+  return 0 <= Proc ? pnx_to_local(global_to_pnx(iglobal, &Boxes[0], BoxOffsets.back()), &Boxes[0], BoxOffsets.back()) : -1;
 }
 
 int64_t CellComm::iGlobal(int64_t ilocal) const {
-  return pnx_to_global(local_to_pnx(ilocal, Boxes[Proc]), Boxes[Proc]);
+    int64_t len = BoxOffsets[Proc + 1] - BoxOffsets[Proc];
+  return 0 <= Proc ? pnx_to_global(local_to_pnx(ilocal, &Boxes[BoxOffsets[Proc]], len), &Boxes[BoxOffsets[Proc]], len) : -1;
 }
 
 int64_t CellComm::oLocal() const {
-  const std::vector<std::pair<int64_t, int64_t>>& SelfBoxes = Boxes[Proc];
-  return (Proc >= 0 && Proc < (int64_t)SelfBoxes.size()) ? std::accumulate(SelfBoxes.begin(), SelfBoxes.begin() + Proc, 0,
+  return 0 <= Proc ? std::accumulate(Boxes.begin() + BoxOffsets[Proc], Boxes.begin() + BoxOffsets[Proc] + Proc, 0,
     [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; }) : -1;
 }
 
 int64_t CellComm::oGlobal() const {
-  return (Proc >= 0 && Proc < (int64_t)Boxes[Proc].size()) ? Boxes[Proc][Proc].first : -1;
+  return 0 <= Proc ? Boxes[BoxOffsets[Proc] + Proc].first : -1;
 }
 
 int64_t CellComm::lenLocal() const {
-  return (Proc >= 0 && Proc < (int64_t)Boxes[Proc].size()) ? Boxes[Proc][Proc].second : -1;
+  return 0 <= Proc ? Boxes[BoxOffsets[Proc] + Proc].second : 0;
 }
 
 int64_t CellComm::lenNeighbors() const {
-  return std::accumulate(Boxes[Proc].begin(), Boxes[Proc].end(), 0,
-    [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; });
+  return 0 <= Proc ? std::accumulate(Boxes.begin() + BoxOffsets[Proc], Boxes.begin() + BoxOffsets[Proc + 1], 0,
+    [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; }) : 0; 
+}
+
+int64_t CellComm::lenNeighborOfNeighbors() const {
+  return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.end(), 0,
+    [](const int64_t& init, const std::pair<int64_t, int64_t>& p) { return init + p.second; }) : 0;
 }
 
 template<typename T> inline MPI_Datatype get_mpi_datatype() {
@@ -198,8 +212,8 @@ template<typename T> inline void CellComm::neighbor_bcast(T* data, const int64_t
   if (NeighborComm.size() > 0) {
     std::vector<int64_t> offsets(NeighborComm.size() + 1, 0);
     for (int64_t p = 0; p < (int64_t)NeighborComm.size(); p++) {
-      int64_t end = Boxes[Proc][p].second;
-      offsets[p + 1] = std::accumulate(box_dims, &box_dims[end], offsets[p]);
+      int64_t end = Boxes[BoxOffsets[Proc] + p].second;
+      offsets[p + 1] = std::reduce(box_dims, &box_dims[end], offsets[p]);
       box_dims = &box_dims[end];
     }
 
@@ -216,8 +230,8 @@ template<typename T> inline void CellComm::neighbor_reduce(T* data, const int64_
   if (NeighborComm.size() > 0) {
     std::vector<int64_t> offsets(NeighborComm.size() + 1, 0);
     for (int64_t p = 0; p < (int64_t)NeighborComm.size(); p++) {
-      int64_t end = Boxes[Proc][p].second;
-      offsets[p + 1] = std::accumulate(box_dims, &box_dims[end], offsets[p]);
+      int64_t end = Boxes[BoxOffsets[Proc] + p].second;
+      offsets[p + 1] = std::reduce(box_dims, &box_dims[end], offsets[p]);
       box_dims = &box_dims[end];
     }
 
