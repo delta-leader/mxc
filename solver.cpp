@@ -2,12 +2,13 @@
 #include <solver.hpp>
 #include <build_tree.hpp>
 #include <comm.hpp>
+#include <kernel.hpp>
 
 #include <algorithm>
 #include <numeric>
 #include <set>
 
-BlockSparseMatrix::BlockSparseMatrix(const int64_t Dims[], const CSR& csr, const CellComm& comm) {
+UlvSolver::UlvSolver(const int64_t Dims[], const CSR& csr, const CellComm& comm) {
   int64_t xlen = comm.lenNeighbors();
   blocksOnRow = std::vector<int64_t>(xlen);
   elementsOnRow = std::vector<int64_t>(xlen);
@@ -36,6 +37,8 @@ BlockSparseMatrix::BlockSparseMatrix(const int64_t Dims[], const CSR& csr, const
     [&](int64_t col) { return Dims[comm.iLocal(col)]; });
   comm.neighbor_bcast(&N[0], &blocksOnRow[0]);
   comm.dup_bcast(&N[0], ARows[xlen]);
+  RankM = std::vector<int64_t>(M.begin(), M.end());
+  RankN = std::vector<int64_t>(N.begin(), N.end());
 
   std::vector<int64_t> Asizes(ARows[xlen]), Aoffsets(ARows[xlen] + 1);
   std::transform(M.begin(), M.end(), N.begin(), Asizes.begin(), [](int64_t m, int64_t n) { return m * n; });
@@ -47,36 +50,68 @@ BlockSparseMatrix::BlockSparseMatrix(const int64_t Dims[], const CSR& csr, const
   for (int64_t i = 0; i < xlen; i++)
     elementsOnRow[i] = std::reduce(&Asizes[ARows[i]], &Asizes[ARows[i + 1]]);
 
-  FM = std::vector<int64_t>();
-  FN = std::vector<int64_t>();
-  FRows = std::vector<int64_t>(nodes + 1);
-  FCols = std::vector<int64_t>();
-  FRows[0] = 0;
+  CM = std::vector<int64_t>();
+  CN = std::vector<int64_t>();
+  CRows = std::vector<int64_t>(nodes + 1);
+  CCols = std::vector<int64_t>();
+  CRows[0] = 0;
 
   for (int64_t y = 0; y < nodes; y++) {
     const int64_t* ycols = &ACols[0] + ARows[y + ylocal];
     const int64_t* ycols_end = &ACols[0] + ARows[y + ylocal + 1];
-    std::set<int64_t> fills_kx;
+    std::set<std::pair<int64_t, int64_t>> fills_kx;
     for (int64_t yk = ARows[y + ylocal]; yk < ARows[y + ylocal + 1]; yk++) {
       int64_t k = comm.iLocal(ACols[yk]);
       for (int64_t kx = ARows[k]; kx < ARows[k + 1]; kx++)
         if (ycols_end == std::find(ycols, ycols_end, ACols[kx]))
-          fills_kx.insert(kx);
+          fills_kx.insert(std::make_pair(ACols[kx], N[kx]));
     }
 
-    FRows[y + 1] = FRows[y] + fills_kx.size();
-    FCols.resize(FRows[y + 1]);
-    FM.resize(FRows[y + 1], Dims[y + ylocal]);
-    FN.resize(FRows[y + 1]);
-    std::transform(fills_kx.begin(), fills_kx.end(), &FCols[FRows[y]], [&](int64_t kx) { return ACols[kx]; });
-    std::transform(fills_kx.begin(), fills_kx.end(), &FN[FRows[y]], [&](int64_t kx) { return N[kx]; });
+    CRows[y + 1] = CRows[y] + fills_kx.size();
+    CCols.resize(CRows[y + 1]);
+    CM.resize(CRows[y + 1], Dims[y + ylocal]);
+    CN.resize(CRows[y + 1]);
+    std::transform(fills_kx.begin(), fills_kx.end(), &CCols[CRows[y]], [&](std::pair<int64_t, int64_t> kx) { return kx.first; });
+    std::transform(fills_kx.begin(), fills_kx.end(), &CN[CRows[y]], [&](std::pair<int64_t, int64_t> kx) { return kx.second; });
   }
 
-  std::vector<int64_t> Fsizes(FRows[nodes]), Foffsets(FRows[nodes] + 1);
-  std::transform(FM.begin(), FM.end(), FN.begin(), Fsizes.begin(), [](int64_t m, int64_t n) { return m * n; });
-  std::inclusive_scan(Fsizes.begin(), Fsizes.end(), Foffsets.begin() + 1);
-  Foffsets[0] = 0;
-  F = std::vector<const std::complex<double>*>(FRows[nodes]);
-  Fdata = std::vector<std::complex<double>>(Foffsets.back(), std::complex<double>(0., 0.));
-  std::transform(Foffsets.begin(), Foffsets.begin() + FRows[nodes], F.begin(), [&](const int64_t d) { return &Fdata[d]; });
+  CRankM = std::vector<int64_t>(CM.begin(), CM.end());
+  CRankN = std::vector<int64_t>(CN.begin(), CN.end());
+  std::vector<int64_t> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
+  std::transform(CM.begin(), CM.end(), CN.begin(), Csizes.begin(), [](int64_t m, int64_t n) { return m * n; });
+  std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
+  Coffsets[0] = 0;
+  C = std::vector<std::complex<double>*>(CRows[nodes]);
+  Cdata = std::vector<std::complex<double>>(Coffsets.back(), std::complex<double>(0., 0.));
+  std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const int64_t d) { return &Cdata[d]; });
+
+  QDim = std::vector<int64_t>(Dims, &Dims[xlen]);
+  QRank = std::vector<int64_t>(Dims, &Dims[xlen]);
+  basisOnRow = std::vector<int64_t>(xlen);
+  std::vector<int64_t> Qoffsets(xlen + 1);
+  std::transform(Dims, &Dims[xlen], basisOnRow.begin(), [](const int64_t d) { return d * d; });
+  std::inclusive_scan(basisOnRow.begin(), basisOnRow.end(), Qoffsets.begin() + 1);
+  Qoffsets[0] = 0;
+
+  Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
+  Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
+  Q = std::vector<const std::complex<double>*>(xlen);
+  R = std::vector<std::complex<double>*>(xlen);
+  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const int64_t d) { return &Qdata[d]; });
+  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const int64_t d) { return &Rdata[d]; });
+}
+
+void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm) {
+  int64_t xlen = comm.lenNeighbors();
+  for (int64_t i = 0; i < xlen; i++) {
+    int64_t y = comm.iGlobal(i);
+    for (int64_t yx = ARows[i]; yx < ARows[i + 1]; yx++) {
+      int64_t x = ACols[yx];
+      int64_t m = cells[y].Body[1] - cells[y].Body[0];
+      int64_t n = cells[x].Body[1] - cells[x].Body[0];
+      const double* Ibodies = &bodies[3 * cells[y].Body[0]];
+      const double* Jbodies = &bodies[3 * cells[x].Body[0]];
+      gen_matrix(eval, m, n, Ibodies, Jbodies, const_cast<std::complex<double>*>(A[yx]), m);
+    }
+  }
 }

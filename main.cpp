@@ -140,7 +140,8 @@ int main(int argc, char* argv[]) {
     std::cout << "Matvec: " << matvec_time << ", " << matvec_comm_time << std::endl;
   }
 
-  BlockSparseMatrix matrix(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
+  UlvSolver matrix(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
+  matrix.loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
 
   for (MPI_Comm& c : mpi_comms)
     MPI_Comm_free(&c);
