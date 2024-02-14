@@ -25,14 +25,16 @@ public:
 
 class ClusterBasis {
 private:
-  std::vector<double> Mdata;
-  std::vector<std::complex<double>> Vdata;
+  std::vector<double> Sdata;
+  std::vector<std::complex<double>> Qdata;
+  std::vector<std::complex<double>> Rdata;
 
 public:
   std::vector<int64_t> Dims;
   std::vector<int64_t> DimsLr;
-  std::vector<const double*> M;
-  std::vector<const std::complex<double>*> V;
+  std::vector<const double*> S;
+  std::vector<const std::complex<double>*> Q;
+  std::vector<const std::complex<double>*> R;
   
   ClusterBasis() {}
   ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);

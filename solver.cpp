@@ -84,21 +84,6 @@ UlvSolver::UlvSolver(const int64_t Dims[], const CSR& csr, const CellComm& comm)
   C = std::vector<std::complex<double>*>(CRows[nodes]);
   Cdata = std::vector<std::complex<double>>(Coffsets.back(), std::complex<double>(0., 0.));
   std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const int64_t d) { return &Cdata[d]; });
-
-  QDim = std::vector<int64_t>(Dims, &Dims[xlen]);
-  QRank = std::vector<int64_t>(Dims, &Dims[xlen]);
-  basisOnRow = std::vector<int64_t>(xlen);
-  std::vector<int64_t> Qoffsets(xlen + 1);
-  std::transform(Dims, &Dims[xlen], basisOnRow.begin(), [](const int64_t d) { return d * d; });
-  std::inclusive_scan(basisOnRow.begin(), basisOnRow.end(), Qoffsets.begin() + 1);
-  Qoffsets[0] = 0;
-
-  Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
-  Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
-  Q = std::vector<const std::complex<double>*>(xlen);
-  R = std::vector<std::complex<double>*>(xlen);
-  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const int64_t d) { return &Qdata[d]; });
-  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const int64_t d) { return &Rdata[d]; });
 }
 
 void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm) {
