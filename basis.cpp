@@ -114,7 +114,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
     int64_t childi = prev_comm.iLocal(cells[ci].Child[0]);
     int64_t clen = cells[ci].Child[1] - cells[ci].Child[0];
     Dims[i + ibegin] = (0 <= childi && 0 < clen) ? 
-      std::accumulate(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + clen], 0) : cells[ci].Body[1] - cells[ci].Body[0];
+      std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + clen]) : cells[ci].Body[1] - cells[ci].Body[0];
   }
 
   const std::vector<int64_t> ones(xlen, 1);
@@ -152,7 +152,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
         matrix[j * (dim + 1)] = std::complex<double>(1., 0.);
     }
     for (int64_t j = 0; j < clen; j++) {
-      int64_t offset = std::accumulate(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + j], 0);
+      int64_t offset = std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + j]);
       int64_t len = prev_basis.DimsLr[childi + j];
       const double* mbegin = prev_basis.S[childi + j];
       std::copy(mbegin, &mbegin[len * 3], &ske[offset * 3]);
@@ -183,9 +183,9 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
   int64_t lbegin = Comm[Levels].oLocal();
   int64_t llen = Comm[Levels].lenLocal();
 
-  std::vector<std::vector<std::complex<double>>> rhsX(Levels + 1), rhsB(Levels + 1);
-  std::vector<std::vector<std::complex<double>*>> rhsXptr(Levels + 1), rhsBptr(Levels + 1);
-  std::vector<std::vector<std::pair<std::complex<double>*, int64_t>>> rhsXoptr(Levels + 1), rhsBoptr(Levels + 1);
+  std::vector<std::vector<std::complex<double>>> rhsX(Levels + 1), rhsY(Levels + 1);
+  std::vector<std::vector<std::complex<double>*>> rhsXptr(Levels + 1), rhsYptr(Levels + 1);
+  std::vector<std::vector<std::pair<std::complex<double>*, int64_t>>> rhsXoptr(Levels + 1), rhsYoptr(Levels + 1);
 
   for (int64_t l = Levels; l >= 0; l--) {
     int64_t xlen = Comm[l].lenNeighbors();
@@ -193,14 +193,14 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
     std::inclusive_scan(Basis[l].Dims.begin(), Basis[l].Dims.end(), offsets.begin() + 1);
 
     rhsX[l] = std::vector<std::complex<double>>(offsets[xlen] * nrhs, std::complex<double>(0., 0.));
-    rhsB[l] = std::vector<std::complex<double>>(offsets[xlen] * nrhs, std::complex<double>(0., 0.));
+    rhsY[l] = std::vector<std::complex<double>>(offsets[xlen] * nrhs, std::complex<double>(0., 0.));
     rhsXptr[l] = std::vector<std::complex<double>*>(xlen, nullptr);
-    rhsBptr[l] = std::vector<std::complex<double>*>(xlen, nullptr);
+    rhsYptr[l] = std::vector<std::complex<double>*>(xlen, nullptr);
     rhsXoptr[l] = std::vector<std::pair<std::complex<double>*, int64_t>>(xlen, std::make_pair(nullptr, 0));
-    rhsBoptr[l] = std::vector<std::pair<std::complex<double>*, int64_t>>(xlen, std::make_pair(nullptr, 0));
+    rhsYoptr[l] = std::vector<std::pair<std::complex<double>*, int64_t>>(xlen, std::make_pair(nullptr, 0));
 
     std::transform(offsets.begin(), offsets.begin() + xlen, rhsXptr[l].begin(), [&](const int64_t d) { return &rhsX[l][0] + d * nrhs; });
-    std::transform(offsets.begin(), offsets.begin() + xlen, rhsBptr[l].begin(), [&](const int64_t d) { return &rhsB[l][0] + d * nrhs; });
+    std::transform(offsets.begin(), offsets.begin() + xlen, rhsYptr[l].begin(), [&](const int64_t d) { return &rhsY[l][0] + d * nrhs; });
 
     if (l < Levels)
       for (int64_t i = 0; i < xlen; i++) {
@@ -214,8 +214,8 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
           int64_t ldi = Basis[l].Dims[i];
           std::transform(offsets_child.begin(), offsets_child.begin() + clen, &rhsXoptr[l + 1][child], 
             [&](const int64_t d) { return std::make_pair(rhsXptr[l][i] + d, ldi); });
-          std::transform(offsets_child.begin(), offsets_child.begin() + clen, &rhsBoptr[l + 1][child], 
-            [&](const int64_t d) { return std::make_pair(rhsBptr[l][i] + d, ldi); });
+          std::transform(offsets_child.begin(), offsets_child.begin() + clen, &rhsYoptr[l + 1][child], 
+            [&](const int64_t d) { return std::make_pair(rhsYptr[l][i] + d, ldi); });
         }
       }
   }
@@ -267,15 +267,14 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
 
         std::vector<std::complex<double>> TMPX(N * nrhs, std::complex<double>(0., 0.));
         std::vector<std::complex<double>> TMPB(K * nrhs, std::complex<double>(0., 0.));
-        std::complex<double> one(1., 0.), zero(0., 0.);
         cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, nrhs, N, &one, Basis[i].R[x], Basis[i].Dims[x], rhsXoptr[i][x].first, rhsXoptr[i][x].second, &zero, &TMPX[0], N);
         mat_vec_reference(*EvalFunc, K, N, nrhs, &TMPB[0], K, &TMPX[0], N, Basis[i].S[y + ibegin], Basis[i].S[x]);
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, K, nrhs, K, &one, Basis[i].R[y + ibegin], Basis[i].Dims[y + ibegin], &TMPB[0], K, &one, rhsBoptr[i][y + ibegin].first, rhsBoptr[i][y + ibegin].second);
+        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, K, nrhs, K, &one, Basis[i].R[y + ibegin], Basis[i].Dims[y + ibegin], &TMPB[0], K, &one, rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second);
       }
       int64_t M = Basis[i].Dims[y + ibegin];
       if (M > 0 && K > 0)
         cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, nrhs, K, &one, Basis[i].Q[y + ibegin], M, 
-          rhsBoptr[i][y + ibegin].first, rhsBoptr[i][y + ibegin].second, &one, rhsBptr[i][y + ibegin], M);
+          rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second, &zero, rhsYptr[i][y + ibegin], M);
     }
   }
 
@@ -286,13 +285,13 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
       int64_t x_loc = Comm[Levels].iLocal(x);
       int64_t M = Cells[y + gbegin].Body[1] - Cells[y + gbegin].Body[0];
       int64_t N = Cells[x].Body[1] - Cells[x].Body[0];
-      mat_vec_reference(*EvalFunc, M, N, nrhs, rhsBptr[Levels][y + lbegin], M, rhsXptr[Levels][x_loc], N, &Bodies[3 * Cells[y + gbegin].Body[0]], &Bodies[3 * Cells[x].Body[0]]);
+      mat_vec_reference(*EvalFunc, M, N, nrhs, rhsYptr[Levels][y + lbegin], M, rhsXptr[Levels][x_loc], N, &Bodies[3 * Cells[y + gbegin].Body[0]], &Bodies[3 * Cells[x].Body[0]]);
     }
 
   Y = 0;
   for (int64_t i = 0; i < llen; i++) {
     int64_t M = Basis[Levels].Dims[lbegin + i];
-    memcpy2d(&X[Y], rhsBptr[Levels][lbegin + i], M, nrhs, ldX, M);
+    memcpy2d(&X[Y], rhsYptr[Levels][lbegin + i], M, nrhs, ldX, M);
     Y = Y + M;
   }
 }
