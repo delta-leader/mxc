@@ -28,16 +28,28 @@ private:
   std::vector<double> Sdata;
   std::vector<std::complex<double>> Qdata;
   std::vector<std::complex<double>> Rdata;
+  std::vector<std::complex<double>> Cdata;
+
+  std::vector<const double*> S;
+  std::vector<int64_t> elementsOnRow;
+  std::vector<int64_t> localChildOffsets;
+  std::vector<int64_t> localChildLrDims;
+  int64_t localChildIndex;
 
 public:
   std::vector<int64_t> Dims;
   std::vector<int64_t> DimsLr;
-  std::vector<const double*> S;
   std::vector<const std::complex<double>*> Q;
-  std::vector<const std::complex<double>*> R;
+  std::vector<std::complex<double>*> R;
+
+  std::vector<int64_t> CRows;
+  std::vector<int64_t> CCols;
+  std::vector<int64_t> CM;
+  std::vector<int64_t> CN;
+  std::vector<const std::complex<double>*> C;
   
   ClusterBasis() {}
-  ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
+  ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
 };
 
 class MatVec {
@@ -47,12 +59,11 @@ private:
   const double* Bodies;
   const Cell* Cells;
   const CSR* Near;
-  const CSR* Far;
   const CellComm* Comm;
   int64_t Levels;
 
 public:
-  MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& rels_far, const CellComm comm[], int64_t levels);
+  MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CellComm comm[], int64_t levels);
 
   void operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) const;
 };

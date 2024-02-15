@@ -99,31 +99,37 @@ void memcpy2d(T* dst, const T* src, int64_t rows, int64_t cols, int64_t ld_dst, 
       std::copy(&src[i * ld_src], &src[i * ld_src + rows], &dst[i * ld_dst]);
 }
 
-ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
+ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
   int64_t xlen = comm.lenNeighbors();
   int64_t ibegin = comm.oLocal();
   int64_t nodes = comm.lenLocal();
+  int64_t ybegin = comm.oGlobal();
+
+  localChildOffsets = std::vector<int64_t>(nodes + 1);
+  localChildLrDims = std::vector<int64_t>(cells[ybegin + nodes - 1].Child[1] - cells[ybegin].Child[0]);
+  localChildIndex = prev_comm.iLocal(cells[ybegin].Child[0]);
+  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [&](const Cell& c) { return c.Child[1] - cells[ybegin].Child[0]; });
+  std::copy(&prev_basis.DimsLr[localChildIndex], &prev_basis.DimsLr[localChildIndex + localChildLrDims.size()], localChildLrDims.begin());
+  localChildOffsets[0] = 0;
+
   Dims = std::vector<int64_t>(xlen, 0);
   DimsLr = std::vector<int64_t>(xlen, 0);
+  elementsOnRow = std::vector<int64_t>(xlen);
   S = std::vector<const double*>(xlen);
   Q = std::vector<const std::complex<double>*>(xlen);
-  R = std::vector<const std::complex<double>*>(xlen);
+  R = std::vector<std::complex<double>*>(xlen);
 
-  for (int64_t i = 0; i < nodes; i++) {
-    int64_t ci = comm.iGlobal(i + ibegin);
-    int64_t childi = prev_comm.iLocal(cells[ci].Child[0]);
-    int64_t clen = cells[ci].Child[1] - cells[ci].Child[0];
-    Dims[i + ibegin] = (0 <= childi && 0 < clen) ? 
-      std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + clen]) : cells[ci].Body[1] - cells[ci].Body[0];
-  }
+  for (int64_t i = 0; i < nodes; i++)
+    Dims[i + ibegin] = localChildOffsets[i] == localChildOffsets[i + 1] ? (cells[i + ybegin].Body[1] - cells[i + ybegin].Body[0]) :
+      std::reduce(&localChildLrDims[localChildOffsets[i]], &localChildLrDims[localChildOffsets[i + 1]]);
 
   const std::vector<int64_t> ones(xlen, 1);
   comm.neighbor_bcast(Dims.data(), ones.data());
   comm.dup_bcast(Dims.data(), xlen);
 
-  std::vector<int64_t> Qsizes(xlen), Qoffsets(xlen + 1);
-  std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const int64_t d) { return d * d; });
-  std::inclusive_scan(Qsizes.begin(), Qsizes.end(), Qoffsets.begin() + 1);
+  std::vector<int64_t> Qoffsets(xlen + 1);
+  std::transform(Dims.begin(), Dims.end(), elementsOnRow.begin(), [](const int64_t d) { return d * d; });
+  std::inclusive_scan(elementsOnRow.begin(), elementsOnRow.end(), Qoffsets.begin() + 1);
   Qoffsets[0] = 0;
   Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
   Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
@@ -142,9 +148,9 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
     std::complex<double>* matrix = &Qdata[Qoffsets[i + ibegin]];
     double* ske = &Sdata[Soffsets[i + ibegin]];
 
-    int64_t ci = comm.iGlobal(i + ibegin);
-    int64_t childi = prev_comm.iLocal(cells[ci].Child[0]);
-    int64_t clen = cells[ci].Child[1] - cells[ci].Child[0];
+    int64_t ci = i + ybegin;
+    int64_t childi = localChildIndex + localChildOffsets[i];
+    int64_t clen = localChildOffsets[i + 1] - localChildOffsets[i];
 
     if (clen <= 0) {
       std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
@@ -166,17 +172,46 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   }
 
   comm.neighbor_bcast(DimsLr.data(), ones.data());
-  comm.dup_bcast(DimsLr.data(), xlen);
   comm.neighbor_bcast(Sdata.data(), Ssizes.data());
+  comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
+  comm.neighbor_bcast(Rdata.data(), elementsOnRow.data());
+  comm.dup_bcast(DimsLr.data(), xlen);
   comm.dup_bcast(Sdata.data(), Soffsets[xlen]);
-  comm.neighbor_bcast(Qdata.data(), Qsizes.data());
   comm.dup_bcast(Qdata.data(), Qoffsets[xlen]);
-  comm.neighbor_bcast(Rdata.data(), Qsizes.data());
   comm.dup_bcast(Rdata.data(), Qoffsets[xlen]);
+
+  CRows = std::vector<int64_t>(&Far.RowIndex[ybegin], &Far.RowIndex[ybegin + nodes + 1]);
+  CCols = std::vector<int64_t>(&Far.ColIndex[CRows[0]], &Far.ColIndex[CRows[nodes]]);
+  int64_t offset = CRows[0];
+  std::for_each(CRows.begin(), CRows.end(), [=](int64_t& i) { i = i - offset; });
+  std::for_each(CCols.begin(), CCols.end(), [=](int64_t& i) { i = comm.iLocal(i); });
+
+  CM = std::vector<int64_t>(CRows[nodes]);
+  CN = std::vector<int64_t>(CRows[nodes]);
+  for (int64_t i = 0; i < nodes; i++)
+    std::fill(&CM[CRows[i]], &CM[CRows[i + 1]], DimsLr[i + ibegin]);
+  std::transform(CCols.begin(), CCols.end(), CN.begin(), [&](int64_t col) { return DimsLr[col]; });
+
+  std::vector<int64_t> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
+  std::transform(CM.begin(), CM.end(), CN.begin(), Csizes.begin(), [](int64_t m, int64_t n) { return m * n; });
+  std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
+  Coffsets[0] = 0;
+  C = std::vector<const std::complex<double>*>(CRows[nodes]);
+  Cdata = std::vector<std::complex<double>>(Coffsets.back());
+  std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const int64_t d) { return &Cdata[d]; });
+
+  for (int64_t i = 0; i < nodes; i++)
+    for (int64_t ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+      int64_t j = CCols[ij], m = CM[ij], n = CN[ij];
+      std::complex<double> one(1., 0.);
+      gen_matrix(eval, m, n, S[i + ibegin], S[j], &Cdata[Coffsets[ij]], m);
+      cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, m, n, &one, R[i + ibegin], Dims[i + ibegin], &Cdata[Coffsets[ij]], m);
+      cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, m, n, &one, R[j], Dims[j], &Cdata[Coffsets[ij]], m);
+    }
 }
 
-MatVec::MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CSR& far, const CellComm comm[], int64_t levels) :
-  EvalFunc(&eval), Basis(basis), Bodies(bodies), Cells(cells), Near(&near), Far(&far), Comm(comm), Levels(levels) {
+MatVec::MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CellComm comm[], int64_t levels) :
+  EvalFunc(&eval), Basis(basis), Bodies(bodies), Cells(cells), Near(&near), Comm(comm), Levels(levels) {
 }
 
 void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) const {
@@ -257,20 +292,14 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
   for (int64_t i = 1; i <= Levels; i++) {
     int64_t ibegin = Comm[i].oLocal();
     int64_t iboxes = Comm[i].lenLocal();
-    int64_t gbegin = Comm[i].oGlobal();
 
     for (int64_t y = 0; y < iboxes; y++) {
-      int64_t K = Basis[i].DimsLr[y + ibegin];
-      for (int64_t yx = Far->RowIndex[y + gbegin]; yx < Far->RowIndex[y + gbegin + 1]; yx++) {
-        int64_t x = Comm[i].iLocal(Far->ColIndex[yx]);
-        int64_t N = Basis[i].DimsLr[x];
-
-        std::vector<std::complex<double>> TMPX(N * nrhs, std::complex<double>(0., 0.));
-        std::vector<std::complex<double>> TMPB(K * nrhs, std::complex<double>(0., 0.));
-        cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, nrhs, N, &one, Basis[i].R[x], Basis[i].Dims[x], rhsXoptr[i][x].first, rhsXoptr[i][x].second, &zero, &TMPX[0], N);
-        mat_vec_reference(*EvalFunc, K, N, nrhs, &TMPB[0], K, &TMPX[0], N, Basis[i].S[y + ibegin], Basis[i].S[x]);
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, K, nrhs, K, &one, Basis[i].R[y + ibegin], Basis[i].Dims[y + ibegin], &TMPB[0], K, &one, rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second);
+      for (int64_t yx = Basis[i].CRows[y]; yx < Basis[i].CRows[y + 1]; yx++) {
+        int64_t x = Basis[i].CCols[yx];
+        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Basis[i].CM[yx], nrhs, Basis[i].CN[yx], &one, Basis[i].C[yx], Basis[i].CM[yx], 
+          rhsXoptr[i][x].first, rhsXoptr[i][x].second, &one, rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second);
       }
+      int64_t K = Basis[i].DimsLr[y + ibegin];
       int64_t M = Basis[i].Dims[y + ibegin];
       if (M > 0 && K > 0)
         cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, nrhs, K, &one, Basis[i].Q[y + ibegin], M, 
