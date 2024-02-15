@@ -209,6 +209,21 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
     }
 }
 
+void compute_rowbasis_null_space(int64_t M, int64_t N, std::complex<double> A[], int64_t LDA) {
+  if (0 < N && N < M) {
+    std::complex<double> one(1., 0.);
+    std::vector<std::complex<double>> B(N * N), TAU(N);
+    lapack_complex_double* Aptr = reinterpret_cast<lapack_complex_double*>(&A[0]);
+    lapack_complex_double* Bptr = reinterpret_cast<lapack_complex_double*>(&B[0]);
+    lapack_complex_double* Tptr = reinterpret_cast<lapack_complex_double*>(&TAU[0]);
+
+    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, N, Aptr, LDA, Tptr);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', N, N, Aptr, LDA, Bptr, N);
+    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, N, Aptr, LDA, Tptr);
+    cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, &B[0], N, A, LDA);
+  }
+}
+
 void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const CellComm& comm) {
   int64_t xlen = comm.lenNeighbors();
   int64_t ibegin = comm.oLocal();
@@ -250,6 +265,7 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
       int64_t len = localChildLrDims[j];
       memcpy2d(&Qdata[Qoffsets[i + ibegin] + offsetNew], &oldQ[i][offsetOld], len, N, M, oldDims[i]);
     }
+    compute_rowbasis_null_space(M, N, &Qdata[Qoffsets[i + ibegin]], M);
   }
 
   std::copy(newLocalChildLrDims.begin(), newLocalChildLrDims.end(), localChildLrDims.begin());
