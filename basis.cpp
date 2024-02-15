@@ -150,19 +150,18 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
 
     int64_t ci = i + ybegin;
     int64_t childi = localChildIndex + localChildOffsets[i];
-    int64_t clen = localChildOffsets[i + 1] - localChildOffsets[i];
+    int64_t cend = localChildIndex + localChildOffsets[i + 1];
 
-    if (clen <= 0) {
+    if (cend <= childi) {
       std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
       for (int64_t j = 0; j < dim; j++)
         matrix[j * (dim + 1)] = std::complex<double>(1., 0.);
     }
-    for (int64_t j = 0; j < clen; j++) {
-      int64_t offset = std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[childi + j]);
-      int64_t len = prev_basis.DimsLr[childi + j];
-      const double* mbegin = prev_basis.S[childi + j];
-      std::copy(mbegin, &mbegin[len * 3], &ske[offset * 3]);
-      memcpy2d(&matrix[offset * (dim + 1)], prev_basis.R[childi + j], len, len, dim, prev_basis.Dims[childi + j]);
+    for (int64_t j = childi; j < cend; j++) {
+      int64_t offset = std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[j]);
+      int64_t len = prev_basis.DimsLr[j];
+      std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske[offset * 3]);
+      memcpy2d(&matrix[offset * (dim + 1)], prev_basis.R[j], len, len, dim, prev_basis.Dims[j]);
     }
 
     int64_t fsize = wsa.fbodies_size_at_i(i);
@@ -208,6 +207,54 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
       cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, m, n, &one, R[i + ibegin], Dims[i + ibegin], &Cdata[Coffsets[ij]], m);
       cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, m, n, &one, R[j], Dims[j], &Cdata[Coffsets[ij]], m);
     }
+}
+
+void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const CellComm& comm) {
+  int64_t xlen = comm.lenNeighbors();
+  int64_t ibegin = comm.oLocal();
+  int64_t nodes = comm.lenLocal();
+
+  std::vector<int64_t> oldDims(nodes);
+  std::vector<std::vector<std::complex<double>>> oldQ(nodes);
+  std::vector<int64_t> newLocalChildLrDims(localChildLrDims.size());
+  std::copy(&prev_basis.DimsLr[localChildIndex], &prev_basis.DimsLr[localChildIndex + localChildLrDims.size()], newLocalChildLrDims.begin());
+
+  for (int64_t i = 0; i < nodes; i++) {
+    oldDims[i] = Dims[i + ibegin];
+    oldQ[i] = std::vector<std::complex<double>>(oldDims[i] * DimsLr[i + ibegin]);
+    std::copy(Q[i + ibegin], Q[i + ibegin] + oldQ[i].size(), oldQ[i].begin());
+    Dims[i + ibegin] = std::reduce(&newLocalChildLrDims[localChildOffsets[i]], &newLocalChildLrDims[localChildOffsets[i + 1]]);
+  }
+
+  const std::vector<int64_t> ones(xlen, 1);
+  comm.neighbor_bcast(Dims.data(), ones.data());
+  comm.dup_bcast(Dims.data(), xlen);
+
+  std::vector<int64_t> Qoffsets(xlen + 1);
+  std::transform(Dims.begin(), Dims.end(), elementsOnRow.begin(), [](const int64_t d) { return d * d; });
+  std::inclusive_scan(elementsOnRow.begin(), elementsOnRow.end(), Qoffsets.begin() + 1);
+  Qoffsets[0] = 0;
+  Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
+  Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
+  std::transform(Qoffsets.begin(), Qoffsets.end(), Q.begin(), [&](const int64_t d) { return &Qdata[d]; });
+  std::transform(Qoffsets.begin(), Qoffsets.end(), R.begin(), [&](const int64_t d) { return &Rdata[d]; });
+
+  for (int64_t i = 0; i < nodes; i++) {
+    int64_t M = Dims[i + ibegin];
+    int64_t N = DimsLr[i + ibegin];
+    int64_t childi = localChildOffsets[i];
+    int64_t cend = localChildOffsets[i + 1];
+    for (int64_t j = childi; j < cend && 0 < N; j++) {
+      int64_t offsetOld = std::reduce(&localChildLrDims[childi], &localChildLrDims[j]);
+      int64_t offsetNew = std::reduce(&newLocalChildLrDims[childi], &newLocalChildLrDims[j]);
+      int64_t len = localChildLrDims[j];
+      memcpy2d(&Qdata[Qoffsets[i + ibegin] + offsetNew], &oldQ[i][offsetOld], len, N, M, oldDims[i]);
+    }
+  }
+
+  std::copy(newLocalChildLrDims.begin(), newLocalChildLrDims.end(), localChildLrDims.begin());
+  comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
+  comm.dup_bcast(Qdata.data(), Qoffsets[xlen]);
 }
 
 MatVec::MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CellComm comm[], int64_t levels) :

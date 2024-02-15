@@ -108,6 +108,11 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = timer.first;
   timer.first = 0;
 
+  /*for (int64_t l = levels - 1; l >= 0; l--) {
+    std::for_each(basis[l + 1].DimsLr.begin(), basis[l + 1].DimsLr.end(), [](int64_t& d) { d += 7; });
+    basis[l].adjustLowerRankGrowth(basis[l + 1], cell_comm[l]);
+  }*/
+
   int64_t llen = cell_comm[levels].lenLocal();
   int64_t gbegin = cell_comm[levels].oGlobal();
   int64_t body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };

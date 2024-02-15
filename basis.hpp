@@ -25,11 +25,11 @@ public:
 
 class ClusterBasis {
 private:
-  std::vector<double> Sdata;
   std::vector<std::complex<double>> Qdata;
   std::vector<std::complex<double>> Rdata;
   std::vector<std::complex<double>> Cdata;
 
+  std::vector<double> Sdata;
   std::vector<const double*> S;
   std::vector<int64_t> elementsOnRow;
   std::vector<int64_t> localChildOffsets;
@@ -50,6 +50,7 @@ public:
   
   ClusterBasis() {}
   ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
+  void adjustLowerRankGrowth(const ClusterBasis& prev_basis, const CellComm& comm);
 };
 
 class MatVec {
