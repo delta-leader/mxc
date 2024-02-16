@@ -91,14 +91,7 @@ int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t
   return rank;
 }
 
-template <typename T>
-void memcpy2d(T* dst, const T* src, int64_t rows, int64_t cols, int64_t ld_dst, int64_t ld_src) {
-  if (rows == ld_dst && rows == ld_src)
-    std::copy(src, src + rows * cols, dst);
-  else 
-    for (int64_t i = 0; i < cols; i++)
-      std::copy(&src[i * ld_src], &src[i * ld_src + rows], &dst[i * ld_dst]);
-}
+extern void zomatcopy(char, int64_t, int64_t, const std::complex<double>*, int64_t, std::complex<double>*, int64_t);
 
 ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
   int64_t xlen = comm.lenNeighbors();
@@ -161,8 +154,10 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
     for (int64_t j = childi; j < cend; j++) {
       int64_t offset = std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[j]);
       int64_t len = prev_basis.DimsLr[j];
-      std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske[offset * 3]);
-      memcpy2d(&matrix[offset * (dim + 1)], prev_basis.R[j], len, len, dim, prev_basis.Dims[j]);
+      if (0 < len) {
+        std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske[offset * 3]);
+        zomatcopy('N', len, len, prev_basis.R[j], prev_basis.Dims[j], &matrix[offset * (dim + 1)], dim);
+      }
     }
 
     int64_t fsize = wsa.fbodies_size_at_i(i);
@@ -239,6 +234,7 @@ int64_t compute_recompression(double epi, int64_t M, int64_t N, std::complex<dou
   }
   return N;
 }
+
 void ClusterBasis::recompressR(double epi, const CellComm& comm) {
   int64_t xlen = comm.lenNeighbors();
   int64_t ibegin = comm.oLocal();
@@ -312,7 +308,7 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
       int64_t offsetOld = std::reduce(&localChildLrDims[childi], &localChildLrDims[j]);
       int64_t offsetNew = std::reduce(&newLocalChildLrDims[childi], &newLocalChildLrDims[j]);
       int64_t len = localChildLrDims[j];
-      memcpy2d(&Qdata[Qoffsets[i + ibegin] + offsetNew], &oldQ[i][offsetOld], len, N, M, oldDims[i]);
+      zomatcopy('N', len, N, &oldQ[i][offsetOld], oldDims[i], &Qdata[Qoffsets[i + ibegin] + offsetNew], M);
     }
     compute_rowbasis_null_space(M, N, &Qdata[Qoffsets[i + ibegin]], M);
   }
@@ -370,7 +366,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
   int64_t Y = 0;
   for (int64_t i = 0; i < llen; i++) {
     int64_t M = Basis[Levels].Dims[lbegin + i];
-    memcpy2d(rhsXptr[Levels][lbegin + i], &X[Y], M, nrhs, M, ldX);
+    zomatcopy('N', M, nrhs, &X[Y], ldX, rhsXptr[Levels][lbegin + i], M);
     Y = Y + M;
   }
 
@@ -428,11 +424,10 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
       int64_t N = Cells[x].Body[1] - Cells[x].Body[0];
       mat_vec_reference(*EvalFunc, M, N, nrhs, rhsYptr[Levels][y + lbegin], M, rhsXptr[Levels][x_loc], N, &Bodies[3 * Cells[y + gbegin].Body[0]], &Bodies[3 * Cells[x].Body[0]]);
     }
-
   Y = 0;
   for (int64_t i = 0; i < llen; i++) {
     int64_t M = Basis[Levels].Dims[lbegin + i];
-    memcpy2d(&X[Y], rhsYptr[Levels][lbegin + i], M, nrhs, ldX, M);
+    zomatcopy('N', M, nrhs, rhsYptr[Levels][lbegin + i], M, &X[Y], ldX);
     Y = Y + M;
   }
 }

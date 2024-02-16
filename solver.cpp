@@ -4,6 +4,8 @@
 #include <comm.hpp>
 #include <kernel.hpp>
 
+#include <cblas.h>
+#include <lapacke.h>
 #include <algorithm>
 #include <numeric>
 #include <set>
@@ -99,4 +101,46 @@ void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], con
       gen_matrix(eval, m, n, Ibodies, Jbodies, const_cast<std::complex<double>*>(A[yx]), m);
     }
   }
+}
+
+extern void zomatcopy(char, int64_t, int64_t, const std::complex<double>*, int64_t, std::complex<double>*, int64_t);
+
+void compute_capture(int64_t M, const int64_t N[], int64_t lenA, const std::complex<double>* A[], const int64_t LDA[], std::complex<double> C[], int64_t LDC) {
+  constexpr int64_t block_size = 1 << 11;
+  if (M > 0) {
+    int64_t K = std::max(M, block_size), B2 = K + M;
+    std::vector<std::complex<double>> B(M * B2, 0.), TAU(M);
+    std::complex<double> zero(0., 0.);
+
+    lapack_complex_double* Bptr = reinterpret_cast<lapack_complex_double*>(&B[0]);
+    lapack_complex_double* Cptr = reinterpret_cast<lapack_complex_double*>(C);
+    lapack_complex_double* Tptr = reinterpret_cast<lapack_complex_double*>(&TAU[0]);
+    lapack_complex_double* Zero = reinterpret_cast<lapack_complex_double*>(&zero);
+
+    zomatcopy('N', M, M, C, LDC, &B[0], B2);
+    int64_t loc = 0;
+    for (int64_t i = 0; i < lenA; i++) {
+      int64_t loc_i = 0;
+      while(loc_i < N[i]) {
+        int64_t len = std::min(N[i] - loc_i, K - loc);
+        zomatcopy('T', M, len, A[i], LDA[i], &B[M + loc], B2);
+        loc_i = loc_i + len;
+        loc = loc + len;
+        if (loc == K) {
+          LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + K, M, Bptr, B2, Tptr);
+          LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, *Zero, *Zero, &Bptr[1], B2);
+          loc = 0;
+        }
+      }
+    }
+
+    if (loc > 0)
+      LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + loc, M, Bptr, B2, Tptr);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, Bptr, B2, Cptr, LDC);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, *Zero, *Zero, &Cptr[1], LDC);
+  }
+}
+
+void UlvSolver::preCompressA2(ClusterBasis& basis, const CellComm& comm) {
+
 }

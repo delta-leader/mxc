@@ -108,11 +108,11 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = timer.first;
   timer.first = 0;
 
-  /*basis[levels].recompressR(epi, cell_comm[levels]);
+  basis[levels].recompressR(epi, cell_comm[levels]);
   for (int64_t l = levels - 1; l >= 0; l--) {
     basis[l].adjustLowerRankGrowth(basis[l + 1], cell_comm[l]);
     basis[l].recompressR(epi, cell_comm[l]);
-  }*/
+  }
 
   int64_t llen = cell_comm[levels].lenLocal();
   int64_t gbegin = cell_comm[levels].oGlobal();

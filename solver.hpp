@@ -7,6 +7,7 @@
 class CSR;
 class Cell;
 class CellComm;
+class ClusterBasis;
 class MatrixAccessor;
 
 class UlvSolver {
@@ -37,5 +38,7 @@ public:
   UlvSolver(const int64_t Dims[], const CSR& csr, const CellComm& comm);
 
   void loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm);
+
+  void preCompressA2(ClusterBasis& basis, const CellComm& comm);
 };
 
