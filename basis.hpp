@@ -50,6 +50,7 @@ public:
   
   ClusterBasis() {}
   ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
+  void recompressR(double epi, const CellComm& comm);
   void adjustLowerRankGrowth(const ClusterBasis& prev_basis, const CellComm& comm);
 };
 

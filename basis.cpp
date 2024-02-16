@@ -65,8 +65,9 @@ int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t
   LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, Bptr, K, &jpiv[0], Tptr);
   int64_t rank = 0;
   double s0 = epi * std::abs(B[0]);
-  while (rank < M && s0 <= std::abs(B[rank * (K + 1)]))
-    ++rank;
+  if (std::numeric_limits<double>::min() < s0)
+    while (rank < M && s0 <= std::abs(B[rank * (K + 1)]))
+      ++rank;
   
   if (rank > 0) {
     if (rank < M)
@@ -207,6 +208,54 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
       cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, m, n, &one, R[i + ibegin], Dims[i + ibegin], &Cdata[Coffsets[ij]], m);
       cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, m, n, &one, R[j], Dims[j], &Cdata[Coffsets[ij]], m);
     }
+}
+
+int64_t compute_recompression(double epi, int64_t M, int64_t N, std::complex<double> Q[], int64_t LDQ, const std::complex<double> R[], int64_t LDR) {
+  if (0 < N && N < M) {
+    int64_t C = M - N;
+    std::vector<std::complex<double>> A(M * M), TAU(C);
+    std::complex<double> one(1., 0.), zero(0., 0.);
+    std::vector<int32_t> jpiv(M, 0);
+    lapack_complex_double* Qptr = reinterpret_cast<lapack_complex_double*>(&Q[0]);
+    lapack_complex_double* Aptr = reinterpret_cast<lapack_complex_double*>(&A[0]);
+    lapack_complex_double* Tptr = reinterpret_cast<lapack_complex_double*>(&TAU[0]);
+
+    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasTrans, C, M, M, &one, &Q[M * N], LDQ, R, LDR, &zero, &A[0], C);
+    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasTrans, N, M, M, &one, Q, LDQ, R, LDR, &zero, &A[M * C], N);
+    double nrmC = cblas_dznrm2(M * C, &A[0], 1);
+    double nrmQ = cblas_dznrm2(M * N, &A[M * C], 1);
+
+    if (epi * nrmQ <= nrmC) {
+      int64_t rank = 0;
+      LAPACKE_zgeqp3(LAPACK_COL_MAJOR, C, M, Aptr, C, &jpiv[0], Tptr);
+      double s0 = epi * std::abs(A[0]) * std::max(nrmQ / nrmC, (double)1.);
+      if (std::numeric_limits<double>::min() < s0)
+        while (rank < C && s0 <= std::abs(A[rank * (C + 1)]))
+          ++rank;
+      if (rank > 0)
+        LAPACKE_zunmqr(LAPACK_COL_MAJOR, 'R', 'N', M, C, rank, Aptr, C, Tptr, &Qptr[M * N], LDQ);
+      return N + rank;
+    }
+  }
+  return N;
+}
+void ClusterBasis::recompressR(double epi, const CellComm& comm) {
+  int64_t xlen = comm.lenNeighbors();
+  int64_t ibegin = comm.oLocal();
+  int64_t nodes = comm.lenLocal();
+
+  for (int64_t i = 0; i < nodes; i++) {
+    int64_t M = Dims[i + ibegin];
+    std::complex<double>* Qptr = const_cast<std::complex<double>*>(Q[i + ibegin]);
+    int64_t rank = compute_recompression(epi, M, DimsLr[i + ibegin], Qptr, M, R[i + ibegin], M);
+    DimsLr[i + ibegin] = rank;
+  }
+
+  const std::vector<int64_t> ones(xlen, 1);
+  comm.neighbor_bcast(DimsLr.data(), ones.data());
+  comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
+  comm.dup_bcast(DimsLr.data(), xlen);
+  comm.dup_bcast(Qdata.data(), std::reduce(elementsOnRow.begin(), elementsOnRow.end()));
 }
 
 void compute_rowbasis_null_space(int64_t M, int64_t N, std::complex<double> A[], int64_t LDA) {
