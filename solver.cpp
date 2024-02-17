@@ -4,8 +4,7 @@
 #include <comm.hpp>
 #include <kernel.hpp>
 
-#include <cblas.h>
-#include <lapacke.h>
+#include <mkl.h>
 #include <algorithm>
 #include <numeric>
 #include <set>
@@ -103,8 +102,6 @@ void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], con
   }
 }
 
-extern void zomatcopy(char, int64_t, int64_t, const std::complex<double>*, int64_t, std::complex<double>*, int64_t);
-
 void compute_capture(int64_t M, const int64_t N[], int64_t lenA, const std::complex<double>* A[], const int64_t LDA[], std::complex<double> C[], int64_t LDC) {
   constexpr int64_t block_size = 1 << 11;
   if (M > 0) {
@@ -117,13 +114,13 @@ void compute_capture(int64_t M, const int64_t N[], int64_t lenA, const std::comp
     lapack_complex_double* Tptr = reinterpret_cast<lapack_complex_double*>(&TAU[0]);
     lapack_complex_double* Zero = reinterpret_cast<lapack_complex_double*>(&zero);
 
-    zomatcopy('N', M, M, C, LDC, &B[0], B2);
+    mkl_zomatcopy('C', 'N', M, M, std::complex<double>(1., 0.), C, LDC, &B[0], B2);
     int64_t loc = 0;
     for (int64_t i = 0; i < lenA; i++) {
       int64_t loc_i = 0;
       while(loc_i < N[i]) {
         int64_t len = std::min(N[i] - loc_i, K - loc);
-        zomatcopy('T', M, len, A[i], LDA[i], &B[M + loc], B2);
+        mkl_zomatcopy('C', 'T', M, len, std::complex<double>(1., 0.), A[i], LDA[i], &B[M + loc], B2);
         loc_i = loc_i + len;
         loc = loc + len;
         if (loc == K) {

@@ -3,8 +3,7 @@
 #include <comm.hpp>
 #include <kernel.hpp>
 
-#include <cblas.h>
-#include <lapacke.h>
+#include <mkl.h>
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -48,21 +47,14 @@ const double* WellSeparatedApproximation::fbodies_at_i(int64_t i) const {
 int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t N, double Xbodies[], const double Fbodies[], std::complex<double> A[], int64_t LDA, std::complex<double> R[], int64_t LDR) {
   int64_t K = std::max(M, N);
   std::complex<double> one(1., 0.), zero(0., 0.);
-  std::vector<std::complex<double>> B(M * K);
+  std::vector<std::complex<double>> B(M * K), TAU(M);
   std::vector<double> S(M * 3);
-  std::vector<int32_t> jpiv(M, 0);
-
-  lapack_complex_double* Aptr = reinterpret_cast<lapack_complex_double*>(&A[0]);
-  lapack_complex_double* Bptr = reinterpret_cast<lapack_complex_double*>(&B[0]);
-  lapack_complex_double* Rptr = reinterpret_cast<lapack_complex_double*>(&R[0]);
-  lapack_complex_double* Tptr = reinterpret_cast<lapack_complex_double*>(&S[0]);
-  lapack_complex_double* One = reinterpret_cast<lapack_complex_double*>(&one);
-  lapack_complex_double* Zero = reinterpret_cast<lapack_complex_double*>(&zero);
+  std::vector<MKL_INT> jpiv(M, 0);
 
   gen_matrix(eval, N, M, Fbodies, Xbodies, &B[0], K);
-  LAPACKE_zgeqrf(LAPACK_COL_MAJOR, N, M, Bptr, K, Tptr);
-  LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, *Zero, *Zero, &Bptr[1], K);
-  LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, Bptr, K, &jpiv[0], Tptr);
+  LAPACKE_zgeqrf(LAPACK_COL_MAJOR, N, M, &B[0], K, &TAU[0]);
+  LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &B[1], K);
+  LAPACKE_zgeqp3(LAPACK_COL_MAJOR, M, M, &B[0], K, &jpiv[0], &TAU[0]);
   int64_t rank = 0;
   double s0 = epi * std::abs(B[0]);
   if (std::numeric_limits<double>::min() < s0)
@@ -72,7 +64,7 @@ int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t
   if (rank > 0) {
     if (rank < M)
       cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, &B[0], K, &B[rank * K], K);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', rank, rank, *Zero, *One, &Bptr[0], K);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', rank, rank, zero, one, &B[0], K);
 
     for (int64_t i = 0; i < M; i++) {
       int64_t piv = (int64_t)jpiv[i] - 1;
@@ -82,16 +74,14 @@ int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t
     std::copy(&S[0], &S[M * 3], Xbodies);
 
     cblas_zgemm(CblasColMajor, CblasNoTrans, CblasTrans, M, rank, M, &one, A, LDA, R, LDR, &zero, &B[0], M);
-    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, rank, Bptr, M, Tptr);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'L', M, rank, Bptr, M, Aptr, LDA);
-    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, rank, Aptr, LDA, Tptr);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', rank, rank, Bptr, M, Rptr, LDR);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', rank - 1, rank - 1, *Zero, *Zero, &Rptr[1], LDR);
+    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, rank, &B[0], M, &TAU[0]);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'L', M, rank, &B[0], M, A, LDA);
+    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, rank, A, LDA, &TAU[0]);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', rank, rank, &B[0], M, R, LDR);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', rank - 1, rank - 1, zero, zero, &R[1], LDR);
   }
   return rank;
 }
-
-extern void zomatcopy(char, int64_t, int64_t, const std::complex<double>*, int64_t, std::complex<double>*, int64_t);
 
 ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
   int64_t xlen = comm.lenNeighbors();
@@ -156,7 +146,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
       int64_t len = prev_basis.DimsLr[j];
       if (0 < len) {
         std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske[offset * 3]);
-        zomatcopy('N', len, len, prev_basis.R[j], prev_basis.Dims[j], &matrix[offset * (dim + 1)], dim);
+        mkl_zomatcopy('C', 'N', len, len, std::complex<double>(1., 0.), prev_basis.R[j], prev_basis.Dims[j], &matrix[offset * (dim + 1)], dim);
       }
     }
 
@@ -210,10 +200,7 @@ int64_t compute_recompression(double epi, int64_t M, int64_t N, std::complex<dou
     int64_t C = M - N;
     std::vector<std::complex<double>> A(M * M), TAU(C);
     std::complex<double> one(1., 0.), zero(0., 0.);
-    std::vector<int32_t> jpiv(M, 0);
-    lapack_complex_double* Qptr = reinterpret_cast<lapack_complex_double*>(&Q[0]);
-    lapack_complex_double* Aptr = reinterpret_cast<lapack_complex_double*>(&A[0]);
-    lapack_complex_double* Tptr = reinterpret_cast<lapack_complex_double*>(&TAU[0]);
+    std::vector<MKL_INT> jpiv(M, 0);
 
     cblas_zgemm(CblasColMajor, CblasConjTrans, CblasTrans, C, M, M, &one, &Q[M * N], LDQ, R, LDR, &zero, &A[0], C);
     cblas_zgemm(CblasColMajor, CblasConjTrans, CblasTrans, N, M, M, &one, Q, LDQ, R, LDR, &zero, &A[M * C], N);
@@ -222,13 +209,13 @@ int64_t compute_recompression(double epi, int64_t M, int64_t N, std::complex<dou
 
     if (epi * nrmQ <= nrmC) {
       int64_t rank = 0;
-      LAPACKE_zgeqp3(LAPACK_COL_MAJOR, C, M, Aptr, C, &jpiv[0], Tptr);
+      LAPACKE_zgeqp3(LAPACK_COL_MAJOR, C, M, &A[0], C, &jpiv[0], &TAU[0]);
       double s0 = epi * std::abs(A[0]) * std::max(nrmQ / nrmC, (double)1.);
       if (std::numeric_limits<double>::min() < s0)
         while (rank < C && s0 <= std::abs(A[rank * (C + 1)]))
           ++rank;
       if (rank > 0)
-        LAPACKE_zunmqr(LAPACK_COL_MAJOR, 'R', 'N', M, C, rank, Aptr, C, Tptr, &Qptr[M * N], LDQ);
+        LAPACKE_zunmqr(LAPACK_COL_MAJOR, 'R', 'N', M, C, rank, &A[0], C, &TAU[0], &Q[M * N], LDQ);
       return N + rank;
     }
   }
@@ -258,13 +245,10 @@ void compute_rowbasis_null_space(int64_t M, int64_t N, std::complex<double> A[],
   if (0 < N && N < M) {
     std::complex<double> one(1., 0.);
     std::vector<std::complex<double>> B(N * N), TAU(N);
-    lapack_complex_double* Aptr = reinterpret_cast<lapack_complex_double*>(&A[0]);
-    lapack_complex_double* Bptr = reinterpret_cast<lapack_complex_double*>(&B[0]);
-    lapack_complex_double* Tptr = reinterpret_cast<lapack_complex_double*>(&TAU[0]);
 
-    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, N, Aptr, LDA, Tptr);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', N, N, Aptr, LDA, Bptr, N);
-    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, N, Aptr, LDA, Tptr);
+    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, N, A, LDA, &TAU[0]);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', N, N, A, LDA, &B[0], N);
+    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, N, A, LDA, &TAU[0]);
     cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, &B[0], N, A, LDA);
   }
 }
@@ -308,7 +292,7 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
       int64_t offsetOld = std::reduce(&localChildLrDims[childi], &localChildLrDims[j]);
       int64_t offsetNew = std::reduce(&newLocalChildLrDims[childi], &newLocalChildLrDims[j]);
       int64_t len = localChildLrDims[j];
-      zomatcopy('N', len, N, &oldQ[i][offsetOld], oldDims[i], &Qdata[Qoffsets[i + ibegin] + offsetNew], M);
+      mkl_zomatcopy('C', 'N', len, N, std::complex<double>(1., 0.), &oldQ[i][offsetOld], oldDims[i], &Qdata[Qoffsets[i + ibegin] + offsetNew], M);
     }
     compute_rowbasis_null_space(M, N, &Qdata[Qoffsets[i + ibegin]], M);
   }
@@ -366,7 +350,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
   int64_t Y = 0;
   for (int64_t i = 0; i < llen; i++) {
     int64_t M = Basis[Levels].Dims[lbegin + i];
-    zomatcopy('N', M, nrhs, &X[Y], ldX, rhsXptr[Levels][lbegin + i], M);
+    mkl_zomatcopy('C', 'N', M, nrhs, std::complex<double>(1., 0.), &X[Y], ldX, rhsXptr[Levels][lbegin + i], M);
     Y = Y + M;
   }
 
@@ -427,7 +411,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
   Y = 0;
   for (int64_t i = 0; i < llen; i++) {
     int64_t M = Basis[Levels].Dims[lbegin + i];
-    zomatcopy('N', M, nrhs, rhsYptr[Levels][lbegin + i], M, &X[Y], ldX);
+    mkl_zomatcopy('C', 'N', M, nrhs, std::complex<double>(1., 0.), rhsYptr[Levels][lbegin + i], M, &X[Y], ldX);
     Y = Y + M;
   }
 }
