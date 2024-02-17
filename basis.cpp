@@ -146,7 +146,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
       int64_t len = prev_basis.DimsLr[j];
       if (0 < len) {
         std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske[offset * 3]);
-        mkl_zomatcopy('C', 'N', len, len, std::complex<double>(1., 0.), prev_basis.R[j], prev_basis.Dims[j], &matrix[offset * (dim + 1)], dim);
+        MKL_Zomatcopy('C', 'N', len, len, std::complex<double>(1., 0.), prev_basis.R[j], prev_basis.Dims[j], &matrix[offset * (dim + 1)], dim);
       }
     }
 
@@ -292,7 +292,7 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
       int64_t offsetOld = std::reduce(&localChildLrDims[childi], &localChildLrDims[j]);
       int64_t offsetNew = std::reduce(&newLocalChildLrDims[childi], &newLocalChildLrDims[j]);
       int64_t len = localChildLrDims[j];
-      mkl_zomatcopy('C', 'N', len, N, std::complex<double>(1., 0.), &oldQ[i][offsetOld], oldDims[i], &Qdata[Qoffsets[i + ibegin] + offsetNew], M);
+      MKL_Zomatcopy('C', 'N', len, N, std::complex<double>(1., 0.), &oldQ[i][offsetOld], oldDims[i], &Qdata[Qoffsets[i + ibegin] + offsetNew], M);
     }
     compute_rowbasis_null_space(M, N, &Qdata[Qoffsets[i + ibegin]], M);
   }
@@ -350,7 +350,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
   int64_t Y = 0;
   for (int64_t i = 0; i < llen; i++) {
     int64_t M = Basis[Levels].Dims[lbegin + i];
-    mkl_zomatcopy('C', 'N', M, nrhs, std::complex<double>(1., 0.), &X[Y], ldX, rhsXptr[Levels][lbegin + i], M);
+    MKL_Zomatcopy('C', 'N', M, nrhs, std::complex<double>(1., 0.), &X[Y], ldX, rhsXptr[Levels][lbegin + i], M);
     Y = Y + M;
   }
 
@@ -411,7 +411,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
   Y = 0;
   for (int64_t i = 0; i < llen; i++) {
     int64_t M = Basis[Levels].Dims[lbegin + i];
-    mkl_zomatcopy('C', 'N', M, nrhs, std::complex<double>(1., 0.), rhsYptr[Levels][lbegin + i], M, &X[Y], ldX);
+    MKL_Zomatcopy('C', 'N', M, nrhs, std::complex<double>(1., 0.), rhsYptr[Levels][lbegin + i], M, &X[Y], ldX);
     Y = Y + M;
   }
 }
