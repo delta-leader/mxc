@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "MKL_ILP64",
+                "MKL_Complex16=std::complex<double>"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerArgs": [
+                "-O3",
+                "-m64",
+                "-Wall",
+                "-Wextra"
+            ]
+        }
+    ],
+    "version": 4
+}
