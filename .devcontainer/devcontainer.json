@@ -1,10 +1,11 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/cpp
 {
-	"name": "C++",
+	"name": "MKL-MPI-C++",
 	"build": {
 		"dockerfile": "Dockerfile"
-	}
+	},
+	"onCreateCommand": "echo 'source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1' | tee -a ~/.bashrc"
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
