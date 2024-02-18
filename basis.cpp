@@ -191,7 +191,7 @@ int64_t compute_recompression(double epi, int64_t DimQ, int64_t RankQ, std::comp
       double scaleQ = nrmR / nrmQ;
       cblas_zscal(RankQ * DimQ, &scaleQ, &A[0], 1);
     }
-    else if (std::numeric_limits<double>::min() < nrmQ && nrmQ < nrmR) {
+    else if (std::numeric_limits<double>::min() < nrmR && nrmR < nrmQ) {
       double scaleR = nrmQ / nrmR;
       cblas_zscal(DimQ * DimQ, &scaleR, &A[RankQ * DimQ], 1);
     }

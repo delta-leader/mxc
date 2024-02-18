@@ -188,12 +188,9 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
     int64_t m = basis.Dims[i + ibegin];
     std::fill(basis.R[i + ibegin], basis.R[i + ibegin] + m * m, std::complex<double>(0., 0.));
 
-    std::vector<const std::complex<double>*> c(&C[CRows[i]], &C[CRows[i + 1]]);
-    std::vector<int64_t> cn(&CN[CRows[i]], &CN[CRows[i + 1]]);
-    std::vector<int64_t> cm(&CM[CRows[i]], &CM[CRows[i + 1]]);
+    const std::complex<double>** c = const_cast<const std::complex<double>**>(&C[0]) + CRows[i];
     if (CRows[i] < CRows[i + 1])
-      captureA(m, &cn[0], CRows[i + 1] - CRows[i], &c[0], &cm[0], basis.R[i + ibegin], m);
-
+      captureA(m, &CN[CRows[i]], CRows[i + 1] - CRows[i], c, &CM[CRows[i]], basis.R[i + ibegin], m);
     for (int64_t ij = CRows[i]; ij < CRows[i + 1]; ij++) {
       std::vector<const std::complex<double>*> a, b;
       std::vector<int64_t> am, bm;
