@@ -164,6 +164,22 @@ void captureAmulB(int64_t M, int64_t N, const int64_t K[], int64_t lenAB, const 
   }
 }
 
+/*void captureAmulB(int64_t M, int64_t N, const int64_t K[], int64_t lenAB, const std::complex<double>* A[], const int64_t LDA[], const std::complex<double>* B[], const int64_t LDB[], std::complex<double> C[], int64_t LDC) {
+  if (M > 0) {
+    int64_t B2 = N + M;
+    std::vector<std::complex<double>> Y(M * B2, 0.), TAU(M);
+    std::complex<double> zero(0., 0.), one(1., 0.);
+
+    MKL_Zomatcopy('C', 'N', M, M, one, C, LDC, &Y[0], B2);
+    for (int64_t b = 0; b < lenAB; b++)
+      cblas_zgemm(CblasColMajor, CblasTrans, CblasTrans, N, M, K[b], &one, B[b], LDB[b], A[b], LDA[b], &one, &Y[M], B2);
+
+    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, B2, M, &Y[0], B2, &TAU[0]);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, &Y[0], B2, C, LDC);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &C[1], LDC);
+  }
+}*/
+
 void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& comm) {
   int64_t ibegin = comm.oLocal();
   int64_t nodes = comm.lenLocal();
@@ -184,7 +200,7 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
 
       for (int64_t ik = ARows[i + ibegin]; ik < ARows[i + ibegin + 1]; ik++) {
         int64_t k = comm.iLocal(ACols[ik]);
-        int64_t kj = std::distance(&ARows[0], std::find(&ARows[k], &ARows[k + 1], CCols[ij]));
+        int64_t kj = std::distance(&ACols[0], std::find(&ACols[ARows[k]], &ACols[ARows[k + 1]], CCols[ij]));
         if (k != i + ibegin && kj != ARows[k + 1]) {
           a.emplace_back(A[ik]);
           b.emplace_back(A[kj]);
@@ -195,8 +211,7 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
 
       int64_t n = CN[ij];
       int64_t lenk = a.size();
-      if (0 < lenk)
-        captureAmulB(m, n, &bm[0], lenk, &a[0], &am[0], &b[0], &bm[0], basis.R[i + ibegin], m);
+      captureAmulB(m, n, &bm[0], lenk, &a[0], &am[0], &b[0], &bm[0], basis.R[i + ibegin], m);
     }
   }
   

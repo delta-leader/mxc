@@ -42,10 +42,10 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
   
-  Laplace3D eval(1);
+  //Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
-  //Helmholtz3D eval(1.e-1, 1.);
+  Helmholtz3D eval(1.e-1, 1.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);
@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
   if (fname == nullptr) {
     mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
     //mesh_unit_cube(&body[0], Nbody);
-    //uniform_unit_cube(&body[0], Nbody, 3);
+    //uniform_unit_cube_rnd(&body[0], Nbody, 3, 999);
     buildTree(&cell[0], &body[0], Nbody, levels);
   }
   else {

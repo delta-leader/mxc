@@ -44,8 +44,6 @@ public:
 
   std::vector<int64_t> CRows;
   std::vector<int64_t> CCols;
-  std::vector<int64_t> CM;
-  std::vector<int64_t> CN;
   std::vector<const std::complex<double>*> C;
   
   ClusterBasis() {}
