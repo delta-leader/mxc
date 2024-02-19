@@ -46,10 +46,9 @@ const double* WellSeparatedApproximation::fbodies_at_i(int64_t i) const {
 
 int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t N, double Xbodies[], const double Fbodies[], std::complex<double> A[], int64_t LDA) {
   int64_t K = std::max(M, N);
-  std::complex<double> one(1., 0.), zero(0., 0.);
   std::vector<std::complex<double>> B(M * K), TAU(M);
-  std::vector<double> S(M * 3);
-  std::vector<MKL_INT> jpiv(M, 0);
+  std::vector<MKL_INT> ipiv(M), jpiv(M, 0);
+  std::complex<double> one(1., 0.), zero(0., 0.);
 
   gen_matrix(eval, N, M, Fbodies, Xbodies, &B[0], K);
   LAPACKE_zgeqrf(LAPACK_COL_MAJOR, N, M, &B[0], K, &TAU[0]);
@@ -66,13 +65,16 @@ int64_t compute_basis(const MatrixAccessor& eval, double epi, int64_t M, int64_t
   if (0 < rank && rank < M) {
     cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, &B[0], K, &B[rank * K], K);
     LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', rank, rank, zero, one, &B[0], K);
+    MKL_Zomatcopy('C', 'T', rank, M, one, &B[0], K, A, LDA);
 
     for (int64_t i = 0; i < M; i++) {
-      int64_t piv = (int64_t)jpiv[i] - 1;
-      std::copy(&B[i * K], &B[i * K + rank], &A[piv * LDA]);
-      std::copy(&Xbodies[piv * 3], &Xbodies[piv * 3 + 3], &S[i * 3]);
+      int64_t piv = std::distance(&jpiv[0], std::find(&jpiv[i], &jpiv[M], i + 1));
+      ipiv[i] = piv + 1;
+      if (piv != i)
+        std::iter_swap(&jpiv[i], &jpiv[piv]);
     }
-    std::copy(&S[0], &S[M * 3], Xbodies);
+    LAPACKE_zlaswp(LAPACK_COL_MAJOR, rank, A, LDA, 1, M, &ipiv[0], 1);
+    LAPACKE_dlaswp(LAPACK_ROW_MAJOR, 3, Xbodies, 3, 1, M, &ipiv[0], -1);
   }
   return rank;
 }
@@ -183,7 +185,7 @@ int64_t compute_recompression(double epi, int64_t DimQ, int64_t RankQ, std::comp
     std::vector<double> S(DimQ * 2);
     std::complex<double> one(1., 0.), zero(0., 0.);
 
-    MKL_Zomatcopy('C', 'T', RankQ, DimQ, one, Q, LDQ, &A[0], DimQ);
+    MKL_Zomatcopy('C', 'N', RankQ, DimQ, one, Q, LDQ, &A[0], DimQ);
     MKL_Zomatcopy('C', 'T', DimQ, DimQ, one, R, LDR, &A[RankQ * DimQ], DimQ);
     double nrmQ = cblas_dznrm2(RankQ * DimQ, &A[0], 1);
     double nrmR = cblas_dznrm2(DimQ * DimQ, &A[RankQ * DimQ], 1);
@@ -205,7 +207,7 @@ int64_t compute_recompression(double epi, int64_t DimQ, int64_t RankQ, std::comp
         
     LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', DimQ, DimQ, zero, zero, R, LDR);
     cblas_zgemm(CblasColMajor, CblasConjTrans, CblasTrans, rank, RankQ, DimQ, &one, &A[0], DimQ, Q, LDQ, &zero, R, LDR);
-    MKL_Zomatcopy('C', 'T', DimQ, DimQ, one, &A[0], DimQ, Q, LDQ);
+    MKL_Zomatcopy('C', 'N', DimQ, DimQ, one, &A[0], DimQ, Q, LDQ);
     return rank;
   }
   else if (RankQ == DimQ) {
@@ -372,7 +374,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
       int64_t M = Basis[i].Dims[y + ibegin];
       int64_t N = Basis[i].DimsLr[y + ibegin];
       if (M > 0 && N > 0)
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, N, nrhs, M, &one, Basis[i].Q[y + ibegin], M, 
+        cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, nrhs, M, &one, Basis[i].Q[y + ibegin], M, 
           rhsXptr[i][y + ibegin], M, &zero, rhsXoptr[i][y + ibegin].first, rhsXoptr[i][y + ibegin].second);
     }
   }
@@ -397,7 +399,7 @@ void MatVec::operator() (int64_t nrhs, std::complex<double> X[], int64_t ldX) co
           rhsXoptr[i][x].first, rhsXoptr[i][x].second, &one, rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second);
       }
       if (M > 0 && K > 0)
-        cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, M, nrhs, K, &one, Basis[i].Q[y + ibegin], M, 
+        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, nrhs, K, &one, Basis[i].Q[y + ibegin], M, 
           rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second, &zero, rhsYptr[i][y + ibegin], M);
     }
   }
