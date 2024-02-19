@@ -158,10 +158,10 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   int64_t offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](int64_t& i) { i = i - offset; });
 
-  std::vector<int64_t> CN(CRows[nodes]), Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
-  std::transform(CCols.begin(), CCols.end(), CN.begin(), [&](int64_t col) { return DimsLr[comm.iLocal(col)]; });
+  std::vector<int64_t> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (int64_t i = 0; i < nodes; i++)
-    std::transform(&CN[CRows[i]], &CN[CRows[i + 1]], &Csizes[CRows[i]], [&](int64_t n) { return DimsLr[i + ibegin] * n; });
+    std::transform(&CCols[CRows[i]], &CCols[CRows[i + 1]], &Csizes[CRows[i]], 
+      [&](int64_t col) { return DimsLr[i + ibegin] * DimsLr[comm.iLocal(col)]; });
   std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
   Coffsets[0] = 0;
 
@@ -173,7 +173,6 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
     for (int64_t ij = CRows[i]; ij < CRows[i + 1]; ij++) {
       int64_t j = comm.iLocal(CCols[ij]);
       int64_t m = DimsLr[i + ibegin], n = DimsLr[j];
-      std::complex<double> one(1., 0.);
       gen_matrix(eval, m, n, S[i + ibegin], S[j], &Cdata[Coffsets[ij]], m);
     }
 }
@@ -185,17 +184,17 @@ int64_t compute_recompression(double epi, int64_t DimQ, int64_t RankQ, std::comp
     std::vector<double> S(DimQ * 2);
     std::complex<double> one(1., 0.), zero(0., 0.);
 
-    MKL_Zomatcopy('C', 'N', RankQ, DimQ, one, Q, LDQ, &A[0], DimQ);
-    MKL_Zomatcopy('C', 'T', DimQ, DimQ, one, R, LDR, &A[RankQ * DimQ], DimQ);
-    double nrmQ = cblas_dznrm2(RankQ * DimQ, &A[0], 1);
-    double nrmR = cblas_dznrm2(DimQ * DimQ, &A[RankQ * DimQ], 1);
+    MKL_Zomatcopy('C', 'N', DimQ, RankQ, one, Q, LDQ, &A[0], DimQ);
+    MKL_Zomatcopy('C', 'T', DimQ, DimQ, one, R, LDR, &A[DimQ * RankQ], DimQ);
+    double nrmQ = cblas_dznrm2(DimQ * RankQ, &A[0], 1);
+    double nrmR = cblas_dznrm2(DimQ * DimQ, &A[DimQ * RankQ], 1);
     if (std::numeric_limits<double>::min() < nrmQ && nrmQ < nrmR) {
       double scaleQ = nrmR / nrmQ;
-      cblas_zscal(RankQ * DimQ, &scaleQ, &A[0], 1);
+      cblas_zscal(DimQ * RankQ, &scaleQ, &A[0], 1);
     }
     else if (std::numeric_limits<double>::min() < nrmR && nrmR < nrmQ) {
       double scaleR = nrmQ / nrmR;
-      cblas_zscal(DimQ * DimQ, &scaleR, &A[RankQ * DimQ], 1);
+      cblas_zscal(DimQ * DimQ, &scaleR, &A[DimQ * RankQ], 1);
     }
 
     LAPACKE_zgesvd(LAPACK_COL_MAJOR, 'O', 'N', DimQ, M, &A[0], DimQ, &S[0], &A[0], DimQ, nullptr, M, &S[DimQ]);
@@ -206,7 +205,7 @@ int64_t compute_recompression(double epi, int64_t DimQ, int64_t RankQ, std::comp
         ++rank;
         
     LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', DimQ, DimQ, zero, zero, R, LDR);
-    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasTrans, rank, RankQ, DimQ, &one, &A[0], DimQ, Q, LDQ, &zero, R, LDR);
+    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, rank, RankQ, DimQ, &one, &A[0], DimQ, Q, LDQ, &zero, R, LDR);
     MKL_Zomatcopy('C', 'N', DimQ, DimQ, one, &A[0], DimQ, Q, LDQ);
     return rank;
   }
@@ -226,6 +225,13 @@ void ClusterBasis::recompressR(double epi, const CellComm& comm) {
   int64_t ibegin = comm.oLocal();
   int64_t nodes = comm.lenLocal();
 
+  std::vector<std::vector<std::complex<double>>> CdataOld(CRows[nodes]);
+  std::vector<int64_t> DimsLrOld(DimsLr.begin(), DimsLr.end());
+  for (int64_t i = 0; i < CRows[nodes] - 1; i++)
+    CdataOld[i] = std::vector<std::complex<double>>(C[i], C[i + 1]);
+  if (0 < CRows[nodes])
+    CdataOld[CRows[nodes] - 1] = std::vector<std::complex<double>>(C[CRows[nodes] - 1], const_cast<const std::complex<double>*>(&Cdata[Cdata.size()]));
+
   for (int64_t i = 0; i < nodes; i++) {
     int64_t M = Dims[i + ibegin], N = DimsLr[i + ibegin];
     std::vector<std::complex<double>> c(N * N);
@@ -242,18 +248,31 @@ void ClusterBasis::recompressR(double epi, const CellComm& comm) {
   comm.dup_bcast(DimsLr.data(), xlen);
   comm.dup_bcast(Qdata.data(), lenQ);
   comm.dup_bcast(Rdata.data(), lenQ);
-}
 
-void compute_rowbasis_null_space(int64_t M, int64_t N, std::complex<double> A[], int64_t LDA) {
-  if (0 < N && N < M) {
-    std::complex<double> one(1., 0.);
-    std::vector<std::complex<double>> B(N * N), TAU(N);
+  std::vector<int64_t> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
+  for (int64_t i = 0; i < nodes; i++)
+    std::transform(&CCols[CRows[i]], &CCols[CRows[i + 1]], &Csizes[CRows[i]], 
+      [&](int64_t col) { return DimsLr[i + ibegin] * DimsLr[comm.iLocal(col)]; });
+  std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
+  Coffsets[0] = 0;
 
-    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, N, A, LDA, &TAU[0]);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', N, N, A, LDA, &B[0], N);
-    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, N, A, LDA, &TAU[0]);
-    cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, &B[0], N, A, LDA);
-  }
+  Cdata.resize(Coffsets.back());
+  std::fill(Cdata.begin(), Cdata.end(), std::complex<double>(0., 0.));
+  std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const int64_t d) { return &Cdata[d]; });
+
+  int64_t dim_max = *std::max_element(DimsLr.begin(), DimsLr.end());
+  std::vector<std::complex<double>> Tmp(dim_max * dim_max);
+  std::complex<double> one(1., 0.), zero(0., 0.);
+
+  for (int64_t i = 0; i < nodes; i++)
+    for (int64_t ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+      int64_t j = comm.iLocal(CCols[ij]);
+      int64_t m1 = DimsLrOld[i + ibegin], n1 = DimsLrOld[j];
+      int64_t m2 = DimsLr[i + ibegin], n2 = DimsLr[j];
+      int64_t ldl = Dims[i + ibegin], ldr = Dims[j];
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasTrans, m1, n2, n1, &one, CdataOld[ij].data(), m1, R[j], ldr, &zero, &Tmp[0], m1);
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m2, n2, m1, &one, R[i + ibegin], ldl, &Tmp[0], m1, &zero, &Cdata[Coffsets[ij]], m2);
+    }
 }
 
 void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const CellComm& comm) {
@@ -268,8 +287,7 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
 
   for (int64_t i = 0; i < nodes; i++) {
     oldDims[i] = Dims[i + ibegin];
-    oldQ[i] = std::vector<std::complex<double>>(oldDims[i] * DimsLr[i + ibegin]);
-    std::copy(Q[i + ibegin], Q[i + ibegin] + oldQ[i].size(), oldQ[i].begin());
+    oldQ[i] = std::vector<std::complex<double>>(Q[i + ibegin], &(Q[i + ibegin])[oldDims[i] * DimsLr[i + ibegin]]);
     Dims[i + ibegin] = std::reduce(&newLocalChildLrDims[localChildOffsets[i]], &newLocalChildLrDims[localChildOffsets[i + 1]]);
   }
 
@@ -286,6 +304,7 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
   std::transform(Qoffsets.begin(), Qoffsets.end(), Q.begin(), [&](const int64_t d) { return &Qdata[d]; });
   std::transform(Qoffsets.begin(), Qoffsets.end(), R.begin(), [&](const int64_t d) { return &Rdata[d]; });
 
+  std::complex<double> one(1., 0.), zero(0., 0.);
   for (int64_t i = 0; i < nodes; i++) {
     int64_t M = Dims[i + ibegin];
     int64_t N = DimsLr[i + ibegin];
@@ -294,10 +313,11 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
     for (int64_t j = childi; j < cend && 0 < N; j++) {
       int64_t offsetOld = std::reduce(&localChildLrDims[childi], &localChildLrDims[j]);
       int64_t offsetNew = std::reduce(&newLocalChildLrDims[childi], &newLocalChildLrDims[j]);
-      int64_t len = localChildLrDims[j];
-      MKL_Zomatcopy('C', 'N', len, N, std::complex<double>(1., 0.), &oldQ[i][offsetOld], oldDims[i], &Qdata[Qoffsets[i + ibegin] + offsetNew], M);
+      int64_t m1 = localChildLrDims[j], m2 = newLocalChildLrDims[j];
+      int64_t lj = localChildIndex + j;
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m2, N, m1, &one, 
+        prev_basis.R[lj], prev_basis.Dims[lj], &(oldQ[i])[offsetOld], oldDims[i], &zero, &Qdata[Qoffsets[i + ibegin] + offsetNew], M);
     }
-    compute_rowbasis_null_space(M, N, &Qdata[Qoffsets[i + ibegin]], M);
   }
 
   std::copy(newLocalChildLrDims.begin(), newLocalChildLrDims.end(), localChildLrDims.begin());
