@@ -12,6 +12,8 @@ class MatrixAccessor;
 
 class BlockSparseMatrix {
 public:
+  std::vector<int64_t> RowIndex;
+  std::vector<int64_t> ColIndex;
   std::vector<int64_t> blocksOnRow;
   std::vector<int64_t> elementsOnRow;
 
@@ -21,8 +23,6 @@ public:
   std::vector<int64_t> N;
   std::vector<int64_t> RankM;
   std::vector<int64_t> RankN;
-  std::vector<int64_t> RowIndex;
-  std::vector<int64_t> ColIndex;
 
   BlockSparseMatrix() {};
   BlockSparseMatrix(int64_t len, const std::pair<int64_t, int64_t> lil[], const std::pair<int64_t, int64_t> dim[], const CellComm& comm);
@@ -35,15 +35,8 @@ public:
 class UlvSolver {
 private:
   BlockSparseMatrix A;
-  std::vector<std::complex<double>> Cdata;
-  
-  std::vector<int64_t> CM;
-  std::vector<int64_t> CN;
-  std::vector<int64_t> CRankM;
-  std::vector<int64_t> CRankN;
-  std::vector<int64_t> CRows;
-  std::vector<int64_t> CCols;
-  std::vector<std::complex<double>*> C;
+  BlockSparseMatrix C;
+  std::vector<int64_t> Ck;
 
 public:
 

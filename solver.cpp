@@ -8,7 +8,7 @@
 #include <mkl.h>
 #include <algorithm>
 #include <numeric>
-#include <set>
+#include <map>
 
 BlockSparseMatrix::BlockSparseMatrix(int64_t len, const std::pair<int64_t, int64_t> lil[], const std::pair<int64_t, int64_t> dim[], const CellComm& comm) {
   int64_t xlen = comm.lenNeighbors();
@@ -98,41 +98,32 @@ UlvSolver::UlvSolver(const int64_t Dims[], const CSR& csr, const CellComm& comm)
   }
 
   A = BlockSparseMatrix(lenA, &lil[0], &dims[0], comm);
-
-  CM = std::vector<int64_t>();
-  CN = std::vector<int64_t>();
-  CRows = std::vector<int64_t>(nodes + 1);
-  CCols = std::vector<int64_t>();
-  CRows[0] = 0;
+  std::map<std::pair<int64_t, int64_t>, std::pair<int64_t, int64_t>> fills;
 
   for (int64_t y = 0; y < nodes; y++) {
     const int64_t* ycols = &A.ColIndex[0] + A.RowIndex[y + ibegin];
     const int64_t* ycols_end = &A.ColIndex[0] + A.RowIndex[y + ibegin + 1];
-    std::set<std::pair<int64_t, int64_t>> fills_kx;
     for (int64_t yk = A.RowIndex[y + ibegin]; yk < A.RowIndex[y + ibegin + 1]; yk++) {
       int64_t k = comm.iLocal(A.ColIndex[yk]);
       for (int64_t kx = A.RowIndex[k]; kx < A.RowIndex[k + 1]; kx++)
         if (ycols_end == std::find(ycols, ycols_end, A.ColIndex[kx]))
-          fills_kx.insert(std::make_pair(A.ColIndex[kx], A.N[kx]));
+          fills.emplace(std::make_pair(y, A.ColIndex[kx]), std::make_pair(yk, kx));
     }
-
-    CRows[y + 1] = CRows[y] + fills_kx.size();
-    CCols.resize(CRows[y + 1]);
-    CM.resize(CRows[y + 1], Dims[y + ibegin]);
-    CN.resize(CRows[y + 1]);
-    std::transform(fills_kx.begin(), fills_kx.end(), &CCols[CRows[y]], [&](std::pair<int64_t, int64_t> kx) { return kx.first; });
-    std::transform(fills_kx.begin(), fills_kx.end(), &CN[CRows[y]], [&](std::pair<int64_t, int64_t> kx) { return kx.second; });
   }
 
-  CRankM = std::vector<int64_t>(CM.begin(), CM.end());
-  CRankN = std::vector<int64_t>(CN.begin(), CN.end());
-  std::vector<int64_t> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
-  std::transform(CM.begin(), CM.end(), CN.begin(), Csizes.begin(), [](int64_t m, int64_t n) { return m * n; });
-  std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
-  Coffsets[0] = 0;
-  C = std::vector<std::complex<double>*>(CRows[nodes]);
-  Cdata = std::vector<std::complex<double>>(Coffsets.back(), std::complex<double>(0., 0.));
-  std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const int64_t d) { return &Cdata[d]; });
+  int64_t lenC = fills.size();
+  std::vector<std::pair<int64_t, int64_t>> lilC(lenC), dimsC(lenC);
+  std::transform(fills.begin(), fills.end(), lilC.begin(), 
+    [&](std::pair<std::pair<int64_t, int64_t>, std::pair<int64_t, int64_t>> f) { return f.first; });
+  std::transform(fills.begin(), fills.end(), dimsC.begin(), 
+    [&](std::pair<std::pair<int64_t, int64_t>, std::pair<int64_t, int64_t>> f) { return std::make_pair(A.M[f.second.first], A.N[f.second.second]); });
+
+  C = BlockSparseMatrix(lenC, &lilC[0], &dimsC[0], comm);
+  Ck = std::vector<int64_t>(C.RowIndex.back());
+  std::transform(fills.begin(), fills.end(), &Ck[C.RowIndex[ibegin]], 
+    [&](std::pair<std::pair<int64_t, int64_t>, std::pair<int64_t, int64_t>> f) { return A.ColIndex[f.second.first]; });
+  comm.neighbor_bcast(Ck.data(), C.blocksOnRow.data());
+  comm.dup_bcast(Ck.data(), C.RowIndex.back());
 }
 
 void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm) {
@@ -182,7 +173,7 @@ void captureA(int64_t M, const int64_t N[], int64_t lenA, const std::complex<dou
 }
 
 void captureAmulB(int64_t M, int64_t N, const int64_t K[], int64_t lenAB, const std::complex<double>* A[], const int64_t LDA[], const std::complex<double>* B[], const int64_t LDB[], std::complex<double> C[], int64_t LDC) {
-  constexpr int64_t batch_size = 8;
+  constexpr int64_t batch_size = 4;
   if (M > 0) {
     int64_t B2 = std::max(M, batch_size * N) + M;
     std::vector<std::complex<double>> Y(M * B2, 0.), TAU(M);
@@ -231,20 +222,25 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
   int64_t ibegin = comm.oLocal();
   int64_t nodes = comm.lenLocal();
 
+  int64_t lenC = C.RowIndex[ibegin + nodes] - C.RowIndex[ibegin];
+  std::vector<const std::complex<double>*> Cptr(lenC);
+  std::transform(&C.DataOffsets[C.RowIndex[ibegin]], &C.DataOffsets[C.RowIndex[ibegin + nodes]], Cptr.begin(), [&](int64_t offset) { return &C.Data[offset]; });
+
   for (int64_t i = 0; i < nodes; i++) {
     int64_t m = basis.Dims[i + ibegin];
     std::fill(basis.R[i + ibegin], basis.R[i + ibegin] + m * m, std::complex<double>(0., 0.));
 
-    const std::complex<double>** c = const_cast<const std::complex<double>**>(&C[0]) + CRows[i];
-    if (CRows[i] < CRows[i + 1])
-      captureA(m, &CN[CRows[i]], CRows[i + 1] - CRows[i], c, &CM[CRows[i]], basis.R[i + ibegin], m);
-    for (int64_t ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+    int64_t offsetCi = C.RowIndex[i + ibegin];
+    int64_t lenCi = C.RowIndex[i + ibegin + 1] - offsetCi;
+    if (0 < lenCi)
+      captureA(m, &C.N[offsetCi], lenCi, &Cptr[offsetCi - C.RowIndex[ibegin]], &C.M[offsetCi], basis.R[i + ibegin], m);
+    for (int64_t ij = C.RowIndex[i + ibegin]; ij < C.RowIndex[i + ibegin + 1]; ij++) {
       std::vector<const std::complex<double>*> a, b;
       std::vector<int64_t> am, bm;
 
       for (int64_t ik = A.RowIndex[i + ibegin]; ik < A.RowIndex[i + ibegin + 1]; ik++) {
         int64_t k = comm.iLocal(A.ColIndex[ik]);
-        int64_t kj = std::distance(&A.ColIndex[0], std::find(&A.ColIndex[A.RowIndex[k]], &A.ColIndex[A.RowIndex[k + 1]], CCols[ij]));
+        int64_t kj = std::distance(&A.ColIndex[0], std::find(&A.ColIndex[A.RowIndex[k]], &A.ColIndex[A.RowIndex[k + 1]], C.ColIndex[ij]));
         if (k != i + ibegin && kj != A.RowIndex[k + 1]) {
           a.emplace_back(A[ik]);
           b.emplace_back(A[kj]);
@@ -253,7 +249,7 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
         }
       }
 
-      int64_t n = CN[ij];
+      int64_t n = C.N[ij];
       int64_t lenk = a.size();
       captureAmulB(m, n, &bm[0], lenk, &a[0], &am[0], &b[0], &bm[0], basis.R[i + ibegin], m);
     }
