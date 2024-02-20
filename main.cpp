@@ -108,10 +108,10 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = timer.first;
   timer.first = 0;
 
-  /*UlvSolver matrix(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
+  UlvSolver matrix(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
   matrix.loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
   matrix.preCompressA2(epi, basis[levels], cell_comm[levels]);
-  basis[levels - 1].adjustLowerRankGrowth(basis[levels], cell_comm[levels - 1]);*/
+  basis[levels - 1].adjustLowerRankGrowth(basis[levels], cell_comm[levels - 1]);
 
   int64_t llen = cell_comm[levels].lenLocal();
   int64_t gbegin = cell_comm[levels].oGlobal();

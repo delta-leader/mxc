@@ -46,6 +46,7 @@ public:
   void neighbor_bcast(double* data, const int64_t box_dims[]) const;
   void neighbor_bcast(std::complex<double>* data, const int64_t box_dims[]) const;
 
+  void neighbor_reduce(int64_t* data, const int64_t box_dims[]) const;
   void neighbor_reduce(std::complex<double>* data, const int64_t box_dims[]) const;
 
   void record_mpi() const;

@@ -186,10 +186,7 @@ template<typename T> inline void CellComm::neighbor_reduce(T* data, const int64_
     record_mpi();
     for (int64_t p = 0; p < (int64_t)NeighborComm.size(); p++) {
       int64_t llen = offsets[p + 1] - offsets[p];
-      if (p == Proc)
-        MPI_Reduce(MPI_IN_PLACE, &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].first, NeighborComm[p].second);
-      else
-        MPI_Reduce(&data[offsets[p]], &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].first, NeighborComm[p].second);
+      MPI_Allreduce(MPI_IN_PLACE, &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].second);
     }
     record_mpi();
   }
@@ -221,6 +218,10 @@ void CellComm::neighbor_bcast(double* data, const int64_t box_dims[]) const {
 
 void CellComm::neighbor_bcast(std::complex<double>* data, const int64_t box_dims[]) const {
   neighbor_bcast<std::complex<double>>(data, box_dims);
+}
+
+void CellComm::neighbor_reduce(int64_t* data, const int64_t box_dims[]) const {
+  neighbor_reduce<int64_t>(data, box_dims);
 }
 
 void CellComm::neighbor_reduce(std::complex<double>* data, const int64_t box_dims[]) const {
