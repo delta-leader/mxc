@@ -10,47 +10,94 @@
 #include <numeric>
 #include <set>
 
-UlvSolver::UlvSolver(const int64_t Dims[], const CSR& csr, const CellComm& comm) {
+BlockSparseMatrix::BlockSparseMatrix(int64_t len, const std::pair<int64_t, int64_t> lil[], const std::pair<int64_t, int64_t> dim[], const CellComm& comm) {
   int64_t xlen = comm.lenNeighbors();
-  blocksOnRow = std::vector<int64_t>(xlen);
-  elementsOnRow = std::vector<int64_t>(xlen);
-  ARows = std::vector<int64_t>(xlen + 1);
-  ARows[0] = 0;
-
-  std::for_each(blocksOnRow.begin(), blocksOnRow.end(), 
-    [&](int64_t& y) { int64_t i = comm.iGlobal(std::distance(&blocksOnRow[0], &y)); y = csr.RowIndex[i + 1] - csr.RowIndex[i]; });
-  std::inclusive_scan(blocksOnRow.begin(), blocksOnRow.end(), ARows.begin() + 1);
-
-  M = std::vector<int64_t>(ARows[xlen]);
-  N = std::vector<int64_t>(ARows[xlen]);
-  A = std::vector<const std::complex<double>*>(ARows[xlen]);
-  ACols = std::vector<int64_t>(ARows[xlen]);
-  
-  int64_t ylocal = comm.oLocal();
+  int64_t ibegin = comm.oLocal();
   int64_t nodes = comm.lenLocal();
 
-  for (int64_t i = 0; i < xlen; i++) {
-    int64_t y = comm.iGlobal(i);
-    std::copy(&csr.ColIndex[csr.RowIndex[y]], &csr.ColIndex[csr.RowIndex[y + 1]], &ACols[ARows[i]]);
-    std::fill(&M[ARows[i]], &M[ARows[i + 1]], Dims[i]);
+  blocksOnRow = std::vector<int64_t>(xlen);
+  elementsOnRow = std::vector<int64_t>(xlen);
+  const std::pair<int64_t, int64_t>* iter = lil;
+  for (int64_t i = 0; i < nodes; i++) {
+    int64_t cols = std::distance(iter, std::find_if_not(iter, &lil[len], [=](std::pair<int64_t, int64_t> l) { return l.first == i; }));
+    blocksOnRow[i + ibegin] = cols;
+    iter = &iter[cols];
   }
 
-  std::transform(&ACols[ARows[ylocal]], &ACols[ARows[ylocal + nodes]], &N[ARows[ylocal]],
-    [&](int64_t col) { return Dims[comm.iLocal(col)]; });
-  comm.neighbor_bcast(&N[0], &blocksOnRow[0]);
-  comm.dup_bcast(&N[0], ARows[xlen]);
+  const std::vector<int64_t> ones(xlen, 1);
+  comm.neighbor_bcast(blocksOnRow.data(), ones.data());
+  comm.dup_bcast(blocksOnRow.data(), xlen);
+
+  RowIndex = std::vector<int64_t>(xlen + 1);
+  RowIndex[0] = 0;
+  std::inclusive_scan(blocksOnRow.begin(), blocksOnRow.end(), RowIndex.begin() + 1);
+
+  M = std::vector<int64_t>(RowIndex[xlen]);
+  N = std::vector<int64_t>(RowIndex[xlen]);
+  ColIndex = std::vector<int64_t>(RowIndex[xlen]);
+
+  std::transform(dim, &dim[len], &M[RowIndex[ibegin]], [](std::pair<int64_t, int64_t> d) { return d.first; });
+  std::transform(dim, &dim[len], &N[RowIndex[ibegin]], [](std::pair<int64_t, int64_t> d) { return d.second; });
+  std::transform(lil, &lil[len], &ColIndex[RowIndex[ibegin]], [](std::pair<int64_t, int64_t> l) { return l.second; });
+
+  comm.neighbor_bcast(M.data(), blocksOnRow.data());
+  comm.neighbor_bcast(N.data(), blocksOnRow.data());
+  comm.neighbor_bcast(ColIndex.data(), blocksOnRow.data());
+  comm.dup_bcast(M.data(), RowIndex[xlen]);
+  comm.dup_bcast(N.data(), RowIndex[xlen]);
+  comm.dup_bcast(ColIndex.data(), RowIndex[xlen]);
+
   RankM = std::vector<int64_t>(M.begin(), M.end());
   RankN = std::vector<int64_t>(N.begin(), N.end());
+  std::vector<int64_t> DataSizes(RowIndex[xlen]);
+  DataOffsets = std::vector<int64_t>(RowIndex[xlen] + 1);
+  DataOffsets[0] = 0;
 
-  std::vector<int64_t> Asizes(ARows[xlen]), Aoffsets(ARows[xlen] + 1);
-  std::transform(M.begin(), M.end(), N.begin(), Asizes.begin(), [](int64_t m, int64_t n) { return m * n; });
-  std::inclusive_scan(Asizes.begin(), Asizes.end(), Aoffsets.begin() + 1);
-  Aoffsets[0] = 0;
-  Adata = std::vector<std::complex<double>>(Aoffsets.back(), std::complex<double>(0., 0.));
-  std::transform(Aoffsets.begin(), Aoffsets.begin() + ARows[xlen], A.begin(), [&](const int64_t d) { return &Adata[d]; });
-  
+  std::transform(M.begin(), M.end(), N.begin(), DataSizes.begin(), [](int64_t m, int64_t n) { return m * n; });
+  std::inclusive_scan(DataSizes.begin(), DataSizes.end(), DataOffsets.begin() + 1);
+  Data = std::vector<std::complex<double>>(DataOffsets.back(), std::complex<double>(0., 0.));
+
   for (int64_t i = 0; i < xlen; i++)
-    elementsOnRow[i] = std::reduce(&Asizes[ARows[i]], &Asizes[ARows[i + 1]]);
+    elementsOnRow[i] = std::reduce(&DataSizes[RowIndex[i]], &DataSizes[RowIndex[i + 1]]);
+}
+
+const std::complex<double>* BlockSparseMatrix::operator[](int64_t i) const {
+  return &Data[DataOffsets[i]];
+}
+
+const std::complex<double>* BlockSparseMatrix::operator()(int64_t y, int64_t x) const {
+  int64_t i = std::distance(&ColIndex[0], std::find(&ColIndex[RowIndex[y]], &ColIndex[RowIndex[y + 1]], x));
+  return i < RowIndex[y + 1] ? &Data[DataOffsets[i]] : nullptr;
+}
+
+std::complex<double>* BlockSparseMatrix::operator[](int64_t i) {
+  return &Data[DataOffsets[i]];
+}
+
+std::complex<double>* BlockSparseMatrix::operator()(int64_t y, int64_t x) {
+  int64_t i = std::distance(&ColIndex[0], std::find(&ColIndex[RowIndex[y]], &ColIndex[RowIndex[y + 1]], x));
+  return i < RowIndex[y + 1] ? &Data[DataOffsets[i]] : nullptr;
+}
+
+UlvSolver::UlvSolver(const int64_t Dims[], const CSR& csr, const CellComm& comm) {
+  int64_t ibegin = comm.oLocal();
+  int64_t ybegin = comm.oGlobal();
+  int64_t nodes = comm.lenLocal();
+
+  int64_t lenA = csr.RowIndex[ybegin + nodes] - csr.RowIndex[ybegin];
+  std::vector<std::pair<int64_t, int64_t>> lil(lenA), dims(lenA);
+
+  for (int64_t i = 0; i < nodes; i++) {
+    int64_t xbegin = csr.RowIndex[ybegin + i];
+    int64_t xend = csr.RowIndex[ybegin + i + 1];
+    int64_t lbegin = xbegin - csr.RowIndex[ybegin];
+    std::transform(&csr.ColIndex[xbegin], &csr.ColIndex[xend], &lil[lbegin], 
+      [=](int64_t col) { return std::make_pair(i, col); });
+    std::transform(&csr.ColIndex[xbegin], &csr.ColIndex[xend], &dims[lbegin], 
+      [&](int64_t col) { return std::make_pair(Dims[i + ibegin], Dims[comm.iLocal(col)]); });
+  }
+
+  A = BlockSparseMatrix(lenA, &lil[0], &dims[0], comm);
 
   CM = std::vector<int64_t>();
   CN = std::vector<int64_t>();
@@ -59,19 +106,19 @@ UlvSolver::UlvSolver(const int64_t Dims[], const CSR& csr, const CellComm& comm)
   CRows[0] = 0;
 
   for (int64_t y = 0; y < nodes; y++) {
-    const int64_t* ycols = &ACols[0] + ARows[y + ylocal];
-    const int64_t* ycols_end = &ACols[0] + ARows[y + ylocal + 1];
+    const int64_t* ycols = &A.ColIndex[0] + A.RowIndex[y + ibegin];
+    const int64_t* ycols_end = &A.ColIndex[0] + A.RowIndex[y + ibegin + 1];
     std::set<std::pair<int64_t, int64_t>> fills_kx;
-    for (int64_t yk = ARows[y + ylocal]; yk < ARows[y + ylocal + 1]; yk++) {
-      int64_t k = comm.iLocal(ACols[yk]);
-      for (int64_t kx = ARows[k]; kx < ARows[k + 1]; kx++)
-        if (ycols_end == std::find(ycols, ycols_end, ACols[kx]))
-          fills_kx.insert(std::make_pair(ACols[kx], N[kx]));
+    for (int64_t yk = A.RowIndex[y + ibegin]; yk < A.RowIndex[y + ibegin + 1]; yk++) {
+      int64_t k = comm.iLocal(A.ColIndex[yk]);
+      for (int64_t kx = A.RowIndex[k]; kx < A.RowIndex[k + 1]; kx++)
+        if (ycols_end == std::find(ycols, ycols_end, A.ColIndex[kx]))
+          fills_kx.insert(std::make_pair(A.ColIndex[kx], A.N[kx]));
     }
 
     CRows[y + 1] = CRows[y] + fills_kx.size();
     CCols.resize(CRows[y + 1]);
-    CM.resize(CRows[y + 1], Dims[y + ylocal]);
+    CM.resize(CRows[y + 1], Dims[y + ibegin]);
     CN.resize(CRows[y + 1]);
     std::transform(fills_kx.begin(), fills_kx.end(), &CCols[CRows[y]], [&](std::pair<int64_t, int64_t> kx) { return kx.first; });
     std::transform(fills_kx.begin(), fills_kx.end(), &CN[CRows[y]], [&](std::pair<int64_t, int64_t> kx) { return kx.second; });
@@ -92,13 +139,13 @@ void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], con
   int64_t xlen = comm.lenNeighbors();
   for (int64_t i = 0; i < xlen; i++) {
     int64_t y = comm.iGlobal(i);
-    for (int64_t yx = ARows[i]; yx < ARows[i + 1]; yx++) {
-      int64_t x = ACols[yx];
+    for (int64_t yx = A.RowIndex[i]; yx < A.RowIndex[i + 1]; yx++) {
+      int64_t x = A.ColIndex[yx];
       int64_t m = cells[y].Body[1] - cells[y].Body[0];
       int64_t n = cells[x].Body[1] - cells[x].Body[0];
       const double* Ibodies = &bodies[3 * cells[y].Body[0]];
       const double* Jbodies = &bodies[3 * cells[x].Body[0]];
-      gen_matrix(eval, m, n, Ibodies, Jbodies, const_cast<std::complex<double>*>(A[yx]), m);
+      gen_matrix(eval, m, n, Ibodies, Jbodies, A[yx], m);
     }
   }
 }
@@ -195,14 +242,14 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
       std::vector<const std::complex<double>*> a, b;
       std::vector<int64_t> am, bm;
 
-      for (int64_t ik = ARows[i + ibegin]; ik < ARows[i + ibegin + 1]; ik++) {
-        int64_t k = comm.iLocal(ACols[ik]);
-        int64_t kj = std::distance(&ACols[0], std::find(&ACols[ARows[k]], &ACols[ARows[k + 1]], CCols[ij]));
-        if (k != i + ibegin && kj != ARows[k + 1]) {
+      for (int64_t ik = A.RowIndex[i + ibegin]; ik < A.RowIndex[i + ibegin + 1]; ik++) {
+        int64_t k = comm.iLocal(A.ColIndex[ik]);
+        int64_t kj = std::distance(&A.ColIndex[0], std::find(&A.ColIndex[A.RowIndex[k]], &A.ColIndex[A.RowIndex[k + 1]], CCols[ij]));
+        if (k != i + ibegin && kj != A.RowIndex[k + 1]) {
           a.emplace_back(A[ik]);
           b.emplace_back(A[kj]);
-          am.emplace_back(M[ik]);
-          bm.emplace_back(M[kj]);
+          am.emplace_back(A.M[ik]);
+          bm.emplace_back(A.M[kj]);
         }
       }
 
