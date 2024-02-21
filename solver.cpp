@@ -79,21 +79,21 @@ std::complex<double>* BlockSparseMatrix::operator()(long long y, long long x) {
   return i < RowIndex[y + 1] ? &Data[DataOffsets[i]] : nullptr;
 }
 
-UlvSolver::UlvSolver(const long long Dims[], const CSR& csr, const CellComm& comm) {
+UlvSolver::UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, const CellComm& comm) {
   long long ibegin = comm.oLocal();
   long long ybegin = comm.oGlobal();
   long long nodes = comm.lenLocal();
 
-  long long lenA = csr.RowIndex[ybegin + nodes] - csr.RowIndex[ybegin];
+  long long lenA = Near.RowIndex[ybegin + nodes] - Near.RowIndex[ybegin];
   std::vector<std::pair<long long, long long>> lil(lenA), dims(lenA);
 
   for (long long i = 0; i < nodes; i++) {
-    long long xbegin = csr.RowIndex[ybegin + i];
-    long long xend = csr.RowIndex[ybegin + i + 1];
-    long long lbegin = xbegin - csr.RowIndex[ybegin];
-    std::transform(&csr.ColIndex[xbegin], &csr.ColIndex[xend], &lil[lbegin], 
+    long long xbegin = Near.RowIndex[ybegin + i];
+    long long xend = Near.RowIndex[ybegin + i + 1];
+    long long lbegin = xbegin - Near.RowIndex[ybegin];
+    std::transform(&Near.ColIndex[xbegin], &Near.ColIndex[xend], &lil[lbegin], 
       [=](long long col) { return std::make_pair(i, col); });
-    std::transform(&csr.ColIndex[xbegin], &csr.ColIndex[xend], &dims[lbegin], 
+    std::transform(&Near.ColIndex[xbegin], &Near.ColIndex[xend], &dims[lbegin], 
       [&](long long col) { return std::make_pair(Dims[i + ibegin], Dims[comm.iLocal(col)]); });
   }
 
@@ -103,20 +103,26 @@ UlvSolver::UlvSolver(const long long Dims[], const CSR& csr, const CellComm& com
   for (long long y = 0; y < nodes; y++) {
     long long* ycols = &A.ColIndex[0] + A.RowIndex[y + ibegin];
     long long* ycols_end = &A.ColIndex[0] + A.RowIndex[y + ibegin + 1];
-    long long d = std::distance(&A.ColIndex[0], std::find(ycols, ycols_end, ybegin + y));
+    long long dy = std::distance(&A.ColIndex[0], std::find(ycols, ycols_end, ybegin + y));
 
-    for (long long yk = d + 1; yk < A.RowIndex[y + ibegin + 1]; yk++) {
+    for (long long yk = dy + 1; yk < A.RowIndex[y + ibegin + 1]; yk++) {
       long long k = comm.iLocal(A.ColIndex[yk]);
       for (long long kx = A.RowIndex[k]; kx < A.RowIndex[k + 1]; kx++)
         if (ycols_end == std::find(ycols, ycols_end, A.ColIndex[kx]))
           fills.emplace(std::make_pair(y, A.ColIndex[kx]), std::make_pair(yk, kx));
     }
 
-    for (long long yk = A.RowIndex[y + ibegin]; yk < d; yk++) {
+    for (long long yk = A.RowIndex[y + ibegin]; yk < dy; yk++) {
       long long k = comm.iLocal(A.ColIndex[yk]);
       for (long long kx = A.RowIndex[k]; kx < A.RowIndex[k + 1]; kx++)
         if (ycols_end == std::find(ycols, ycols_end, A.ColIndex[kx]))
           fills.emplace(std::make_pair(y, A.ColIndex[kx]), std::make_pair(yk, kx));
+    }
+
+    for (long long yx = Far.RowIndex[y + ibegin]; yx < Far.RowIndex[y + ibegin + 1]; yx++) {
+      long long x = comm.iLocal(Far.ColIndex[yx]);
+      long long dx = std::distance(&A.ColIndex[0], std::find(&A.ColIndex[A.RowIndex[x]], &A.ColIndex[A.RowIndex[x + 1]], Far.ColIndex[yx]));
+      fills.emplace(std::make_pair(y, Far.ColIndex[yx]), std::make_pair(dy, dx));
     }
   }
 
@@ -152,7 +158,7 @@ void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], con
 
 void captureA(long long M, const long long N[], long long lenA, const std::complex<double>* A[], std::complex<double> C[]) {
   constexpr long long block_size = 1 << 11;
-  if (M > 0) {
+  if (0 < M && 0 < lenA) {
     long long K = std::max(M, block_size), B2 = K + M;
     std::vector<std::complex<double>> B(M * B2, 0.), TAU(M);
     std::complex<double> zero(0., 0.), one(1., 0.);
@@ -174,7 +180,7 @@ void captureA(long long M, const long long N[], long long lenA, const std::compl
       }
     }
 
-    if (loc > 0)
+    if (0 < loc)
       LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + loc, M, &B[0], B2, &TAU[0]);
     LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, &B[0], B2, C, M);
     LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &C[1], M);
@@ -183,14 +189,14 @@ void captureA(long long M, const long long N[], long long lenA, const std::compl
 
 void captureAmulB(long long M, long long N, const long long K[], long long lenAB, const std::complex<double>* A[], const std::complex<double>* B[], std::complex<double> C[]) {
   constexpr long long batch_size = 4;
-  if (M > 0) {
+  if (0 < M && 0 < lenAB) {
     long long B2 = std::max(M, batch_size * N) + M;
     std::vector<std::complex<double>> Y(M * B2, 0.), TAU(M);
     std::complex<double> zero(0., 0.), one(1., 0.);
 
     MKL_Zomatcopy('C', 'N', M, M, one, C, M, &Y[0], B2);
     long long rem = lenAB % batch_size;
-    if (rem > 0) {
+    if (0 < rem) {
       for (long long b = 0; b < rem; b++)
         cblas_zgemm(CblasColMajor, CblasTrans, CblasTrans, N, M, K[b], &one, B[b], K[b], A[b], M, &zero, &Y[M + b * N], B2);
 

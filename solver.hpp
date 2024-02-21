@@ -39,7 +39,7 @@ private:
 
 public:
 
-  UlvSolver(const long long Dims[], const CSR& csr, const CellComm& comm);
+  UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, const CellComm& comm);
 
   void loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm);
 
