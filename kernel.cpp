@@ -4,6 +4,7 @@
 #include <cblas.h>
 #include <algorithm>
 #include <numeric>
+#include <vector>
 #include <array>
 
 void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]) {
