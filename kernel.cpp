@@ -1,7 +1,7 @@
 
 #include <kernel.hpp>
 
-#include <cblas.h>
+#include <mkl.h>
 #include <algorithm>
 #include <numeric>
 #include <vector>

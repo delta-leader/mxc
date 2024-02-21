@@ -1,6 +1,6 @@
-FROM mcr.microsoft.com/devcontainers/cpp:1-ubuntu-22.04
+FROM mcr.microsoft.com/devcontainers/cpp:1-debian-11
 
-ARG REINSTALL_CMAKE_VERSION_FROM_SOURCE="3.22.2"
+ARG REINSTALL_CMAKE_VERSION_FROM_SOURCE="3.28.3"
 
 # Optionally install the cmake for vcpkg
 COPY ./reinstall-cmake.sh /tmp/
@@ -20,7 +20,5 @@ RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRO
 RUN echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | tee /etc/apt/sources.list.d/oneAPI.list
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-     && apt-get -y install --no-install-recommends python3-matplotlib intel-oneapi-mkl-devel libopenmpi-dev \
+     && apt-get -y install --no-install-recommends python3-matplotlib intel-oneapi-mkl-devel libmpich-dev \
      && rm -rf /var/lib/apt/lists/*
-
-ENV OMPI_MCA_btl_vader_single_copy_mechanism none
