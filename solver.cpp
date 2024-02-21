@@ -119,7 +119,7 @@ UlvSolver::UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, co
           fills.emplace(std::make_pair(y, A.ColIndex[kx]), std::make_pair(yk, kx));
     }
 
-    for (long long yx = Far.RowIndex[y + ibegin]; yx < Far.RowIndex[y + ibegin + 1]; yx++) {
+    for (long long yx = Far.RowIndex[y + ybegin]; yx < Far.RowIndex[y + ybegin + 1]; yx++) {
       long long x = comm.iLocal(Far.ColIndex[yx]);
       long long dx = std::distance(&A.ColIndex[0], std::find(&A.ColIndex[A.RowIndex[x]], &A.ColIndex[A.RowIndex[x + 1]], Far.ColIndex[yx]));
       fills.emplace(std::make_pair(y, Far.ColIndex[yx]), std::make_pair(dy, dx));
@@ -254,7 +254,8 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
   }
   
   basis.recompressR(epi, comm);
-  for (long long i = 0; i < xlen; i++)
+  std::complex<double> one(1., 0.);
+  for (long long i = 0; i < xlen; i++) {
     for (long long ij = C.RowIndex[i]; ij < C.RowIndex[i + 1]; ij++) {
       long long j = comm.iLocal(C.ColIndex[ij]);
       if (ybegin <= Ck[ij] && Ck[ij] < ybegin + nodes) {
@@ -271,6 +272,14 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
         C.RankN[ij] = 0;
       }
     }
+
+    if (ibegin <= i && i < ibegin + nodes)
+      for (long long ij = basis.CRows[i - ibegin]; ij < basis.CRows[i - ibegin + 1]; ij++) {
+        long long j = comm.iLocal(basis.CCols[ij]);
+        long long mn = basis.DimsLr[i] * basis.DimsLr[j];
+        cblas_zaxpy(mn, &one, basis.C[ij], 1, C(i, basis.CCols[ij]), 1);
+      }
+  }
 
   comm.neighbor_reduce(C.Data.data(), C.elementsOnRow.data());
   comm.neighbor_reduce(C.RankM.data(), C.blocksOnRow.data());
