@@ -217,6 +217,16 @@ void captureAmulB(long long M, long long N, const long long K[], long long lenAB
   }
 }
 
+void mulQhAQ(long long M, long long N, std::complex<double>* A, long long K1, const std::complex<double>* Ql, long long K2, const std::complex<double>* Qr) {
+  if (0 < M && 0 < N) {
+    std::vector<std::complex<double>> B(M * K2);
+    std::complex<double> zero(0., 0.), one(1., 0.);
+    cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, K2, N, &one, A, M, Qr, N, &zero, &B[0], M);
+    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, K1, K2, M, &one, Ql, M, &B[0], M, &zero, A, K1);
+    std::fill(&A[K1 * K2], &A[M * N], zero);
+  }
+}
+
 void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -258,19 +268,16 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
   for (long long i = 0; i < xlen; i++) {
     for (long long ij = C.RowIndex[i]; ij < C.RowIndex[i + 1]; ij++) {
       long long j = comm.iLocal(C.ColIndex[ij]);
+      long long k1 = 0, k2 = 0;
       if (ybegin <= Ck[ij] && Ck[ij] < ybegin + nodes) {
-        C.RankM[ij] = basis.DimsLr[i];
-        C.RankN[ij] = basis.DimsLr[j];
-        // TODO
-        //std::cout << comm.iGlobal(i) << ", " << C.ColIndex[ij] << ", " << Ck[ij] << std::endl;
+        k1 = basis.DimsLr[i];
+        k2 = basis.DimsLr[j];
+        mulQhAQ(C.M[ij], C.N[ij], C[ij], k1, basis.Q[i], k2, basis.Q[j]);
       }
-      else {
-        long long M = C.M[ij], N = C.N[ij];
-        std::complex<double>* Cptr = C[ij];
-        std::fill(Cptr, &Cptr[M * N], std::complex<double>(0., 0.));
-        C.RankM[ij] = 0;
-        C.RankN[ij] = 0;
-      }
+      else
+        std::fill(C[ij], C[ij] + (C.M[ij] * C.N[ij]), std::complex<double>(0., 0.));
+      C.RankM[ij] = k1;
+      C.RankN[ij] = k2;
     }
 
     if (ibegin <= i && i < ibegin + nodes)
@@ -287,4 +294,23 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
   comm.dup_bcast(C.Data.data(), C.DataOffsets.back());
   comm.dup_bcast(C.RankM.data(), C.RowIndex.back());
   comm.dup_bcast(C.RankN.data(), C.RowIndex.back());
+}
+
+void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
+  for (long long i = 0; i < nodes; i++)
+    for (long long ij = A.RowIndex[i + ibegin]; ij < A.RowIndex[i + ibegin + 1]; ij++) {
+      long long j = comm.iLocal(A.ColIndex[ij]);
+      mulQhAQ(A.M[ij], A.N[ij], A[ij], A.M[ij], basis.Q[i + ibegin], A.N[ij], basis.Q[j]);
+      A.RankM[ij] = basis.DimsLr[i + ibegin];
+      A.RankN[ij] = basis.DimsLr[j];
+    }
+
+  comm.neighbor_bcast(A.Data.data(), A.elementsOnRow.data());
+  comm.neighbor_bcast(A.RankM.data(), A.blocksOnRow.data());
+  comm.neighbor_bcast(A.RankN.data(), A.blocksOnRow.data());
+  comm.dup_bcast(A.Data.data(), A.DataOffsets.back());
+  comm.dup_bcast(A.RankM.data(), A.RowIndex.back());
+  comm.dup_bcast(A.RankN.data(), A.RowIndex.back());
 }

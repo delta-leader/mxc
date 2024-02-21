@@ -20,6 +20,7 @@ RUN wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRO
 RUN echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | tee /etc/apt/sources.list.d/oneAPI.list
 
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-     && apt-get -y install --no-install-recommends python3-matplotlib intel-oneapi-mkl-devel intel-oneapi-mpi-devel \
+     && apt-get -y install --no-install-recommends python3-matplotlib intel-oneapi-mkl-devel libopenmpi-dev \
      && rm -rf /var/lib/apt/lists/*
 
+ENV OMPI_MCA_btl_vader_single_copy_mechanism none

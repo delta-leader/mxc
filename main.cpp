@@ -112,6 +112,7 @@ int main(int argc, char* argv[]) {
   matrix.loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
   matrix.preCompressA2(epi, basis[levels], cell_comm[levels]);
   basis[levels - 1].adjustLowerRankGrowth(basis[levels], cell_comm[levels - 1]);
+  matrix.factorizeA(basis[levels], cell_comm[levels]);
 
   long long llen = cell_comm[levels].lenLocal();
   long long gbegin = cell_comm[levels].oGlobal();

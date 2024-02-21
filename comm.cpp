@@ -186,7 +186,10 @@ template<typename T> inline void CellComm::neighbor_reduce(T* data, const long l
     record_mpi();
     for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
       long long llen = offsets[p + 1] - offsets[p];
-      MPI_Allreduce(MPI_IN_PLACE, &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].second);
+      if (p == Proc)
+        MPI_Reduce(MPI_IN_PLACE, &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].first, NeighborComm[p].second);
+      else
+        MPI_Reduce(&data[offsets[p]], &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].first, NeighborComm[p].second);
     }
     record_mpi();
   }
