@@ -1,23 +1,28 @@
 
-
 CXX		= mpicxx -std=c++17
 CFLAGS	= -O3 -m64 -Wall -Wextra -fopenmp -I. -I"${MKLROOT}/include" -D"MKL_ILP64" -D"MKL_Complex16=std::complex<double>"
 LDFLAGS	= -L${MKLROOT}/lib -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
 
-ODIR	= ./obj
-LDIR	= ./lib
+OBJDIR	= ./obj
 
-DEPS	= basis.hpp build_tree.hpp comm.hpp geometry.hpp kernel.hpp solver.hpp
-objs	= main.o basis.o build_tree.o comm.o kernel.o solver.o 
-OBJ = $(patsubst %,$(ODIR)/%,$(objs))
+HEADER	= basis.hpp build_tree.hpp comm.hpp geometry.hpp kernel.hpp solver.hpp
+SRCS		= main.cpp basis.cpp build_tree.cpp comm.cpp kernel.cpp solver.cpp
 
-$(ODIR)/%.o: %.cpp $(DEPS)
+OBJS 	= $(addprefix $(OBJDIR)/,$(patsubst %.cpp,%.o,$(SRCS)))
+
+$(OBJDIR)/%.o: %.cpp $(HEADER)
 	$(CXX) -c -o $@ $< $(CFLAGS)
 
-main.app: $(OBJ)
+main.app: $(OBJS)
 	$(CXX) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+$(OBJS): | $(OBJDIR)
+ 
+$(OBJDIR):
+	mkdir $(OBJDIR)
 
 .PHONY: clean
 
 clean:
-	rm -f $(ODIR)/*.o *.app
+	rm -f $(OBJDIR)/*.o *.app
+	rm -r $(OBJDIR)
