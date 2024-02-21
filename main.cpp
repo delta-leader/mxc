@@ -23,11 +23,11 @@ void solveRelErr(double* err_out, const std::complex<double>* X, const std::comp
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
-  long long Nbody = argc > 1 ? atol(argv[1]) : 8192;
+  long long Nbody = argc > 1 ? atoll(argv[1]) : 8192;
   double theta = argc > 2 ? atof(argv[2]) : 1e0;
-  long long leaf_size = argc > 3 ? atol(argv[3]) : 256;
+  long long leaf_size = argc > 3 ? atoll(argv[3]) : 256;
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
-  long long rank = argc > 5 ? atol(argv[5]) : 100;
+  long long rank = argc > 5 ? atoll(argv[5]) : 100;
   const char* fname = argc > 6 ? argv[6] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -108,10 +108,10 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = timer.first;
   timer.first = 0;
 
-  /*UlvSolver matrix(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
+  UlvSolver matrix(basis[levels].Dims.data(), cellNear, cell_comm[levels]);
   matrix.loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
   matrix.preCompressA2(epi, basis[levels], cell_comm[levels]);
-  basis[levels - 1].adjustLowerRankGrowth(basis[levels], cell_comm[levels - 1]);*/
+  basis[levels - 1].adjustLowerRankGrowth(basis[levels], cell_comm[levels - 1]);
 
   long long llen = cell_comm[levels].lenLocal();
   long long gbegin = cell_comm[levels].oGlobal();
@@ -126,7 +126,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  mv(nrhs, &X1[0], lenX);
+  mv(nrhs, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
   timer.first = 0;
 
   double cerr = 0.;
-  mat_vec_reference(eval, lenX, Nbody, nrhs, &X2[0], lenX, &Xbody[0], Nbody, &body[body_local[0] * 3], &body[0]);
+  mat_vec_reference(eval, lenX, Nbody, nrhs, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX * nrhs);
 

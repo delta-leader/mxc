@@ -66,5 +66,5 @@ private:
 public:
   MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CellComm comm[], long long levels);
 
-  void operator() (long long nrhs, std::complex<double> X[], long long ldX) const;
+  void operator() (long long nrhs, std::complex<double> X[]) const;
 };

@@ -145,25 +145,25 @@ void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], con
       long long n = cells[x].Body[1] - cells[x].Body[0];
       const double* Ibodies = &bodies[3 * cells[y].Body[0]];
       const double* Jbodies = &bodies[3 * cells[x].Body[0]];
-      gen_matrix(eval, m, n, Ibodies, Jbodies, A[yx], m);
+      gen_matrix(eval, m, n, Ibodies, Jbodies, A[yx]);
     }
   }
 }
 
-void captureA(long long M, const long long N[], long long lenA, const std::complex<double>* A[], const long long LDA[], std::complex<double> C[], long long LDC) {
+void captureA(long long M, const long long N[], long long lenA, const std::complex<double>* A[], std::complex<double> C[]) {
   constexpr long long block_size = 1 << 11;
   if (M > 0) {
     long long K = std::max(M, block_size), B2 = K + M;
     std::vector<std::complex<double>> B(M * B2, 0.), TAU(M);
-    std::complex<double> zero(0., 0.);
+    std::complex<double> zero(0., 0.), one(1., 0.);
 
-    MKL_Zomatcopy('C', 'N', M, M, std::complex<double>(1., 0.), C, LDC, &B[0], B2);
+    MKL_Zomatcopy('C', 'N', M, M, one, C, M, &B[0], B2);
     long long loc = 0;
     for (long long i = 0; i < lenA; i++) {
       long long loc_i = 0;
       while(loc_i < N[i]) {
         long long len = std::min(N[i] - loc_i, K - loc);
-        MKL_Zomatcopy('C', 'T', M, len, std::complex<double>(1., 0.), A[i] + loc_i * LDA[i], LDA[i], &B[M + loc], B2);
+        MKL_Zomatcopy('C', 'T', M, len, one, &(A[i])[loc_i * M], M, &B[M + loc], B2);
         loc_i = loc_i + len;
         loc = loc + len;
         if (loc == K) {
@@ -176,23 +176,23 @@ void captureA(long long M, const long long N[], long long lenA, const std::compl
 
     if (loc > 0)
       LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + loc, M, &B[0], B2, &TAU[0]);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, &B[0], B2, C, LDC);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &C[1], LDC);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, &B[0], B2, C, M);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &C[1], M);
   }
 }
 
-void captureAmulB(long long M, long long N, const long long K[], long long lenAB, const std::complex<double>* A[], const long long LDA[], const std::complex<double>* B[], const long long LDB[], std::complex<double> C[], long long LDC) {
+void captureAmulB(long long M, long long N, const long long K[], long long lenAB, const std::complex<double>* A[], const std::complex<double>* B[], std::complex<double> C[]) {
   constexpr long long batch_size = 4;
   if (M > 0) {
     long long B2 = std::max(M, batch_size * N) + M;
     std::vector<std::complex<double>> Y(M * B2, 0.), TAU(M);
     std::complex<double> zero(0., 0.), one(1., 0.);
 
-    MKL_Zomatcopy('C', 'N', M, M, one, C, LDC, &Y[0], B2);
+    MKL_Zomatcopy('C', 'N', M, M, one, C, M, &Y[0], B2);
     long long rem = lenAB % batch_size;
     if (rem > 0) {
       for (long long b = 0; b < rem; b++)
-        cblas_zgemm(CblasColMajor, CblasTrans, CblasTrans, N, M, K[b], &one, B[b], LDB[b], A[b], LDA[b], &zero, &Y[M + b * N], B2);
+        cblas_zgemm(CblasColMajor, CblasTrans, CblasTrans, N, M, K[b], &one, B[b], K[b], A[b], M, &zero, &Y[M + b * N], B2);
 
       LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + rem * N, M, &Y[0], B2, &TAU[0]);
       LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &Y[1], B2);
@@ -200,32 +200,16 @@ void captureAmulB(long long M, long long N, const long long K[], long long lenAB
 
     for (long long i = rem; i < lenAB; i += batch_size) {
       for (long long b = 0; b < batch_size; b++)
-        cblas_zgemm(CblasColMajor, CblasTrans, CblasTrans, N, M, K[i + b], &one, B[i + b], LDB[i + b], A[i + b], LDA[i + b], &zero, &Y[M + b * N], B2);
+        cblas_zgemm(CblasColMajor, CblasTrans, CblasTrans, N, M, K[i + b], &one, B[i + b], K[i + b], A[i + b], M, &zero, &Y[M + b * N], B2);
 
       LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M + batch_size * N, M, &Y[0], B2, &TAU[0]);
       LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &Y[1], B2);
     }
 
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, &Y[0], B2, C, LDC);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &C[1], LDC);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, &Y[0], B2, C, M);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &C[1], M);
   }
 }
-
-/*void captureAmulB(long long M, long long N, const long long K[], long long lenAB, const std::complex<double>* A[], const long long LDA[], const std::complex<double>* B[], const long long LDB[], std::complex<double> C[], long long LDC) {
-  if (M > 0) {
-    long long B2 = N + M;
-    std::vector<std::complex<double>> Y(M * B2, 0.), TAU(M);
-    std::complex<double> zero(0., 0.), one(1., 0.);
-
-    MKL_Zomatcopy('C', 'N', M, M, one, C, LDC, &Y[0], B2);
-    for (long long b = 0; b < lenAB; b++)
-      cblas_zgemm(CblasColMajor, CblasTrans, CblasTrans, N, M, K[b], &one, B[b], LDB[b], A[b], LDA[b], &one, &Y[M], B2);
-
-    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, B2, M, &Y[0], B2, &TAU[0]);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, &Y[0], B2, C, LDC);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &C[1], LDC);
-  }
-}*/
 
 void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& comm) {
   long long ibegin = comm.oLocal();
@@ -245,22 +229,21 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
     long long offsetCi = C.RowIndex[i + ibegin];
     long long lenCi = C.RowIndex[i + ibegin + 1] - offsetCi;
     if (0 < lenCi)
-      captureA(m, &C.N[offsetCi], lenCi, &Cptr[offsetCi - C.RowIndex[ibegin]], &C.M[offsetCi], basis.R[i + ibegin], m);
+      captureA(m, &C.N[offsetCi], lenCi, &Cptr[offsetCi - C.RowIndex[ibegin]], basis.R[i + ibegin]);
     for (long long ij = C.RowIndex[i + ibegin]; ij < C.RowIndex[i + ibegin + 1]; ij++) {
-      std::vector<const std::complex<double>*> a, b;
-      std::vector<long long> am, bm;
+      std::vector<const std::complex<double>*> Aptr, Bptr;
+      std::vector<long long> K;
 
       for (long long ik = A.RowIndex[i + ibegin]; ik < A.RowIndex[i + ibegin + 1]; ik++) {
         long long k = comm.iLocal(A.ColIndex[ik]);
         long long kj = std::distance(&A.ColIndex[0], std::find(&A.ColIndex[A.RowIndex[k]], &A.ColIndex[A.RowIndex[k + 1]], C.ColIndex[ij]));
         if (k != i + ibegin && kj != A.RowIndex[k + 1]) {
-          a.emplace_back(A[ik]);
-          b.emplace_back(A[kj]);
-          am.emplace_back(A.M[ik]);
-          bm.emplace_back(A.M[kj]);
+          Aptr.emplace_back(A[ik]);
+          Bptr.emplace_back(A[kj]);
+          K.emplace_back(A.M[kj]);
         }
       }
-      captureAmulB(m, C.N[ij], &bm[0], a.size(), &a[0], &am[0], &b[0], &bm[0], basis.R[i + ibegin], m);
+      captureAmulB(m, C.N[ij], &K[0], Aptr.size(), &Aptr[0], &Bptr[0], basis.R[i + ibegin]);
     }
   }
   

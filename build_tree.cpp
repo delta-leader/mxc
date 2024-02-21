@@ -6,7 +6,6 @@
 #include <cmath>
 #include <algorithm>
 #include <array>
-#include <set>
 
 void get_bounds(const double* bodies, long long nbodies, double R[], double C[]) {
   double Xmin[3];
@@ -178,24 +177,4 @@ CSR::CSR(char NoF, long long ncells, const Cell* cells, double theta) {
     RowIndex[n] = std::distance(LIL.begin(), 
       std::find_if(LIL.begin() + RowIndex[n - 1], LIL.end(), 
         [=](const std::pair<long long, long long>& i) { return n <= i.first; }));
-}
-
-CSR::CSR(const CSR& A, const CSR& B) {
-  long long M = A.RowIndex.size() - 1;
-  RowIndex.resize(M + 1);
-  ColIndex.clear();
-  RowIndex[0] = 0;
-
-  for (long long y = 0; y < M; y++) {
-    std::set<long long> cols;
-    std::for_each(&A.ColIndex[A.RowIndex[y]], &A.ColIndex[A.RowIndex[y + 1]], [&](long long x) {
-      std::for_each(&B.ColIndex[B.RowIndex[x]], &B.ColIndex[B.RowIndex[x + 1]], [&](long long z) {
-        cols.insert(z);
-      });
-    });
-
-    for (std::set<long long>::iterator i = cols.begin(); i != cols.end(); i = std::next(i))
-      ColIndex.push_back(*i);
-    RowIndex[y + 1] = (long long)ColIndex.size();
-  }
 }

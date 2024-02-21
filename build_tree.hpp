@@ -17,7 +17,6 @@ public:
   std::vector<long long> ColIndex;
 
   CSR(char NoF, long long ncells, const Cell* cells, double theta);
-  CSR(const CSR& A, const CSR& B);
 };
 
 void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels);

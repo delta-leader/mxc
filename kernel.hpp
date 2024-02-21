@@ -55,8 +55,8 @@ public:
 };
 
 
-void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[], long long lda);
+void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]);
 
-long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], std::complex<double> U[], long long ldu);
+long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], std::complex<double> U[]);
 
-void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, long long nrhs, std::complex<double> B[], long long ldB, const std::complex<double> X[], long long ldX, const double ibodies[], const double jbodies[]);
+void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, long long nrhs, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]);
