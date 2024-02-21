@@ -30,6 +30,7 @@ private:
 
   std::vector<double> Sdata;
   std::vector<const double*> S;
+  std::vector<long long> ParentSequenceNum;
   std::vector<long long> elementsOnRow;
   std::vector<long long> localChildOffsets;
   std::vector<long long> localChildLrDims;
@@ -47,9 +48,8 @@ public:
   
   ClusterBasis() {}
   ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
-  
+  long long copyOffset(long long i) const;
   void recompressR(double epi, const CellComm& comm);
-  
   void adjustLowerRankGrowth(const ClusterBasis& prev_basis, const CellComm& comm);
 };
 

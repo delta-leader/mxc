@@ -86,27 +86,34 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   long long nodes = comm.lenLocal();
   long long ybegin = comm.oGlobal();
 
-  localChildOffsets = std::vector<long long>(nodes + 1);
-  localChildLrDims = std::vector<long long>(cells[ybegin + nodes - 1].Child[1] - cells[ybegin].Child[0]);
   localChildIndex = prev_comm.iLocal(cells[ybegin].Child[0]);
-  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [&](const Cell& c) { return c.Child[1] - cells[ybegin].Child[0]; });
-  std::copy(&prev_basis.DimsLr[localChildIndex], &prev_basis.DimsLr[localChildIndex + localChildLrDims.size()], localChildLrDims.begin());
+  localChildOffsets = std::vector<long long>(nodes + 1);
   localChildOffsets[0] = 0;
+  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [&](const Cell& c) { return c.Child[1] - cells[ybegin].Child[0]; });
+
+  localChildLrDims = std::vector<long long>(localChildOffsets.back());
+  std::copy(&prev_basis.DimsLr[localChildIndex], &prev_basis.DimsLr[localChildIndex + localChildLrDims.size()], localChildLrDims.begin());
 
   Dims = std::vector<long long>(xlen, 0);
   DimsLr = std::vector<long long>(xlen, 0);
+  ParentSequenceNum = std::vector<long long>(xlen);
   elementsOnRow = std::vector<long long>(xlen);
   S = std::vector<const double*>(xlen);
   Q = std::vector<const std::complex<double>*>(xlen);
   R = std::vector<std::complex<double>*>(xlen);
 
-  for (long long i = 0; i < nodes; i++)
-    Dims[i + ibegin] = localChildOffsets[i] == localChildOffsets[i + 1] ? (cells[i + ybegin].Body[1] - cells[i + ybegin].Body[0]) :
-      std::reduce(&localChildLrDims[localChildOffsets[i]], &localChildLrDims[localChildOffsets[i + 1]]);
+  std::transform(&cells[ybegin], &cells[ybegin + nodes], &ParentSequenceNum[ibegin], [](const Cell& c) { return c.ParentSeq; });
+  if (localChildOffsets.back() == 0)
+    std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
+  else
+    std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin], 
+      [&](long long start, long long end) { return std::reduce(&localChildLrDims[start], &localChildLrDims[end]); });
 
   const std::vector<long long> ones(xlen, 1);
   comm.neighbor_bcast(Dims.data(), ones.data());
+  comm.neighbor_bcast(ParentSequenceNum.data(), ones.data());
   comm.dup_bcast(Dims.data(), xlen);
+  comm.dup_bcast(ParentSequenceNum.data(), xlen);
 
   std::vector<long long> Qoffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), elementsOnRow.begin(), [](const long long d) { return d * d; });
@@ -136,7 +143,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
     if (cend <= childi)
       std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
     for (long long j = childi; j < cend; j++) {
-      long long offset = std::reduce(&prev_basis.DimsLr[childi], &prev_basis.DimsLr[j]);
+      long long offset = prev_basis.copyOffset(j);
       long long len = prev_basis.DimsLr[j];
       std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske[offset * 3]);
     }
@@ -176,6 +183,11 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
       long long m = DimsLr[i + ibegin], n = DimsLr[j];
       gen_matrix(eval, m, n, S[i + ibegin], S[j], &Cdata[Coffsets[ij]]);
     }
+}
+
+long long ClusterBasis::copyOffset(long long i) const {
+  long long start = std::max((long long)0, i - ParentSequenceNum[i]);
+  return std::reduce(&DimsLr[start], &DimsLr[i], (long long)0);
 }
 
 long long compute_recompression(double epi, long long DimQ, long long RankQ, std::complex<double> Q[], std::complex<double> R[]) {
@@ -316,10 +328,10 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
     long long childi = localChildOffsets[i];
     long long cend = localChildOffsets[i + 1];
     for (long long j = childi; j < cend && 0 < N; j++) {
-      long long offsetOld = std::reduce(&localChildLrDims[childi], &localChildLrDims[j]);
-      long long offsetNew = std::reduce(&newLocalChildLrDims[childi], &newLocalChildLrDims[j]);
       long long m1 = localChildLrDims[j], m2 = newLocalChildLrDims[j];
       long long lj = localChildIndex + j;
+      long long offsetOld = std::reduce(&localChildLrDims[childi], &localChildLrDims[j]);
+      long long offsetNew = prev_basis.copyOffset(lj);
       cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m2, N, m1, &one, 
         prev_basis.R[lj], prev_basis.Dims[lj], &(oldQ[i])[offsetOld], oldDims[i], &zero, &Qdata[Qoffsets[i + ibegin] + offsetNew], M);
     }
