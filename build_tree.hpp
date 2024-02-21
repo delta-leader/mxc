@@ -1,12 +1,11 @@
 
 #pragma once
 
-#include <cstdint>
 #include <vector>
 
 class Cell {
 public:
-  int64_t Child[2], Body[2];
+  long long Child[2], Body[2];
   double R[3], C[3];
 
   Cell();
@@ -14,13 +13,13 @@ public:
 
 class CSR {
 public:
-  std::vector<int64_t> RowIndex;
-  std::vector<int64_t> ColIndex;
+  std::vector<long long> RowIndex;
+  std::vector<long long> ColIndex;
 
-  CSR(char NoF, int64_t ncells, const Cell* cells, double theta);
+  CSR(char NoF, long long ncells, const Cell* cells, double theta);
   CSR(const CSR& A, const CSR& B);
 };
 
-void buildTree(Cell* cells, double* bodies, int64_t nbodies, int64_t levels);
+void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels);
 
-void buildTreeBuckets(Cell* cells, const double* bodies, const int64_t buckets[], int64_t levels);
+void buildTreeBuckets(Cell* cells, const double* bodies, const long long buckets[], long long levels);

@@ -8,15 +8,15 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-void uniform_unit_cube(double* bodies, int64_t nbodies, double diameter, int64_t dim) {
-  int64_t side = ceil(pow(nbodies, 1. / dim));
-  int64_t lens[3] = { dim > 0 ? side : 1, dim > 1 ? side : 1, dim > 2 ? side : 1 };
+void uniform_unit_cube(double* bodies, long long nbodies, double diameter, long long dim) {
+  long long side = ceil(pow(nbodies, 1. / dim));
+  long long lens[3] = { dim > 0 ? side : 1, dim > 1 ? side : 1, dim > 2 ? side : 1 };
   double step = diameter / side;
 
-  for (int64_t i = 0; i < lens[0]; ++i)
-    for (int64_t j = 0; j < lens[1]; ++j)
-       for (int64_t k = 0; k < lens[2]; ++k) {
-    int64_t x = k + lens[2] * (j + lens[1] * i);
+  for (long long i = 0; i < lens[0]; ++i)
+    for (long long j = 0; j < lens[1]; ++j)
+       for (long long k = 0; k < lens[2]; ++k) {
+    long long x = k + lens[2] * (j + lens[1] * i);
     if (x < nbodies) {
       bodies[x * 3] = i * step;
       bodies[x * 3 + 1] = j * step;
@@ -25,11 +25,11 @@ void uniform_unit_cube(double* bodies, int64_t nbodies, double diameter, int64_t
   }
 }
 
-void uniform_unit_cube_rnd(double* bodies, int64_t nbodies, int64_t dim, unsigned int seed) {
+void uniform_unit_cube_rnd(double* bodies, long long nbodies, long long dim, unsigned int seed) {
   if (seed > 0)
     srand(seed);
 
-  for (int64_t i = 0; i < nbodies; i++) {
+  for (long long i = 0; i < nbodies; i++) {
     double r0 = dim > 0 ? ((double)rand() / RAND_MAX) : 0.;
     double r1 = dim > 1 ? ((double)rand() / RAND_MAX) : 0.;
     double r2 = dim > 2 ? ((double)rand() / RAND_MAX) : 0.;
@@ -39,35 +39,35 @@ void uniform_unit_cube_rnd(double* bodies, int64_t nbodies, int64_t dim, unsigne
   }
 }
 
-void mesh_unit_cube(double* bodies, int64_t nbodies) {
+void mesh_unit_cube(double* bodies, long long nbodies) {
   if (nbodies < 8) {
     std::cerr << "Error cubic mesh size (GT/EQ. 8 required): %" << nbodies << "." << std::endl;
     return;
   }
 
   // compute splits: solution to 6x^2 + 12x + 8 = nbodies.
-  int64_t x_lower_bound = (int64_t)floor(sqrt(6 * nbodies - 12) / 6 - 1);
-  int64_t x_splits[3] = { x_lower_bound, x_lower_bound, x_lower_bound };
+  long long x_lower_bound = (long long)floor(sqrt(6 * nbodies - 12) / 6 - 1);
+  long long x_splits[3] = { x_lower_bound, x_lower_bound, x_lower_bound };
   
-  for (int64_t i = 0; i < 3; i++) {
-    int64_t x = x_splits[0];
-    int64_t y = x_splits[1];
-    int64_t z = x_splits[2];
-    int64_t mesh_points = 8 + 4 * x + 4 * y + 4 * z + 2 * x * y + 2 * x * z + 2 * y * z;
+  for (long long i = 0; i < 3; i++) {
+    long long x = x_splits[0];
+    long long y = x_splits[1];
+    long long z = x_splits[2];
+    long long mesh_points = 8 + 4 * x + 4 * y + 4 * z + 2 * x * y + 2 * x * z + 2 * y * z;
     if (mesh_points < nbodies)
       x_splits[i] = x_splits[i] + 1;
   }
 
-  int64_t lens[7] = { 8, 4 * x_splits[0], 4 * x_splits[1], 4 * x_splits[2],
+  long long lens[7] = { 8, 4 * x_splits[0], 4 * x_splits[1], 4 * x_splits[2],
     2 * x_splits[0] * x_splits[1], 2 * x_splits[0] * x_splits[2], 2 * x_splits[1] * x_splits[2] };
 
   double segment_x = 2. / (1. + x_splits[0]);
   double segment_y = 2. / (1. + x_splits[1]);
   double segment_z = 2. / (1. + x_splits[2]);
 
-  for (int64_t i = 0; i < nbodies; i++) {
-    int64_t region = 0;
-    int64_t ri = i;
+  for (long long i = 0; i < nbodies; i++) {
+    long long region = 0;
+    long long ri = i;
     while (region < 6 && ri >= lens[region]) {
       ri = ri - lens[region];
       region = region + 1;
@@ -99,24 +99,24 @@ void mesh_unit_cube(double* bodies, int64_t nbodies) {
       break;
     }
     case 4: { // surface parallel to X-Y plane
-      int64_t x = (ri >> 1) / x_splits[1];
-      int64_t y = (ri >> 1) - x * x_splits[1];
+      long long x = (ri >> 1) / x_splits[1];
+      long long y = (ri >> 1) - x * x_splits[1];
       bodies[i * 3] = -1 + (x + 1) * segment_x;
       bodies[i * 3 + 1] = -1 + (y + 1) * segment_y;
       bodies[i * 3 + 2] = (double)(1 - 2 * (ri & 1));
       break;
     }
     case 5: { // surface parallel to X-Z plane
-      int64_t x = (ri >> 1) / x_splits[2];
-      int64_t z = (ri >> 1) - x * x_splits[2];
+      long long x = (ri >> 1) / x_splits[2];
+      long long z = (ri >> 1) - x * x_splits[2];
       bodies[i * 3] = -1 + (x + 1) * segment_x;
       bodies[i * 3 + 1] = (double)(1 - 2 * (ri & 1));
       bodies[i * 3 + 2] = -1 + (z + 1) * segment_z;
       break;
     }
     case 6: { // surface parallel to Y-Z plane
-      int64_t y = (ri >> 1) / x_splits[2];
-      int64_t z = (ri >> 1) - y * x_splits[2];
+      long long y = (ri >> 1) / x_splits[2];
+      long long z = (ri >> 1) - y * x_splits[2];
       bodies[i * 3] = (double)(1 - 2 * (ri & 1));
       bodies[i * 3 + 1] = -1 + (y + 1) * segment_y;
       bodies[i * 3 + 2] = -1 + (z + 1) * segment_z;
@@ -128,12 +128,12 @@ void mesh_unit_cube(double* bodies, int64_t nbodies) {
   }
 }
 
-void mesh_unit_sphere(double* bodies, int64_t nbodies, double r) {
+void mesh_unit_sphere(double* bodies, long long nbodies, double r) {
   const double phi = M_PI * (3. - std::sqrt(5.));  // golden angle in radians
   const double d = r + r;
   const double r2 = r * r;
 
-  for (int64_t i = 0; i < nbodies; ++i) {
+  for (long long i = 0; i < nbodies; ++i) {
     const double y = r - ((double)i / (double)(nbodies - 1)) * d;  // y goes from r to -r
 
     // Note: setting constant radius = 1 will produce a cylindrical shape
@@ -148,12 +148,12 @@ void mesh_unit_sphere(double* bodies, int64_t nbodies, double r) {
   }
 }
 
-void read_sorted_bodies(int64_t* nbodies, int64_t lbuckets, double* bodies, int64_t buckets[], const char* fname) {
+void read_sorted_bodies(long long* nbodies, long long lbuckets, double* bodies, long long buckets[], const char* fname) {
   std::ifstream file(fname);
 
-  int64_t curr = 1, cbegin = 0, iter = 0, len = *nbodies;
+  long long curr = 1, cbegin = 0, iter = 0, len = *nbodies;
   while (iter < len && !file.eof()) {
-    int64_t b = 0;
+    long long b = 0;
     double x = 0., y = 0., z = 0.;
     file >> x >> y >> z >> b;
 

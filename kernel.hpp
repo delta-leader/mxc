@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <complex>
 #include <cmath>
 
@@ -56,8 +55,8 @@ public:
 };
 
 
-void gen_matrix(const MatrixAccessor& eval, int64_t m, int64_t n, const double* bi, const double* bj, std::complex<double> Aij[], int64_t lda);
+void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[], long long lda);
 
-int64_t interpolative_decomp_aca(double epi, const MatrixAccessor& eval, int64_t M, int64_t N, int64_t K, const double bi[], const double bj[], int64_t ipiv[], std::complex<double> U[], int64_t ldu);
+long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], std::complex<double> U[], long long ldu);
 
-void mat_vec_reference(const MatrixAccessor& eval, int64_t M, int64_t N, int64_t nrhs, std::complex<double> B[], int64_t ldB, const std::complex<double> X[], int64_t ldX, const double ibodies[], const double jbodies[]);
+void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, long long nrhs, std::complex<double> B[], long long ldB, const std::complex<double> X[], long long ldX, const double ibodies[], const double jbodies[]);

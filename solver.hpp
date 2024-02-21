@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <cstdint>
 #include <complex>
 
 class CSR;
@@ -12,35 +11,35 @@ class MatrixAccessor;
 
 class BlockSparseMatrix {
 public:
-  std::vector<int64_t> RowIndex;
-  std::vector<int64_t> ColIndex;
-  std::vector<int64_t> blocksOnRow;
-  std::vector<int64_t> elementsOnRow;
+  std::vector<long long> RowIndex;
+  std::vector<long long> ColIndex;
+  std::vector<long long> blocksOnRow;
+  std::vector<long long> elementsOnRow;
 
   std::vector<std::complex<double>> Data;
-  std::vector<int64_t> DataOffsets;
-  std::vector<int64_t> M;
-  std::vector<int64_t> N;
-  std::vector<int64_t> RankM;
-  std::vector<int64_t> RankN;
+  std::vector<long long> DataOffsets;
+  std::vector<long long> M;
+  std::vector<long long> N;
+  std::vector<long long> RankM;
+  std::vector<long long> RankN;
 
   BlockSparseMatrix() {};
-  BlockSparseMatrix(int64_t len, const std::pair<int64_t, int64_t> lil[], const std::pair<int64_t, int64_t> dim[], const CellComm& comm);
-  const std::complex<double>* operator[](int64_t i) const;
-  const std::complex<double>* operator()(int64_t y, int64_t x) const;
-  std::complex<double>* operator[](int64_t i);
-  std::complex<double>* operator()(int64_t y, int64_t x);
+  BlockSparseMatrix(long long len, const std::pair<long long, long long> lil[], const std::pair<long long, long long> dim[], const CellComm& comm);
+  const std::complex<double>* operator[](long long i) const;
+  const std::complex<double>* operator()(long long y, long long x) const;
+  std::complex<double>* operator[](long long i);
+  std::complex<double>* operator()(long long y, long long x);
 };
 
 class UlvSolver {
 private:
   BlockSparseMatrix A;
   BlockSparseMatrix C;
-  std::vector<int64_t> Ck;
+  std::vector<long long> Ck;
 
 public:
 
-  UlvSolver(const int64_t Dims[], const CSR& csr, const CellComm& comm);
+  UlvSolver(const long long Dims[], const CSR& csr, const CellComm& comm);
 
   void loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm);
 
