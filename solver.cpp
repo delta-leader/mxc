@@ -156,6 +156,31 @@ void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], con
   }
 }
 
+void UlvSolver::loadDataInterNode(const Cell cells[], const UlvSolver& prev_matrix, const CellComm& prev_comm, const CellComm& comm) {
+  long long ibegin = comm.oLocal();
+  long long ybegin = comm.oGlobal();
+  long long nodes = comm.lenLocal();
+  long long lowerY = prev_comm.oGlobal();
+  long long lowerZ = lowerY + prev_comm.lenLocal();
+
+  long long cbegin = std::distance(&cells[ybegin], std::find_if(&cells[ybegin], &cells[ybegin + nodes], 
+    [&](const Cell& c) { return c.Child[0] <= lowerY && lowerY < c.Child[1]; }));
+  long long cend = std::distance(&cells[ybegin + cbegin], std::find_if(&cells[ybegin + cbegin], &cells[ybegin + nodes], 
+    [&](const Cell& c) { return c.Child[0] <= lowerZ && lowerZ < c.Child[1]; }));
+  ibegin = ibegin + cbegin;
+  ybegin = ybegin + cbegin;
+  nodes = cend - cbegin;
+
+  long long lowerI = prev_comm.oLocal();
+  std::vector<long long> localChildOffsets(nodes + 1);
+  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [&](const Cell& c) { return lowerI + c.Child[1] - cells[ybegin].Child[0]; });
+  localChildOffsets[0] = lowerI;
+
+  for (int64_t i = 0; i < nodes; i++) {
+
+  }
+}
+
 void captureA(long long M, const long long N[], long long lenA, const std::complex<double>* A[], std::complex<double> C[]) {
   constexpr long long block_size = 1 << 11;
   if (0 < M && 0 < lenA) {

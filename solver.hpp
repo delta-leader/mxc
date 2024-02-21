@@ -43,6 +43,8 @@ public:
 
   void loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm);
 
+  void loadDataInterNode(const Cell cells[], const UlvSolver& prev_matrix, const CellComm& prev_comm, const CellComm& comm);
+
   void preCompressA2(double epi, ClusterBasis& basis, const CellComm& comm);
 
   void factorizeA(const ClusterBasis& basis, const CellComm& comm);
