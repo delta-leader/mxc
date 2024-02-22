@@ -76,6 +76,7 @@ UlvSolver::UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, co
   long long ibegin = comm.oLocal();
   long long ybegin = comm.oGlobal();
   long long nodes = comm.lenLocal();
+  long long xlen = comm.lenNeighbors();
 
   long long lenA = Near.RowIndex[ybegin + nodes] - Near.RowIndex[ybegin];
   std::vector<std::pair<long long, long long>> lil(lenA), dims(lenA);
@@ -132,6 +133,10 @@ UlvSolver::UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, co
     [&](std::pair<std::pair<long long, long long>, std::pair<long long, long long>> f) { return A.ColIndex[f.second.first]; });
   comm.neighbor_bcast(Ck.data(), C.blocksOnRow.data());
   comm.dup_bcast(Ck.data(), C.RowIndex.back());
+
+  Apiv = std::vector<std::vector<long long>>(xlen);
+  for (long long i = 0; i < xlen; i++)
+    Apiv[i] = std::vector<long long>(Dims[i], 0);
 }
 
 void UlvSolver::loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm) {
@@ -156,19 +161,12 @@ void UlvSolver::loadDataInterNode(const Cell cells[], const UlvSolver& prev_matr
   long long lowerY = prev_comm.oGlobal();
   long long lowerZ = lowerY + prev_comm.lenLocal();
 
-  long long cbegin = std::distance(&cells[ybegin], std::find_if(&cells[ybegin], &cells[ybegin + nodes], 
-    [&](const Cell& c) { return c.Child[0] <= lowerY && lowerY < c.Child[1]; }));
-  long long cend = std::distance(&cells[ybegin + cbegin], std::find_if(&cells[ybegin + cbegin], &cells[ybegin + nodes], 
-    [&](const Cell& c) { return c.Child[0] <= lowerZ && lowerZ < c.Child[1]; }));
-  ibegin = ibegin + cbegin;
-  ybegin = ybegin + cbegin;
-  nodes = cend - cbegin;
-
-  long long lowerI = prev_comm.oLocal() - cells[ybegin].Child[0];
   std::complex<double> one(1., 0.);
   for (long long i = 0; i < nodes; i++) {
-    long long cybegin = cells[i + ybegin].Child[0] + lowerI;
-    long long cyend = cells[i + ybegin].Child[1] + lowerI;
+    long long ci = std::max(lowerY, cells[i + ybegin].Child[0]);
+    long long clen = std::min(lowerZ, cells[i + ybegin].Child[1]) - ci;
+    long long cybegin = prev_comm.iLocal(ci);
+    long long cyend = cybegin + clen;
 
     for (long long ij = A.RowIndex[i + ibegin]; ij < A.RowIndex[i + ibegin + 1]; ij++) {
       long long j = A.ColIndex[ij];
@@ -189,9 +187,8 @@ void UlvSolver::loadDataInterNode(const Cell cells[], const UlvSolver& prev_matr
           }
           else if (0 <= lowC) {
             std::array<long long, 4> CDIM = prev_matrix.C.DimsLr[lowC];
-            long long LDC = prev_matrix.C.Dims[lowC].first;
             long long offset = CDIM[2] + AM * CDIM[3];
-            MKL_Zomatcopy('C', 'N', CDIM[0], CDIM[1], one, prev_matrix.C[lowC], LDC, &Aptr[offset], AM);
+            MKL_Zomatcopy('C', 'N', CDIM[0], CDIM[1], one, prev_matrix.C[lowC], CDIM[0], &Aptr[offset], AM);
           }
         }
     }
@@ -215,9 +212,8 @@ void UlvSolver::loadDataInterNode(const Cell cells[], const UlvSolver& prev_matr
           }
           else if (0 <= lowC) {
             std::array<long long, 4> CDIM = prev_matrix.C.DimsLr[lowC];
-            long long LDC = prev_matrix.C.Dims[lowC].first;
             long long offset = CDIM[2] + CM * CDIM[3];
-            MKL_Zomatcopy('C', 'N', CDIM[0], CDIM[1], one, prev_matrix.C[lowC], LDC, &Cptr[offset], CM);
+            MKL_Zomatcopy('C', 'N', CDIM[0], CDIM[1], one, prev_matrix.C[lowC], CDIM[0], &Cptr[offset], CM);
           }
         }
     }

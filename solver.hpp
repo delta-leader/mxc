@@ -34,6 +34,7 @@ private:
   BlockSparseMatrix A;
   BlockSparseMatrix C;
   std::vector<long long> Ck;
+  std::vector<std::vector<long long>> Apiv;
 
 public:
 
