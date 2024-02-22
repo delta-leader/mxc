@@ -114,6 +114,9 @@ int main(int argc, char* argv[]) {
   basis[levels - 1].adjustLowerRankGrowth(basis[levels], cell_comm[levels - 1]);
   matrix.factorizeA(basis[levels], cell_comm[levels]);
 
+  UlvSolver upper(basis[levels - 1].Dims.data(), cellNear, cellFar, cell_comm[levels - 1]);
+  upper.loadDataInterNode(&cell[0], matrix, cell_comm[levels], cell_comm[levels - 1]);
+
   long long llen = cell_comm[levels].lenLocal();
   long long gbegin = cell_comm[levels].oGlobal();
   long long body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };

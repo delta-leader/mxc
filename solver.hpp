@@ -25,9 +25,8 @@ public:
   BlockSparseMatrix() {};
   BlockSparseMatrix(long long len, const std::pair<long long, long long> lil[], const std::pair<long long, long long> dim[], const CellComm& comm);
   const std::complex<double>* operator[](long long i) const;
-  const std::complex<double>* operator()(long long y, long long x) const;
   std::complex<double>* operator[](long long i);
-  std::complex<double>* operator()(long long y, long long x);
+  long long operator()(long long y, long long x) const;
 };
 
 class UlvSolver {

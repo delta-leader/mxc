@@ -41,7 +41,7 @@ BlockSparseMatrix::BlockSparseMatrix(long long len, const std::pair<long long, l
 
   long long* DimsPtr = reinterpret_cast<long long*>(Dims.data());
   std::vector<long long> blocks2(xlen);
-  std::transform(blocksOnRow.begin(), blocksOnRow.end(), blocks2.begin(), [](int64_t b) { return b + b; });
+  std::transform(blocksOnRow.begin(), blocksOnRow.end(), blocks2.begin(), [](long long b) { return b + b; });
   comm.neighbor_bcast(DimsPtr, blocks2.data());
   comm.neighbor_bcast(ColIndex.data(), blocksOnRow.data());
   comm.dup_bcast(DimsPtr, RowIndex[xlen] * 2);
@@ -63,18 +63,13 @@ const std::complex<double>* BlockSparseMatrix::operator[](long long i) const {
   return &Data[DataOffsets[i]];
 }
 
-const std::complex<double>* BlockSparseMatrix::operator()(long long y, long long x) const {
-  long long i = std::distance(&ColIndex[0], std::find(&ColIndex[RowIndex[y]], &ColIndex[RowIndex[y + 1]], x));
-  return i < RowIndex[y + 1] ? &Data[DataOffsets[i]] : nullptr;
-}
-
 std::complex<double>* BlockSparseMatrix::operator[](long long i) {
   return &Data[DataOffsets[i]];
 }
 
-std::complex<double>* BlockSparseMatrix::operator()(long long y, long long x) {
+long long BlockSparseMatrix::operator()(long long y, long long x) const {
   long long i = std::distance(&ColIndex[0], std::find(&ColIndex[RowIndex[y]], &ColIndex[RowIndex[y + 1]], x));
-  return i < RowIndex[y + 1] ? &Data[DataOffsets[i]] : nullptr;
+  return i < RowIndex[y + 1] ? i : -1;
 }
 
 UlvSolver::UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, const CellComm& comm) {
@@ -169,14 +164,70 @@ void UlvSolver::loadDataInterNode(const Cell cells[], const UlvSolver& prev_matr
   ybegin = ybegin + cbegin;
   nodes = cend - cbegin;
 
-  long long lowerI = prev_comm.oLocal();
-  std::vector<long long> localChildOffsets(nodes + 1);
-  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [&](const Cell& c) { return lowerI + c.Child[1] - cells[ybegin].Child[0]; });
-  localChildOffsets[0] = lowerI;
+  long long lowerI = prev_comm.oLocal() - cells[ybegin].Child[0];
+  std::complex<double> one(1., 0.);
+  for (long long i = 0; i < nodes; i++) {
+    long long cybegin = cells[i + ybegin].Child[0] + lowerI;
+    long long cyend = cells[i + ybegin].Child[1] + lowerI;
 
-  for (int64_t i = 0; i < nodes; i++) {
+    for (long long ij = A.RowIndex[i + ibegin]; ij < A.RowIndex[i + ibegin + 1]; ij++) {
+      long long j = A.ColIndex[ij];
+      long long cxbegin = cells[j].Child[0];
+      long long cxend = cells[j].Child[1];
+      long long AM = A.Dims[ij].first;
+      std::complex<double>* Aptr = A[ij];
 
+      for (long long cy = cybegin; cy < cyend; cy++)
+        for (long long cx = cxbegin; cx < cxend; cx++) {
+          long long lowA = prev_matrix.A(cy, cx);
+          long long lowC = prev_matrix.C(cy, cx);
+          if (0 <= lowA) {
+            std::array<long long, 4> ADIM = prev_matrix.A.DimsLr[lowA];
+            long long LDA = prev_matrix.A.Dims[lowA].first;
+            long long offset = ADIM[2] + AM * ADIM[3];
+            MKL_Zomatcopy('C', 'N', ADIM[0], ADIM[1], one, prev_matrix.A[lowA], LDA, &Aptr[offset], AM);
+          }
+          else if (0 <= lowC) {
+            std::array<long long, 4> CDIM = prev_matrix.C.DimsLr[lowC];
+            long long LDC = prev_matrix.C.Dims[lowC].first;
+            long long offset = CDIM[2] + AM * CDIM[3];
+            MKL_Zomatcopy('C', 'N', CDIM[0], CDIM[1], one, prev_matrix.C[lowC], LDC, &Aptr[offset], AM);
+          }
+        }
+    }
+
+    for (long long ij = C.RowIndex[i + ibegin]; ij < C.RowIndex[i + ibegin + 1]; ij++) {
+      long long j = C.ColIndex[ij];
+      long long cxbegin = cells[j].Child[0];
+      long long cxend = cells[j].Child[1];
+      long long CM = C.Dims[ij].first;
+      std::complex<double>* Cptr = C[ij];
+
+      for (long long cy = cybegin; cy < cyend; cy++)
+        for (long long cx = cxbegin; cx < cxend; cx++) {
+          long long lowA = prev_matrix.A(cy, cx);
+          long long lowC = prev_matrix.C(cy, cx);
+          if (0 <= lowA) {
+            std::array<long long, 4> ADIM = prev_matrix.A.DimsLr[lowA];
+            long long LDA = prev_matrix.A.Dims[lowA].first;
+            long long offset = ADIM[2] + CM * ADIM[3];
+            MKL_Zomatcopy('C', 'N', ADIM[0], ADIM[1], one, prev_matrix.A[lowA], LDA, &Cptr[offset], CM);
+          }
+          else if (0 <= lowC) {
+            std::array<long long, 4> CDIM = prev_matrix.C.DimsLr[lowC];
+            long long LDC = prev_matrix.C.Dims[lowC].first;
+            long long offset = CDIM[2] + CM * CDIM[3];
+            MKL_Zomatcopy('C', 'N', CDIM[0], CDIM[1], one, prev_matrix.C[lowC], LDC, &Cptr[offset], CM);
+          }
+        }
+    }
   }
+
+  comm.level_merge(A.Data.data(), A.DataOffsets.back());
+  comm.neighbor_bcast(A.Data.data(), A.elementsOnRow.data());
+  comm.dup_bcast(A.Data.data(), A.DataOffsets.back());
+  comm.level_merge(C.Data.data(), C.DataOffsets.back());
+  comm.dup_bcast(C.Data.data(), C.DataOffsets.back());
 }
 
 void captureA(long long M, const long long N[], long long lenA, const std::complex<double>* A[], std::complex<double> C[]) {
@@ -311,13 +362,14 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
       for (long long ij = basis.CRows[i - ibegin]; ij < basis.CRows[i - ibegin + 1]; ij++) {
         long long j = comm.iLocal(basis.CCols[ij]);
         long long mn = basis.DimsLr[i] * basis.DimsLr[j];
-        cblas_zaxpy(mn, &one, basis.C[ij], 1, C(i, basis.CCols[ij]), 1);
+        long long cloc = C(i, basis.CCols[ij]);
+        cblas_zaxpy(mn, &one, basis.C[ij], 1, C[cloc], 1);
       }
   }
 
   long long* DimsLrPtr = reinterpret_cast<long long*>(C.DimsLr.data());
   std::vector<long long> blocks4(xlen);
-  std::transform(C.blocksOnRow.begin(), C.blocksOnRow.end(), blocks4.begin(), [](int64_t b) { return b * 4; });
+  std::transform(C.blocksOnRow.begin(), C.blocksOnRow.end(), blocks4.begin(), [](long long b) { return b * 4; });
   comm.neighbor_reduce(C.Data.data(), C.elementsOnRow.data());
   comm.neighbor_reduce(DimsLrPtr, blocks4.data());
   comm.dup_bcast(C.Data.data(), C.DataOffsets.back());
@@ -340,7 +392,7 @@ void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
 
   long long* DimsLrPtr = reinterpret_cast<long long*>(A.DimsLr.data());
   std::vector<long long> blocks4(A.blocksOnRow.size());
-  std::transform(A.blocksOnRow.begin(), A.blocksOnRow.end(), blocks4.begin(), [](int64_t b) { return b * 4; });
+  std::transform(A.blocksOnRow.begin(), A.blocksOnRow.end(), blocks4.begin(), [](long long b) { return b * 4; });
   comm.neighbor_bcast(A.Data.data(), A.elementsOnRow.data());
   comm.neighbor_bcast(DimsLrPtr, blocks4.data());
   comm.dup_bcast(A.Data.data(), A.DataOffsets.back());
