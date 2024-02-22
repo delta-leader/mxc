@@ -32,28 +32,26 @@ BlockSparseMatrix::BlockSparseMatrix(long long len, const std::pair<long long, l
   RowIndex[0] = 0;
   std::inclusive_scan(blocksOnRow.begin(), blocksOnRow.end(), RowIndex.begin() + 1);
 
-  M = std::vector<long long>(RowIndex[xlen]);
-  N = std::vector<long long>(RowIndex[xlen]);
   ColIndex = std::vector<long long>(RowIndex[xlen]);
+  Dims = std::vector<std::pair<long long, long long>>(RowIndex[xlen]);
+  DimsLr = std::vector<std::array<long long, 4>>(RowIndex[xlen]);
 
-  std::transform(dim, &dim[len], &M[RowIndex[ibegin]], [](std::pair<long long, long long> d) { return d.first; });
-  std::transform(dim, &dim[len], &N[RowIndex[ibegin]], [](std::pair<long long, long long> d) { return d.second; });
+  std::copy(dim, &dim[len], &Dims[RowIndex[ibegin]]);
   std::transform(lil, &lil[len], &ColIndex[RowIndex[ibegin]], [](std::pair<long long, long long> l) { return l.second; });
 
-  comm.neighbor_bcast(M.data(), blocksOnRow.data());
-  comm.neighbor_bcast(N.data(), blocksOnRow.data());
+  long long* DimsPtr = reinterpret_cast<long long*>(Dims.data());
+  std::vector<long long> blocks2(xlen);
+  std::transform(blocksOnRow.begin(), blocksOnRow.end(), blocks2.begin(), [](int64_t b) { return b + b; });
+  comm.neighbor_bcast(DimsPtr, blocks2.data());
   comm.neighbor_bcast(ColIndex.data(), blocksOnRow.data());
-  comm.dup_bcast(M.data(), RowIndex[xlen]);
-  comm.dup_bcast(N.data(), RowIndex[xlen]);
+  comm.dup_bcast(DimsPtr, RowIndex[xlen] * 2);
   comm.dup_bcast(ColIndex.data(), RowIndex[xlen]);
 
-  RankM = std::vector<long long>(M.begin(), M.end());
-  RankN = std::vector<long long>(N.begin(), N.end());
   std::vector<long long> DataSizes(RowIndex[xlen]);
   DataOffsets = std::vector<long long>(RowIndex[xlen] + 1);
   DataOffsets[0] = 0;
 
-  std::transform(M.begin(), M.end(), N.begin(), DataSizes.begin(), [](long long m, long long n) { return m * n; });
+  std::transform(Dims.begin(), Dims.end(), DataSizes.begin(), [](std::pair<long long, long long> d) { return d.first * d.second; });
   std::inclusive_scan(DataSizes.begin(), DataSizes.end(), DataOffsets.begin() + 1);
   Data = std::vector<std::complex<double>>(DataOffsets.back(), std::complex<double>(0., 0.));
 
@@ -131,7 +129,7 @@ UlvSolver::UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, co
   std::transform(fills.begin(), fills.end(), lilC.begin(), 
     [&](std::pair<std::pair<long long, long long>, std::pair<long long, long long>> f) { return f.first; });
   std::transform(fills.begin(), fills.end(), dimsC.begin(), 
-    [&](std::pair<std::pair<long long, long long>, std::pair<long long, long long>> f) { return std::make_pair(A.M[f.second.first], A.N[f.second.second]); });
+    [&](std::pair<std::pair<long long, long long>, std::pair<long long, long long>> f) { return std::make_pair(A.Dims[f.second.first].first, A.Dims[f.second.second].second); });
 
   C = BlockSparseMatrix(lenC, &lilC[0], &dimsC[0], comm);
   Ck = std::vector<long long>(C.RowIndex.back());
@@ -269,22 +267,24 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
 
     long long offsetCi = C.RowIndex[i + ibegin];
     long long lenCi = C.RowIndex[i + ibegin + 1] - offsetCi;
+    std::vector<long long> CN(lenCi);
+    std::transform(&C.Dims[offsetCi], &C.Dims[offsetCi + lenCi], CN.begin(), [](const std::pair<long long, long long>& d) { return d.second; });
     if (0 < lenCi)
-      captureA(m, &C.N[offsetCi], lenCi, &Cptr[offsetCi - C.RowIndex[ibegin]], basis.R[i + ibegin]);
-    for (long long ij = C.RowIndex[i + ibegin]; ij < C.RowIndex[i + ibegin + 1]; ij++) {
+      captureA(m, CN.data(), lenCi, &Cptr[offsetCi - C.RowIndex[ibegin]], basis.R[i + ibegin]);
+    for (long long ij = 0; ij < lenCi; ij++) {
       std::vector<const std::complex<double>*> Aptr, Bptr;
       std::vector<long long> K;
 
       for (long long ik = A.RowIndex[i + ibegin]; ik < A.RowIndex[i + ibegin + 1]; ik++) {
         long long k = comm.iLocal(A.ColIndex[ik]);
-        long long kj = std::distance(&A.ColIndex[0], std::find(&A.ColIndex[A.RowIndex[k]], &A.ColIndex[A.RowIndex[k + 1]], C.ColIndex[ij]));
+        long long kj = std::distance(&A.ColIndex[0], std::find(&A.ColIndex[A.RowIndex[k]], &A.ColIndex[A.RowIndex[k + 1]], C.ColIndex[offsetCi + ij]));
         if (k != i + ibegin && kj != A.RowIndex[k + 1]) {
           Aptr.emplace_back(A[ik]);
           Bptr.emplace_back(A[kj]);
-          K.emplace_back(A.M[kj]);
+          K.emplace_back(A.Dims[kj].first);
         }
       }
-      captureAmulB(m, C.N[ij], &K[0], Aptr.size(), &Aptr[0], &Bptr[0], basis.R[i + ibegin]);
+      captureAmulB(m, CN[ij], &K[0], Aptr.size(), &Aptr[0], &Bptr[0], basis.R[i + ibegin]);
     }
   }
   
@@ -293,16 +293,18 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
   for (long long i = 0; i < xlen; i++) {
     for (long long ij = C.RowIndex[i]; ij < C.RowIndex[i + 1]; ij++) {
       long long j = comm.iLocal(C.ColIndex[ij]);
-      long long k1 = 0, k2 = 0;
+      long long CM = C.Dims[ij].first;
+      long long CN = C.Dims[ij].second;
+
+      std::array<long long, 4> d{ 0, 0, 0, 0 };
       if (ybegin <= Ck[ij] && Ck[ij] < ybegin + nodes) {
-        k1 = basis.DimsLr[i];
-        k2 = basis.DimsLr[j];
-        mulQhAQ(C.M[ij], C.N[ij], C[ij], k1, basis.Q[i], k2, basis.Q[j]);
+        d = std::array<long long, 4>{ 
+          basis.DimsLr[i], basis.DimsLr[j], basis.copyOffset(i), basis.copyOffset(j) };
+        mulQhAQ(CM, CN, C[ij], d[0], basis.Q[i], d[1], basis.Q[j]);
       }
       else
-        std::fill(C[ij], C[ij] + (C.M[ij] * C.N[ij]), std::complex<double>(0., 0.));
-      C.RankM[ij] = k1;
-      C.RankN[ij] = k2;
+        std::fill(C[ij], C[ij] + CM * CN, std::complex<double>(0., 0.));
+      C.DimsLr[ij] = d;
     }
 
     if (ibegin <= i && i < ibegin + nodes)
@@ -313,29 +315,34 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
       }
   }
 
+  long long* DimsLrPtr = reinterpret_cast<long long*>(C.DimsLr.data());
+  std::vector<long long> blocks4(xlen);
+  std::transform(C.blocksOnRow.begin(), C.blocksOnRow.end(), blocks4.begin(), [](int64_t b) { return b * 4; });
   comm.neighbor_reduce(C.Data.data(), C.elementsOnRow.data());
-  comm.neighbor_reduce(C.RankM.data(), C.blocksOnRow.data());
-  comm.neighbor_reduce(C.RankN.data(), C.blocksOnRow.data());
+  comm.neighbor_reduce(DimsLrPtr, blocks4.data());
   comm.dup_bcast(C.Data.data(), C.DataOffsets.back());
-  comm.dup_bcast(C.RankM.data(), C.RowIndex.back());
-  comm.dup_bcast(C.RankN.data(), C.RowIndex.back());
+  comm.dup_bcast(DimsLrPtr, C.RowIndex.back() * 4);
 }
 
 void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
+
   for (long long i = 0; i < nodes; i++)
     for (long long ij = A.RowIndex[i + ibegin]; ij < A.RowIndex[i + ibegin + 1]; ij++) {
       long long j = comm.iLocal(A.ColIndex[ij]);
-      mulQhAQ(A.M[ij], A.N[ij], A[ij], A.M[ij], basis.Q[i + ibegin], A.N[ij], basis.Q[j]);
-      A.RankM[ij] = basis.DimsLr[i + ibegin];
-      A.RankN[ij] = basis.DimsLr[j];
+      long long AM = A.Dims[ij].first;
+      long long AN = A.Dims[ij].second;
+      mulQhAQ(AM, AN, A[ij], AM, basis.Q[i + ibegin], AN, basis.Q[j]);
+      A.DimsLr[ij] = std::array<long long, 4>{ 
+        basis.DimsLr[i + ibegin], basis.DimsLr[j], basis.copyOffset(i + ibegin), basis.copyOffset(j) };
     }
 
+  long long* DimsLrPtr = reinterpret_cast<long long*>(A.DimsLr.data());
+  std::vector<long long> blocks4(A.blocksOnRow.size());
+  std::transform(A.blocksOnRow.begin(), A.blocksOnRow.end(), blocks4.begin(), [](int64_t b) { return b * 4; });
   comm.neighbor_bcast(A.Data.data(), A.elementsOnRow.data());
-  comm.neighbor_bcast(A.RankM.data(), A.blocksOnRow.data());
-  comm.neighbor_bcast(A.RankN.data(), A.blocksOnRow.data());
+  comm.neighbor_bcast(DimsLrPtr, blocks4.data());
   comm.dup_bcast(A.Data.data(), A.DataOffsets.back());
-  comm.dup_bcast(A.RankM.data(), A.RowIndex.back());
-  comm.dup_bcast(A.RankN.data(), A.RowIndex.back());
+  comm.dup_bcast(DimsLrPtr, A.RowIndex.back() * 4);
 }

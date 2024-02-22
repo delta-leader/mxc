@@ -132,11 +132,11 @@ long long CellComm::lenNeighbors() const {
 
 template<typename T> inline MPI_Datatype get_mpi_datatype() {
   if (typeid(T) == typeid(long long))
-    return MPI_INT64_T;
+    return MPI_LONG_LONG_INT;
   if (typeid(T) == typeid(double))
     return MPI_DOUBLE;
   if (typeid(T) == typeid(std::complex<double>))
-    return MPI_DOUBLE_COMPLEX;
+    return MPI_C_DOUBLE_COMPLEX;
   return MPI_DATATYPE_NULL;
 }
 

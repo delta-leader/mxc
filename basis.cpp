@@ -102,7 +102,8 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   Q = std::vector<const std::complex<double>*>(xlen);
   R = std::vector<std::complex<double>*>(xlen);
 
-  std::transform(&cells[ybegin], &cells[ybegin + nodes], &ParentSequenceNum[ibegin], [](const Cell& c) { return c.ParentSeq; });
+  std::transform(&cells[ybegin], &cells[ybegin + nodes], &ParentSequenceNum[ibegin], 
+    [&](const Cell& c) { return 0 <= c.Parent ? std::distance(&cells[cells[c.Parent].Child[0]], &c) : 0; });
   if (localChildOffsets.back() == 0)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
   else

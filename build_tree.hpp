@@ -5,7 +5,7 @@
 
 class Cell {
 public:
-  long long Child[2], ParentSeq, Body[2];
+  long long Child[2], Parent, Body[2];
   double R[3], C[3];
 
   Cell();

@@ -76,7 +76,6 @@ int admis_check(double theta, const double C1[], const double C2[], const double
 void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels) {
   cells[0].Body[0] = 0;
   cells[0].Body[1] = nbodies;
-  cells[0].ParentSeq = 0;
   get_bounds(bodies, nbodies, cells[0].R, cells[0].C);
 
   long long nleaf = (long long)1 << levels;
@@ -104,10 +103,10 @@ void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels)
 
     c0.Body[0] = i_begin;
     c0.Body[1] = loc;
-    c0.ParentSeq = 0;
+    c0.Parent = i;
     c1.Body[0] = loc;
     c1.Body[1] = i_end;
-    c1.ParentSeq = 1;
+    c1.Parent = i;
 
     get_bounds(&bodies[i_begin * 3], loc - i_begin, c0.R, c0.C);
     get_bounds(&bodies[loc * 3], i_end - loc, c1.R, c1.C);
@@ -121,7 +120,6 @@ void buildTreeBuckets(Cell* cells, const double* bodies, const long long buckets
     long long ci = i + nleaf - 1;
     cells[ci].Child[0] = -1;
     cells[ci].Child[1] = -1;
-    cells[ci].ParentSeq = i & 1;
     cells[ci].Body[0] = count;
     cells[ci].Body[1] = count + buckets[i];
     get_bounds(&bodies[count * 3], buckets[i], cells[ci].R, cells[ci].C);
@@ -135,9 +133,10 @@ void buildTreeBuckets(Cell* cells, const double* bodies, const long long buckets
     long long len = cells[c1].Body[1] - begin;
     cells[i].Child[0] = c0;
     cells[i].Child[1] = c0 + 2;
-    cells[i].ParentSeq = !(i & 1);
     cells[i].Body[0] = begin;
     cells[i].Body[1] = begin + len;
+    cells[c0].Parent = i;
+    cells[c1].Parent = i;
     get_bounds(&bodies[begin * 3], len, cells[i].R, cells[i].C);
   }
 }
@@ -156,7 +155,7 @@ void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const
 }
 
 Cell::Cell() {
-  Child[0] = Child[1] = ParentSeq = -1;
+  Child[0] = Child[1] = Parent = -1;
   Body[0] = Body[1] = -1;
   C[0] = C[1] = C[2] = 0.;
   R[0] = R[1] = R[2] = 0.;

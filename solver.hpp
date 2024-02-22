@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <array>
 #include <complex>
 
 class CSR;
@@ -18,10 +19,8 @@ public:
 
   std::vector<std::complex<double>> Data;
   std::vector<long long> DataOffsets;
-  std::vector<long long> M;
-  std::vector<long long> N;
-  std::vector<long long> RankM;
-  std::vector<long long> RankN;
+  std::vector<std::pair<long long, long long>> Dims;
+  std::vector<std::array<long long, 4>> DimsLr;
 
   BlockSparseMatrix() {};
   BlockSparseMatrix(long long len, const std::pair<long long, long long> lil[], const std::pair<long long, long long> dim[], const CellComm& comm);
