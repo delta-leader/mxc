@@ -220,9 +220,10 @@ void UlvSolver::loadDataInterNode(const Cell cells[], const UlvSolver& prev_matr
   }
 
   comm.level_merge(A.Data.data(), A.DataOffsets.back());
-  comm.neighbor_bcast(A.Data.data(), A.elementsOnRow.data());
-  comm.dup_bcast(A.Data.data(), A.DataOffsets.back());
   comm.level_merge(C.Data.data(), C.DataOffsets.back());
+  comm.neighbor_bcast(A.Data.data(), A.elementsOnRow.data());
+  comm.neighbor_bcast(C.Data.data(), C.elementsOnRow.data());
+  comm.dup_bcast(A.Data.data(), A.DataOffsets.back());
   comm.dup_bcast(C.Data.data(), C.DataOffsets.back());
 }
 
@@ -372,8 +373,29 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
   comm.dup_bcast(DimsLrPtr, C.RowIndex.back() * 4);
 }
 
+void factor_diag(long long N, long long lenS, std::complex<double>* D, long long* ipiv) {
+  long long lenR = N - lenS;
+  std::complex<double> one(1., 0.), minus_one(-1., 0.);
+
+  if (0 < lenR) {
+    std::complex<double>* Arr = &D[lenS * (N + 1)];
+    LAPACKE_zgetrf(LAPACK_COL_MAJOR, lenR, lenR, Arr, N, ipiv);
+
+    if (0 < lenS) {
+      std::complex<double>* Ars = &D[lenS];
+      std::complex<double>* Asr = &D[lenS * N];
+      
+      LAPACKE_zlaswp(LAPACK_COL_MAJOR, lenS, Ars, N, 1, lenR, ipiv, 1);
+      cblas_ztrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, lenR, lenS, &one, Arr, N, Ars, N);
+      cblas_ztrsm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, lenS, lenR, &one, Arr, N, Asr, N);
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, lenS, lenS, lenR, &minus_one, Asr, N, Ars, N, &one, D, N);
+    }
+  }
+}
+
 void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
   long long ibegin = comm.oLocal();
+  long long ybegin = comm.oGlobal();
   long long nodes = comm.lenLocal();
 
   for (long long i = 0; i < nodes; i++)
@@ -393,4 +415,10 @@ void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
   comm.neighbor_bcast(DimsLrPtr, blocks4.data());
   comm.dup_bcast(A.Data.data(), A.DataOffsets.back());
   comm.dup_bcast(DimsLrPtr, A.RowIndex.back() * 4);
+
+  for (long long i = 0; i < nodes; i++) {
+    long long ii = A(i + ibegin, i + ybegin);
+    long long AM = A.Dims[ii].first;
+    factor_diag(AM, A.DimsLr[ii][0], A[ii], Apiv[i + ibegin].data());
+  }
 }

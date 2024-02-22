@@ -388,14 +388,14 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
       }
   }
 
+  const std::complex<double> one(1., 0.), zero(0., 0.);
   long long Y = 0, lenX = std::reduce(&Basis[Levels].Dims[lbegin], &Basis[Levels].Dims[lbegin + llen]);
   for (long long i = 0; i < llen; i++) {
     long long M = Basis[Levels].Dims[lbegin + i];
-    MKL_Zomatcopy('C', 'N', M, nrhs, std::complex<double>(1., 0.), &X[Y], lenX, rhsXptr[Levels][lbegin + i], M);
+    MKL_Zomatcopy('C', 'N', M, nrhs, one, &X[Y], lenX, rhsXptr[Levels][lbegin + i], M);
     Y = Y + M;
   }
 
-  const std::complex<double> one(1., 0.), zero(0., 0.);
   for (long long i = Levels; i > 0; i--) {
     long long ibegin = Comm[i].oLocal();
     long long iboxes = Comm[i].lenLocal();
@@ -455,7 +455,7 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
   Y = 0;
   for (long long i = 0; i < llen; i++) {
     long long M = Basis[Levels].Dims[lbegin + i];
-    MKL_Zomatcopy('C', 'N', M, nrhs, std::complex<double>(1., 0.), rhsYptr[Levels][lbegin + i], M, &X[Y], lenX);
+    MKL_Zomatcopy('C', 'N', M, nrhs, one, rhsYptr[Levels][lbegin + i], M, &X[Y], lenX);
     Y = Y + M;
   }
 }
