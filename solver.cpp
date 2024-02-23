@@ -549,7 +549,7 @@ void UlvSolver::backwardSubstitute(long long nrhs, const std::complex<double> Y[
   Xoffsets[0] = 0;
   long long lenX = Xoffsets.back();
 
-  std::vector<std::complex<double>> Z(X, &X[lenX * nrhs]);
+  std::vector<std::complex<double>> Z(lenX * nrhs);
   std::vector<long long> Yoffsets(xlen + 1);
   std::inclusive_scan(basis.DimsLr.begin(), basis.DimsLr.end(), Yoffsets.begin() + 1);
   Yoffsets[0] = 0;
@@ -586,11 +586,11 @@ void UlvSolver::backwardSubstitute(long long nrhs, const std::complex<double> Y[
   std::transform(basis.Dims.begin(), basis.Dims.end(), Zsizes.begin(), [=](long long d) { return d * nrhs; });
   comm.neighbor_bcast(Z.data(), Zsizes.data());
 
-  for (long long i = 0; i < nodes; i++) {
-    long long M = basis.Dims[i + ibegin], N = basis.DimsLr[i + ibegin], K = M - N;
-    long long offsetX = Xoffsets[i + ibegin] * nrhs;
-    long long offsetOut = Xoffsets[i + ibegin];
+  for (long long i = 0; i < xlen; i++) {
+    long long M = basis.Dims[i];
+    long long offsetX = Xoffsets[i] * nrhs;
+    long long offsetOut = Xoffsets[i];
     if (0 < M)
-      MKL_Zomatcopy('C', 'N', K, nrhs, one, &Z[offsetX], M, &X[offsetOut], lenX);
+      MKL_Zomatcopy('C', 'N', M, nrhs, one, &Z[offsetX], M, &X[offsetOut], lenX);
   }
 }

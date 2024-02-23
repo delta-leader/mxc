@@ -25,6 +25,7 @@ public:
 
   BlockSparseMatrix() {};
   BlockSparseMatrix(long long len, const std::pair<long long, long long> lil[], const std::pair<long long, long long> dim[], const CellComm& comm);
+
   const std::complex<double>* operator[](long long i) const;
   std::complex<double>* operator[](long long i);
   long long operator()(long long y, long long x) const;
@@ -41,19 +42,14 @@ private:
   std::vector<std::vector<long long>> Apiv;
 
 public:
-
+  UlvSolver() {};
   UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, const CellComm& comm);
 
   void loadDataLeaf(const MatrixAccessor& eval, const Cell cells[], const double bodies[], const CellComm& comm);
-
   void loadDataInterNode(const Cell cells[], const UlvSolver& prev_matrix, const CellComm& prev_comm, const CellComm& comm);
-
   void preCompressA2(double epi, ClusterBasis& basis, const CellComm& comm);
-
   void factorizeA(const ClusterBasis& basis, const CellComm& comm);
-
   void forwardSubstitute(long long nrhs, std::complex<double> X[], std::complex<double> Y[], const ClusterBasis& basis, const CellComm& comm) const;
-
   void backwardSubstitute(long long nrhs, const std::complex<double> Y[], std::complex<double> Z[], const ClusterBasis& basis, const CellComm& comm) const;
 };
 

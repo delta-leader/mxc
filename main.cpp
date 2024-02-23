@@ -108,16 +108,21 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = timer.first;
   timer.first = 0;
 
-  /*UlvSolver matrix(basis[levels].Dims.data(), cellNear, cellFar, cell_comm[levels]);
-  matrix.loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
-  matrix.preCompressA2(epi, basis[levels], cell_comm[levels]);
-  basis[levels - 1].adjustLowerRankGrowth(basis[levels], cell_comm[levels - 1]);
-  matrix.factorizeA(basis[levels], cell_comm[levels]);
+  std::vector<UlvSolver> matrix(levels + 1);
+  matrix[levels] = UlvSolver(basis[levels].Dims.data(), cellNear, cellFar, cell_comm[levels]);
+  matrix[levels].loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
+  matrix[levels].preCompressA2(epi, basis[levels], cell_comm[levels]);
+  matrix[levels].factorizeA(basis[levels], cell_comm[levels]);
 
-  UlvSolver upper(basis[levels - 1].Dims.data(), cellNear, cellFar, cell_comm[levels - 1]);
-  upper.loadDataInterNode(&cell[0], matrix, cell_comm[levels], cell_comm[levels - 1]);
+  for (long long l = levels - 1; l >= 0; l--) {
+    basis[l].adjustLowerRankGrowth(basis[l + 1], cell_comm[l]);
+    matrix[l] = UlvSolver(basis[l].Dims.data(), cellNear, cellFar, cell_comm[l]);
+    matrix[l].loadDataInterNode(&cell[0], matrix[l + 1], cell_comm[l + 1], cell_comm[l]);
+    matrix[l].preCompressA2(epi, basis[l], cell_comm[l]);
+    matrix[l].factorizeA(basis[l], cell_comm[l]);
+  }
 
-  std::vector<std::complex<double>> T1(Nbody * nrhs, std::complex<double>(0., 0.));
+  /*std::vector<std::complex<double>> T1(Nbody * nrhs, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> T2(Nbody * nrhs, std::complex<double>(0., 0.));
   matrix.forwardSubstitute(nrhs, &T1[0], &T2[0], basis[levels], cell_comm[levels]);
   matrix.backwardSubstitute(nrhs, &T1[0], &T2[0], basis[levels], cell_comm[levels]);*/

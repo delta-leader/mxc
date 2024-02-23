@@ -219,7 +219,7 @@ long long compute_recompression(double epi, long long M, long long N, std::compl
     MKL_Zomatcopy('C', 'N', M, M, one, &A[0], M, Q, M);
     return rank;
   }
-  else if (N == M) {
+  else if (0 < M && N == M) {
     std::vector<std::complex<double>> TAU(M);
     std::complex<double> zero(0., 0.);
     LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, M, Q, M, &TAU[0]);
