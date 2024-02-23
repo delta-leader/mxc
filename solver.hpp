@@ -14,6 +14,7 @@ class BlockSparseMatrix {
 public:
   std::vector<long long> RowIndex;
   std::vector<long long> ColIndex;
+  std::vector<long long> ColIndexLocal;
   std::vector<long long> blocksOnRow;
   std::vector<long long> elementsOnRow;
 
@@ -34,6 +35,9 @@ private:
   BlockSparseMatrix A;
   BlockSparseMatrix C;
   std::vector<long long> Ck;
+  std::vector<long long> Ad;
+  std::vector<std::pair<long long, long long>> ALocalCol;
+  std::vector<std::vector<long long>> ALocalElements;
   std::vector<std::vector<long long>> Apiv;
 
 public:

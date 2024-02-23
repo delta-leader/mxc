@@ -115,7 +115,12 @@ int main(int argc, char* argv[]) {
   matrix.factorizeA(basis[levels], cell_comm[levels]);
 
   UlvSolver upper(basis[levels - 1].Dims.data(), cellNear, cellFar, cell_comm[levels - 1]);
-  upper.loadDataInterNode(&cell[0], matrix, cell_comm[levels], cell_comm[levels - 1]);*/
+  upper.loadDataInterNode(&cell[0], matrix, cell_comm[levels], cell_comm[levels - 1]);
+
+  std::vector<std::complex<double>> T1(Nbody * nrhs, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> T2(Nbody * nrhs, std::complex<double>(0., 0.));
+  matrix.forwardSubstitute(nrhs, &T1[0], &T2[0], basis[levels], cell_comm[levels]);
+  matrix.backwardSubstitute(nrhs, &T1[0], &T2[0], basis[levels], cell_comm[levels]);*/
 
   long long llen = cell_comm[levels].lenLocal();
   long long gbegin = cell_comm[levels].oGlobal();

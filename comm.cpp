@@ -69,7 +69,6 @@ CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[]
   Boxes = std::vector<std::pair<long long, long long>>(NeighborRanks.size());
   NeighborComm = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? NeighborRanks.size() : 0);
 
-  std::vector<std::pair<long long, long long>> BoxesVector;
   for (long long i = 0; i < (long long)NeighborRanks.size(); i++) {
     long long ibegin = Mapping[NeighborRanks[i]].first;
     long long iend = Mapping[NeighborRanks[i]].second;

@@ -44,6 +44,7 @@ public:
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
+  std::vector<long long> CColsLocal;
   std::vector<const std::complex<double>*> C;
   
   ClusterBasis() {}

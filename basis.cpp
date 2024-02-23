@@ -159,13 +159,15 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
 
   CRows = std::vector<long long>(&Far.RowIndex[ybegin], &Far.RowIndex[ybegin + nodes + 1]);
   CCols = std::vector<long long>(&Far.ColIndex[CRows[0]], &Far.ColIndex[CRows[nodes]]);
+  CColsLocal = std::vector<long long>(CRows.back());
   long long offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
+  std::transform(CCols.begin(), CCols.end(), CColsLocal.begin(), [&](long long col) { return comm.iLocal(col); });
 
   std::vector<long long> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
-    std::transform(&CCols[CRows[i]], &CCols[CRows[i + 1]], &Csizes[CRows[i]], 
-      [&](long long col) { return DimsLr[i + ibegin] * DimsLr[comm.iLocal(col)]; });
+    std::transform(&CColsLocal[CRows[i]], &CColsLocal[CRows[i + 1]], &Csizes[CRows[i]], 
+      [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
   std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
   Coffsets[0] = 0;
 
@@ -175,7 +177,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
 
   for (long long i = 0; i < nodes; i++)
     for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
-      long long j = comm.iLocal(CCols[ij]);
+      long long j = CColsLocal[ij];
       long long m = DimsLr[i + ibegin], n = DimsLr[j];
       gen_matrix(eval, m, n, S[i + ibegin], S[j], &Cdata[Coffsets[ij]]);
     }
@@ -255,8 +257,8 @@ void ClusterBasis::recompressR(double epi, const CellComm& comm) {
 
   std::vector<long long> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
-    std::transform(&CCols[CRows[i]], &CCols[CRows[i + 1]], &Csizes[CRows[i]], 
-      [&](long long col) { return DimsLr[i + ibegin] * DimsLr[comm.iLocal(col)]; });
+    std::transform(&CColsLocal[CRows[i]], &CColsLocal[CRows[i + 1]], &Csizes[CRows[i]], 
+      [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
   std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
   Coffsets[0] = 0;
 
@@ -273,7 +275,7 @@ void ClusterBasis::recompressR(double epi, const CellComm& comm) {
     long long m2 = DimsLr[i + ibegin];
     long long ldl = Dims[i + ibegin];
     for (long long ij = CRows[i]; ij < CRows[i + 1] && 0 < m1; ij++) {
-      long long j = comm.iLocal(CCols[ij]);
+      long long j = CColsLocal[ij];
       long long n1 = DimsLrOld[j];
       long long n2 = DimsLr[j];
       long long ldr = Dims[j];
@@ -418,7 +420,7 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
 
       if (0 < K) {
         for (long long yx = Basis[i].CRows[y]; yx < Basis[i].CRows[y + 1]; yx++) {
-          long long x = Comm[i].iLocal(Basis[i].CCols[yx]);
+          long long x = Basis[i].CColsLocal[yx];
           long long N = Basis[i].DimsLr[x];
             cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, K, nrhs, N, &one, Basis[i].C[yx], K, 
               rhsXoptr[i][x].first, rhsXoptr[i][x].second, &one, rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second);
