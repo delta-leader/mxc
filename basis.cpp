@@ -113,8 +113,6 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   const std::vector<long long> ones(xlen, 1);
   comm.neighbor_bcast(Dims.data(), ones.data());
   comm.neighbor_bcast(ParentSequenceNum.data(), ones.data());
-  comm.dup_bcast(Dims.data(), xlen);
-  comm.dup_bcast(ParentSequenceNum.data(), xlen);
 
   std::vector<long long> Qoffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), elementsOnRow.begin(), [](const long long d) { return d * d; });
@@ -122,15 +120,15 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   Qoffsets[0] = 0;
   Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
   Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
-  std::transform(Qoffsets.begin(), Qoffsets.end(), Q.begin(), [&](const long long d) { return &Qdata[d]; });
-  std::transform(Qoffsets.begin(), Qoffsets.end(), R.begin(), [&](const long long d) { return &Rdata[d]; });
+  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const long long d) { return &Qdata[d]; });
+  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const long long d) { return &Rdata[d]; });
 
   std::vector<long long> Ssizes(xlen), Soffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), Ssizes.begin(), [](const long long d) { return 3 * d; });
   std::inclusive_scan(Ssizes.begin(), Ssizes.end(), Soffsets.begin() + 1);
   Soffsets[0] = 0;
   Sdata = std::vector<double>(Soffsets[xlen], 0.);
-  std::transform(Soffsets.begin(), Soffsets.end(), S.begin(), [&](const long long d) { return &Sdata[d]; });
+  std::transform(Soffsets.begin(), Soffsets.begin() + xlen, S.begin(), [&](const long long d) { return &Sdata[d]; });
 
   for (long long i = 0; i < nodes; i++) {
     long long dim = Dims[i + ibegin];
@@ -158,9 +156,6 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   comm.neighbor_bcast(DimsLr.data(), ones.data());
   comm.neighbor_bcast(Sdata.data(), Ssizes.data());
   comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
-  comm.dup_bcast(DimsLr.data(), xlen);
-  comm.dup_bcast(Sdata.data(), Soffsets[xlen]);
-  comm.dup_bcast(Qdata.data(), Qoffsets[xlen]);
 
   CRows = std::vector<long long>(&Far.RowIndex[ybegin], &Far.RowIndex[ybegin + nodes + 1]);
   CCols = std::vector<long long>(&Far.ColIndex[CRows[0]], &Far.ColIndex[CRows[nodes]]);
@@ -191,47 +186,46 @@ long long ClusterBasis::copyOffset(long long i) const {
   return std::reduce(&DimsLr[start], &DimsLr[i], (long long)0);
 }
 
-long long compute_recompression(double epi, long long DimQ, long long RankQ, std::complex<double> Q[], std::complex<double> R[]) {
-  if (0 < RankQ && RankQ < DimQ) {
-    long long M = DimQ + RankQ;
-    std::vector<std::complex<double>> A(M * DimQ);
-    std::vector<double> S(DimQ * 2);
+long long compute_recompression(double epi, long long M, long long N, std::complex<double> Q[], std::complex<double> R[]) {
+  if (0 < N && N < M) {
+    std::vector<std::complex<double>> A((M + N) * M);
+    std::vector<double> S(M * 2);
     std::complex<double> one(1., 0.), zero(0., 0.);
 
-    MKL_Zomatcopy('C', 'N', DimQ, RankQ, one, Q, DimQ, &A[0], DimQ);
-    MKL_Zomatcopy('C', 'T', DimQ, DimQ, one, R, DimQ, &A[DimQ * RankQ], DimQ);
-    double nrmQ = cblas_dznrm2(DimQ * RankQ, &A[0], 1);
-    double nrmR = cblas_dznrm2(DimQ * DimQ, &A[DimQ * RankQ], 1);
+    MKL_Zomatcopy('C', 'N', M, N, one, Q, M, &A[0], M);
+    MKL_Zomatcopy('C', 'T', M, M, one, R, M, &A[M * N], M);
+    double nrmQ = cblas_dznrm2(M * N, &A[0], 1);
+    double nrmR = cblas_dznrm2(M * M, &A[M * N], 1);
     if (std::numeric_limits<double>::min() < nrmQ && nrmQ < nrmR) {
       double scaleQ = nrmR / nrmQ;
-      cblas_zscal(DimQ * RankQ, &scaleQ, &A[0], 1);
+      cblas_zscal(M * N, &scaleQ, &A[0], 1);
     }
     else if (std::numeric_limits<double>::min() < nrmR && nrmR < nrmQ) {
       double scaleR = nrmQ / nrmR;
-      cblas_zscal(DimQ * DimQ, &scaleR, &A[DimQ * RankQ], 1);
+      cblas_zscal(M * M, &scaleR, &A[M * N], 1);
     }
 
-    LAPACKE_zgesvd(LAPACK_COL_MAJOR, 'O', 'N', DimQ, M, &A[0], DimQ, &S[0], &A[0], DimQ, nullptr, M, &S[DimQ]);
+    LAPACKE_zgesvd(LAPACK_COL_MAJOR, 'O', 'N', M, M + N, &A[0], M, &S[0], &A[0], M, nullptr, M + N, &S[M]);
     long long rank = 0;
     double s0 = epi * S[0];
     if (std::numeric_limits<double>::min() < s0)
-      while (rank < DimQ && s0 <= S[rank])
+      while (rank < M && s0 <= S[rank])
         ++rank;
         
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', DimQ, DimQ, zero, zero, R, DimQ);
-    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, rank, RankQ, DimQ, &one, &A[0], DimQ, Q, DimQ, &zero, R, DimQ);
-    MKL_Zomatcopy('C', 'N', DimQ, DimQ, one, &A[0], DimQ, Q, DimQ);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', M, M, zero, zero, R, M);
+    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, rank, N, M, &one, &A[0], M, Q, M, &zero, R, M);
+    MKL_Zomatcopy('C', 'N', M, M, one, &A[0], M, Q, M);
     return rank;
   }
-  else if (RankQ == DimQ) {
-    std::vector<std::complex<double>> TAU(DimQ);
+  else if (N == M) {
+    std::vector<std::complex<double>> TAU(M);
     std::complex<double> zero(0., 0.);
-    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, DimQ, DimQ, Q, DimQ, &TAU[0]);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', DimQ, DimQ, Q, DimQ, R, DimQ);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', DimQ - 1, DimQ - 1, zero, zero, &R[1], DimQ);
-    LAPACKE_zungqr(LAPACK_COL_MAJOR, DimQ, DimQ, DimQ, Q, DimQ, &TAU[0]);
+    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, M, Q, M, &TAU[0]);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'U', M, M, Q, M, R, M);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &R[1], M);
+    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, M, M, Q, M, &TAU[0]);
   }
-  return RankQ;
+  return N;
 }
 
 void ClusterBasis::recompressR(double epi, const CellComm& comm) {
@@ -255,13 +249,9 @@ void ClusterBasis::recompressR(double epi, const CellComm& comm) {
   }
 
   const std::vector<long long> ones(xlen, 1);
-  long long lenQ = std::reduce(elementsOnRow.begin(), elementsOnRow.end());
   comm.neighbor_bcast(DimsLr.data(), ones.data());
   comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
   comm.neighbor_bcast(Rdata.data(), elementsOnRow.data());
-  comm.dup_bcast(DimsLr.data(), xlen);
-  comm.dup_bcast(Qdata.data(), lenQ);
-  comm.dup_bcast(Rdata.data(), lenQ);
 
   std::vector<long long> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
@@ -311,7 +301,6 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
 
   const std::vector<long long> ones(xlen, 1);
   comm.neighbor_bcast(Dims.data(), ones.data());
-  comm.dup_bcast(Dims.data(), xlen);
 
   std::vector<long long> Qoffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), elementsOnRow.begin(), [](const long long d) { return d * d; });
@@ -319,8 +308,8 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
   Qoffsets[0] = 0;
   Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
   Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
-  std::transform(Qoffsets.begin(), Qoffsets.end(), Q.begin(), [&](const long long d) { return &Qdata[d]; });
-  std::transform(Qoffsets.begin(), Qoffsets.end(), R.begin(), [&](const long long d) { return &Rdata[d]; });
+  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const long long d) { return &Qdata[d]; });
+  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const long long d) { return &Rdata[d]; });
 
   std::complex<double> one(1., 0.), zero(0., 0.);
   for (long long i = 0; i < nodes; i++) {
@@ -340,7 +329,6 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
 
   std::copy(newLocalChildLrDims.begin(), newLocalChildLrDims.end(), localChildLrDims.begin());
   comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
-  comm.dup_bcast(Qdata.data(), Qoffsets[xlen]);
 }
 
 MatVec::MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CellComm comm[], long long levels) :
@@ -396,17 +384,13 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
     Y = Y + M;
   }
 
-  for (long long i = Levels; i > 0; i--) {
+  for (long long i = Levels; i >= 0; i--) {
     long long ibegin = Comm[i].oLocal();
     long long iboxes = Comm[i].lenLocal();
     long long xlen = Comm[i].lenNeighbors();
 
-    std::vector<long long> lens(xlen);
-    std::transform(Basis[i].Dims.begin(), Basis[i].Dims.end(), lens.begin(), [=](const long long& i) { return i * nrhs; });
     long long lenI = nrhs * std::reduce(&Basis[i].Dims[0], &Basis[i].Dims[xlen]);
     Comm[i].level_merge(rhsX[i].data(), lenI);
-    Comm[i].neighbor_bcast(rhsX[i].data(), lens.data());
-    Comm[i].dup_bcast(rhsX[i].data(), lenI);
 
     for (long long y = 0; y < iboxes; y++) {
       long long M = Basis[i].Dims[y + ibegin];
@@ -417,9 +401,11 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
     }
   }
 
-  if (Basis[0].Dims[0] > 0) {
-    Comm[0].level_merge(rhsX[0].data(), Basis[0].Dims[0] * nrhs);
-    Comm[0].dup_bcast(rhsX[0].data(), Basis[0].Dims[0] * nrhs);
+  for (long long i = Levels; i >= 0; i--) {
+    long long xlen = Comm[i].lenNeighbors();
+    std::vector<long long> lens(xlen);
+    std::transform(Basis[i].Dims.begin(), Basis[i].Dims.end(), lens.begin(), [=](long long d) { return d * nrhs; });
+    Comm[i].neighbor_bcast(rhsX[i].data(), lens.data());
   }
 
   for (long long i = 1; i <= Levels; i++) {

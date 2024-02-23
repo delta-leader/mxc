@@ -92,7 +92,8 @@ CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[]
 
   getNextLevelMapping(&Mapping[0], cells, mpi_size);
   long long p_next = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_rank], Mapping[mpi_rank]));
-  MergeComm = MPI_Comm_split_unique(unique_comms, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
+  MergeComm.first = (int)(mpi_rank == p && p_next == p);
+  MergeComm.second = MPI_Comm_split_unique(unique_comms, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
   DupComm = MPI_Comm_split_unique(unique_comms, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 }
 
@@ -141,74 +142,57 @@ template<typename T> inline MPI_Datatype get_mpi_datatype() {
 }
 
 template<typename T> inline void CellComm::level_merge(T* data, long long len) const {
-  if (MergeComm != MPI_COMM_NULL) {
+  if (MergeComm.second != MPI_COMM_NULL) {
     record_mpi();
-    MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, MergeComm);
-    record_mpi();
-  }
-}
-
-template<typename T> inline void CellComm::dup_bast(T* data, long long len) const {
-  if (DupComm != MPI_COMM_NULL) {
-    record_mpi();
-    MPI_Bcast(data, len, get_mpi_datatype<T>(), 0, DupComm);
+    if (MergeComm.first)
+      MPI_Reduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, 0, MergeComm.second);
+    else
+      MPI_Reduce(data, data, len, get_mpi_datatype<T>(), MPI_SUM, 0, MergeComm.second);
     record_mpi();
   }
 }
 
 template<typename T> inline void CellComm::neighbor_bcast(T* data, const long long box_dims[]) const {
-  if (NeighborComm.size() > 0) {
-    std::vector<long long> offsets(NeighborComm.size() + 1, 0);
-    for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
-      long long end = Boxes[p].second;
-      offsets[p + 1] = std::reduce(box_dims, &box_dims[end], offsets[p]);
-      box_dims = &box_dims[end];
-    }
-
-    record_mpi();
-    for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
-      long long llen = offsets[p + 1] - offsets[p];
-      MPI_Bcast(&data[offsets[p]], llen, get_mpi_datatype<T>(), NeighborComm[p].first, NeighborComm[p].second);
-    }
-    record_mpi();
+  std::vector<long long> offsets(Boxes.size() + 1, 0);
+  for (long long p = 0; p < (long long)Boxes.size(); p++) {
+    long long end = Boxes[p].second;
+    offsets[p + 1] = std::reduce(box_dims, &box_dims[end], offsets[p]);
+    box_dims = &box_dims[end];
   }
+
+  record_mpi();
+  for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
+    long long llen = offsets[p + 1] - offsets[p];
+    MPI_Bcast(&data[offsets[p]], llen, get_mpi_datatype<T>(), NeighborComm[p].first, NeighborComm[p].second);
+  }
+  if (DupComm != MPI_COMM_NULL)
+    MPI_Bcast(data, offsets.back(), get_mpi_datatype<T>(), 0, DupComm);
+  record_mpi();
 }
 
 template<typename T> inline void CellComm::neighbor_reduce(T* data, const long long box_dims[]) const {
-  if (NeighborComm.size() > 0) {
-    std::vector<long long> offsets(NeighborComm.size() + 1, 0);
-    for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
-      long long end = Boxes[p].second;
-      offsets[p + 1] = std::reduce(box_dims, &box_dims[end], offsets[p]);
-      box_dims = &box_dims[end];
-    }
-
-    record_mpi();
-    for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
-      long long llen = offsets[p + 1] - offsets[p];
-      if (p == Proc)
-        MPI_Reduce(MPI_IN_PLACE, &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].first, NeighborComm[p].second);
-      else
-        MPI_Reduce(&data[offsets[p]], &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].first, NeighborComm[p].second);
-    }
-    record_mpi();
+  std::vector<long long> offsets(Boxes.size() + 1, 0);
+  for (long long p = 0; p < (long long)Boxes.size(); p++) {
+    long long end = Boxes[p].second;
+    offsets[p + 1] = std::reduce(box_dims, &box_dims[end], offsets[p]);
+    box_dims = &box_dims[end];
   }
+
+  record_mpi();
+  for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
+    long long llen = offsets[p + 1] - offsets[p];
+    if (p == Proc)
+      MPI_Reduce(MPI_IN_PLACE, &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].first, NeighborComm[p].second);
+    else
+      MPI_Reduce(&data[offsets[p]], &data[offsets[p]], llen, get_mpi_datatype<T>(), MPI_SUM, NeighborComm[p].first, NeighborComm[p].second);
+  }
+  if (DupComm != MPI_COMM_NULL)
+    MPI_Bcast(data, offsets.back(), get_mpi_datatype<T>(), 0, DupComm);
+  record_mpi();
 }
 
 void CellComm::level_merge(std::complex<double>* data, long long len) const {
   level_merge<std::complex<double>>(data, len);
-}
-
-void CellComm::dup_bcast(long long* data, long long len) const {
-  dup_bast<long long>(data, len);
-}
-
-void CellComm::dup_bcast(double* data, long long len) const {
-  dup_bast<double>(data, len);
-}
-
-void CellComm::dup_bcast(std::complex<double>* data, long long len) const {
-  dup_bast<std::complex<double>>(data, len);
 }
 
 void CellComm::neighbor_bcast(long long* data, const long long box_dims[]) const {

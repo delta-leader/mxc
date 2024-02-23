@@ -47,5 +47,9 @@ public:
   void preCompressA2(double epi, ClusterBasis& basis, const CellComm& comm);
 
   void factorizeA(const ClusterBasis& basis, const CellComm& comm);
+
+  void forwardSubstitute(long long nrhs, std::complex<double> X[], std::complex<double> Y[], const ClusterBasis& basis, const CellComm& comm) const;
+
+  void backwardSubstitute(long long nrhs, const std::complex<double> Y[], std::complex<double> Z[], const ClusterBasis& basis, const CellComm& comm) const;
 };
 
