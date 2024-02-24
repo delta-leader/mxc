@@ -46,24 +46,24 @@ const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
 
 long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> A[]) {
   long long K = std::min(M, N), rank = 0;
+  std::complex<double> one(1., 0.), zero(0., 0.);
   std::vector<std::complex<double>> B(M * N), TAU(M);
   std::vector<long long> jpiv(M, 0);
-  std::complex<double> one(1., 0.), zero(0., 0.);
 
-  gen_matrix(eval, N, M, Fbodies, Xbodies, &B[0]);
-  if (K < N) {
-    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, N, M, &B[0], N, &TAU[0]);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &B[1], N);
+  if (0 < K) {
+    gen_matrix(eval, N, M, Fbodies, Xbodies, &B[0]);
+    if (K < N) {
+      LAPACKE_zgeqrf(LAPACK_COL_MAJOR, N, M, &B[0], N, &TAU[0]);
+      LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &B[1], N);
+    }
+
+    LAPACKE_zgeqp3(LAPACK_COL_MAJOR, K, M, &B[0], N, &jpiv[0], &TAU[0]);
+    double s0 = epi * std::abs(B[0]);
+    if (std::numeric_limits<double>::min() < s0)
+      while (rank < K && s0 <= std::abs(B[rank * (N + 1)]))
+        ++rank;
   }
 
-  LAPACKE_zgeqp3(LAPACK_COL_MAJOR, K, M, &B[0], N, &jpiv[0], &TAU[0]);
-  double s0 = epi * std::abs(B[0]);
-  if (std::numeric_limits<double>::min() < s0)
-    while (rank < K && s0 <= std::abs(B[rank * (N + 1)]))
-      ++rank;
-
-  if (rank == M)
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', M, M, zero, one, A, M);
   if (0 < rank && rank < M) {
     cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, &B[0], N, &B[rank * N], N);
     LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', rank, rank, zero, one, &B[0], N);
@@ -77,6 +77,8 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
     LAPACKE_zlaswp(LAPACK_COL_MAJOR, rank, A, M, 1, M, &jpiv[0], 1);
     LAPACKE_dlaswp(LAPACK_ROW_MAJOR, 3, Xbodies, 3, 1, M, &jpiv[0], -1);
   }
+  else
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', M, M, zero, one, A, M);
   return rank;
 }
 
@@ -149,7 +151,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
 
     long long fsize = wsa.fbodies_size_at_i(i);
     const double* fbodies = wsa.fbodies_at_i(i);
-    long long rank = (dim > 0 && fsize > 0) ? compute_basis(eval, epi, dim, fsize, ske, fbodies, matrix) : 0;
+    long long rank = compute_basis(eval, epi, dim, fsize, ske, fbodies, matrix);
     DimsLr[i + ibegin] = rank;
   }
 

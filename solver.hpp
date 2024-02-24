@@ -53,3 +53,5 @@ public:
   void backwardSubstitute(long long nrhs, const std::complex<double> Y[], std::complex<double> Z[], const ClusterBasis& basis, const CellComm& comm) const;
 };
 
+void SolveULV(long long nrhs, std::complex<double> X[], const UlvSolver matrix[], const ClusterBasis basis[], const CellComm comm[], long long levels);
+
