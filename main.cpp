@@ -28,13 +28,13 @@ int main(int argc, char* argv[]) {
   long long leaf_size = argc > 3 ? atoll(argv[3]) : 256;
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
   long long rank = argc > 5 ? atoll(argv[5]) : 100;
-  const char* fname = argc > 6 ? argv[6] : nullptr;
+  long long nrhs = argc > 6 ? atoll(argv[6]) : 2;
+  const char* fname = argc > 7 ? argv[7] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   long long levels = (long long)log2((double)Nbody / leaf_size);
   long long Nleaf = (long long)1 << levels;
   long long ncells = Nleaf + Nleaf - 1;
-  long long nrhs = 2;
   MPI_Comm world;
   MPI_Comm_dup(MPI_COMM_WORLD, &world);
 
@@ -42,10 +42,10 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
   
-  //Laplace3D eval(1);
+  Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
-  Helmholtz3D eval(1.e-1, 1.);
+  //Helmholtz3D eval(1.e-1, 1.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);
@@ -108,6 +108,20 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = timer.first;
   timer.first = 0;
 
+  std::vector<UlvSolver> matrix(levels + 1);
+  matrix[levels] = UlvSolver(basis[levels].Dims.data(), cellNear, cellFar, cell_comm[levels]);
+  matrix[levels].loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
+  matrix[levels].preCompressA2(epi, basis[levels], cell_comm[levels]);
+  matrix[levels].factorizeA(basis[levels], cell_comm[levels]);
+
+  for (long long l = levels - 1; l >= 0; l--) {
+    basis[l].adjustLowerRankGrowth(basis[l + 1], cell_comm[l]);
+    matrix[l] = UlvSolver(basis[l].Dims.data(), cellNear, cellFar, cell_comm[l]);
+    matrix[l].loadDataInterNode(&cell[0], matrix[l + 1], cell_comm[l + 1], cell_comm[l]);
+    matrix[l].preCompressA2(epi, basis[l], cell_comm[l]);
+    matrix[l].factorizeA(basis[l], cell_comm[l]);
+  }
+
   long long llen = cell_comm[levels].lenLocal();
   long long gbegin = cell_comm[levels].oGlobal();
   long long body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
@@ -132,20 +146,6 @@ int main(int argc, char* argv[]) {
   mat_vec_reference(eval, lenX, Nbody, nrhs, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX * nrhs);
-
-  std::vector<UlvSolver> matrix(levels + 1);
-  matrix[levels] = UlvSolver(basis[levels].Dims.data(), cellNear, cellFar, cell_comm[levels]);
-  matrix[levels].loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
-  matrix[levels].preCompressA2(epi, basis[levels], cell_comm[levels]);
-  matrix[levels].factorizeA(basis[levels], cell_comm[levels]);
-
-  for (long long l = levels - 1; l >= 0; l--) {
-    basis[l].adjustLowerRankGrowth(basis[l + 1], cell_comm[l]);
-    matrix[l] = UlvSolver(basis[l].Dims.data(), cellNear, cellFar, cell_comm[l]);
-    matrix[l].loadDataInterNode(&cell[0], matrix[l + 1], cell_comm[l + 1], cell_comm[l]);
-    matrix[l].preCompressA2(epi, basis[l], cell_comm[l]);
-    matrix[l].factorizeA(basis[l], cell_comm[l]);
-  }
 
   SolveULV(nrhs, &X1[0], &matrix[0], &basis[0], &cell_comm[0], levels);
 

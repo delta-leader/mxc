@@ -264,8 +264,7 @@ void ClusterBasis::recompressR(double epi, const CellComm& comm) {
   std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
   Coffsets[0] = 0;
 
-  Cdata.resize(Coffsets.back());
-  std::fill(Cdata.begin(), Cdata.end(), std::complex<double>(0., 0.));
+  Cdata = std::vector<std::complex<double>>(Coffsets.back(), std::complex<double>(0., 0.));
   std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const long long d) { return &Cdata[d]; });
 
   long long dim_max = *std::max_element(DimsLr.begin(), DimsLr.end());
@@ -321,7 +320,9 @@ void ClusterBasis::adjustLowerRankGrowth(const ClusterBasis& prev_basis, const C
     long long N = DimsLr[i + ibegin];
     long long childi = localChildOffsets[i];
     long long cend = localChildOffsets[i + 1];
-    for (long long j = childi; j < cend && 0 < N; j++) {
+    if (N == 0)
+      LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', M, M, zero, one, &Qdata[Qoffsets[i + ibegin]], M);
+    else for (long long j = childi; j < cend; j++) {
       long long m1 = localChildLrDims[j], m2 = newLocalChildLrDims[j];
       long long lj = localChildIndex + j;
       long long offsetOld = std::reduce(&localChildLrDims[childi], &localChildLrDims[j]);
