@@ -88,10 +88,12 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   long long nodes = comm.lenLocal();
   long long ybegin = comm.oGlobal();
 
-  localChildIndex = prev_comm.iLocal(cells[ybegin].Child[0]);
+  long long ychild = cells[ybegin].Child[0];
+  localChildIndex = prev_comm.iLocal(ychild);
+  selfChildIndex = 0 <= ychild ? (prev_comm.oGlobal() - ychild) : 0;
   localChildOffsets = std::vector<long long>(nodes + 1);
   localChildOffsets[0] = 0;
-  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [&](const Cell& c) { return c.Child[1] - cells[ybegin].Child[0]; });
+  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return c.Child[1] - ychild; });
 
   localChildLrDims = std::vector<long long>(localChildOffsets.back());
   std::copy(&prev_basis.DimsLr[localChildIndex], &prev_basis.DimsLr[localChildIndex + localChildLrDims.size()], localChildLrDims.begin());
@@ -188,6 +190,10 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
 long long ClusterBasis::copyOffset(long long i) const {
   long long start = std::max((long long)0, i - ParentSequenceNum[i]);
   return std::reduce(&DimsLr[start], &DimsLr[i], (long long)0);
+}
+
+long long ClusterBasis::childWriteOffset() const {
+  return std::reduce(localChildLrDims.begin(), localChildLrDims.begin() + selfChildIndex, (long long)0);
 }
 
 long long compute_recompression(double epi, long long M, long long N, std::complex<double> Q[], std::complex<double> R[]) {

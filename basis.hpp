@@ -35,6 +35,7 @@ private:
   std::vector<long long> localChildOffsets;
   std::vector<long long> localChildLrDims;
   long long localChildIndex;
+  long long selfChildIndex;
 
 public:
   std::vector<long long> Dims;
@@ -50,6 +51,7 @@ public:
   ClusterBasis() {}
   ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
   long long copyOffset(long long i) const;
+  long long childWriteOffset() const;
   void recompressR(double epi, const CellComm& comm);
   void adjustLowerRankGrowth(const ClusterBasis& prev_basis, const CellComm& comm);
 };

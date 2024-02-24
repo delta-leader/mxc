@@ -49,8 +49,8 @@ public:
   void loadDataInterNode(const Cell cells[], const UlvSolver& prev_matrix, const CellComm& prev_comm, const CellComm& comm);
   void preCompressA2(double epi, ClusterBasis& basis, const CellComm& comm);
   void factorizeA(const ClusterBasis& basis, const CellComm& comm);
-  void forwardSubstitute(long long nrhs, std::complex<double> X[], std::complex<double> Y[], const ClusterBasis& basis, const CellComm& comm) const;
-  void backwardSubstitute(long long nrhs, const std::complex<double> Y[], std::complex<double> Z[], const ClusterBasis& basis, const CellComm& comm) const;
+  void forwardSubstitute(long long nrhs, long long lenY, std::complex<double> X[], std::complex<double> Y[], const ClusterBasis& basis, const CellComm& comm) const;
+  void backwardSubstitute(long long nrhs, long long lenY, const std::complex<double> Y[], std::complex<double> Z[], const ClusterBasis& basis, const CellComm& comm) const;
 };
 
 void SolveULV(long long nrhs, std::complex<double> X[], const UlvSolver matrix[], const ClusterBasis basis[], const CellComm comm[], long long levels);

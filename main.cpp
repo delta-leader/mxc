@@ -162,7 +162,6 @@ int main(int argc, char* argv[]) {
     std::cout << "Matvec: " << matvec_time << ", " << matvec_comm_time << std::endl;
   }
 
-
   for (MPI_Comm& c : mpi_comms)
     MPI_Comm_free(&c);
   MPI_Comm_free(&world);

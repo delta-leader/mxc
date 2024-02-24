@@ -434,7 +434,7 @@ void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
   }
 }
 
-void UlvSolver::forwardSubstitute(long long nrhs, std::complex<double> X[], std::complex<double> Y[], const ClusterBasis& basis, const CellComm& comm) const {
+void UlvSolver::forwardSubstitute(long long nrhs, long long lenY, std::complex<double> X[], std::complex<double> Y[], const ClusterBasis& basis, const CellComm& comm) const {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long xlen = comm.lenNeighbors();
@@ -445,10 +445,9 @@ void UlvSolver::forwardSubstitute(long long nrhs, std::complex<double> X[], std:
   long long lenX = Xoffsets.back();
   comm.level_merge(X, lenX * nrhs);
 
-  std::vector<long long> Yoffsets(xlen + 1);
-  std::inclusive_scan(basis.DimsLr.begin(), basis.DimsLr.end(), Yoffsets.begin() + 1);
+  std::vector<long long> Yoffsets(nodes + 1);
+  std::inclusive_scan(basis.DimsLr.begin() + ibegin, basis.DimsLr.begin() + (ibegin + nodes), Yoffsets.begin() + 1);
   Yoffsets[0] = 0;
-  long long lenY = Yoffsets.back();
 
   std::vector<std::complex<double>> Z(X, &X[lenX * nrhs]);
   std::complex<double> one(1., 0.), zero(0., 0.), minus_one(-1., 0.);
@@ -456,9 +455,8 @@ void UlvSolver::forwardSubstitute(long long nrhs, std::complex<double> X[], std:
     long long M = basis.Dims[i], N = basis.DimsLr[i], K = M - N;
     long long offsetIn = Xoffsets[i];
     long long offsetX = Xoffsets[i] * nrhs;
-    long long offsety = Yoffsets[i];
+    long long offsety = Yoffsets[i - ibegin];
     const std::complex<double>* Qr = &(basis.Q[i])[M * N];
-
     if (0 < K)
       cblas_zgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, K, nrhs, M, &one, Qr, M, &Z[offsetIn], lenX, &zero, &X[offsetX], M);
     if (0 < N)
@@ -540,20 +538,20 @@ void UlvSolver::forwardSubstitute(long long nrhs, std::complex<double> X[], std:
 
   for (long long i = ibegin; i < (ibegin + nodes); i++) {
     long long Mi = basis.Dims[i], Ni = basis.DimsLr[i];
-    long long offsety = Yoffsets[i];
+    long long offsety = Yoffsets[i - ibegin];
 
-    for (long long ij = A.RowIndex[i]; ij < A.RowIndex[i + 1]; ij++) {
-      long long j = A.ColIndexLocal[ij];
-      long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
-      long long offsetj = Xoffsets[j] * nrhs;
-      std::array<const std::complex<double>*, 4> splitsij = matrixSplits(Mi, Ni, Nj, A[ij]);
-      if (0 < Ni)
+    if (0 < Ni)
+      for (long long ij = A.RowIndex[i]; ij < A.RowIndex[i + 1]; ij++) {
+        long long j = A.ColIndexLocal[ij];
+        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
+        long long offsetj = Xoffsets[j] * nrhs;
+        std::array<const std::complex<double>*, 4> splitsij = matrixSplits(Mi, Ni, Nj, A[ij]);
         cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ni, nrhs, Kj, &minus_one, splitsij[1], Mi, &X[offsetj], Mj, &one, &Y[offsety], lenY);
-    }
+      }
   }
 }
 
-void UlvSolver::backwardSubstitute(long long nrhs, const std::complex<double> Y[], std::complex<double> X[], const ClusterBasis& basis, const CellComm& comm) const {
+void UlvSolver::backwardSubstitute(long long nrhs, long long lenY, const std::complex<double> Y[], std::complex<double> X[], const ClusterBasis& basis, const CellComm& comm) const {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long xlen = comm.lenNeighbors();
@@ -563,13 +561,24 @@ void UlvSolver::backwardSubstitute(long long nrhs, const std::complex<double> Y[
   Xoffsets[0] = 0;
   long long lenX = Xoffsets.back();
 
-  std::vector<std::complex<double>> Z(lenX * nrhs, std::complex<double>(0., 0.));
-  std::vector<long long> Yoffsets(xlen + 1);
-  std::inclusive_scan(basis.DimsLr.begin(), basis.DimsLr.end(), Yoffsets.begin() + 1);
+  std::vector<long long> Yoffsets(nodes + 1);
+  std::inclusive_scan(basis.DimsLr.begin() + ibegin, basis.DimsLr.begin() + (ibegin + nodes), Yoffsets.begin() + 1);
   Yoffsets[0] = 0;
-  long long lenY = Yoffsets.back();
-  
+
   std::complex<double> one(1., 0.), minus_one(-1., 0.), zero(0., 0.);
+  std::vector<std::complex<double>> Z(lenX * nrhs, zero);
+  for (long long i = ibegin; i < (ibegin + nodes); i++) {
+    long long M = basis.Dims[i], N = basis.DimsLr[i];
+    long long offsetZ = Xoffsets[i] * nrhs;
+    long long offsetY = Yoffsets[i - ibegin];
+    if (0 < N)
+      MKL_Zomatcopy('C', 'N', N, nrhs, one, &Y[offsetY], lenY, &Z[offsetZ], M);
+  }
+
+  std::vector<long long> Zsizes(xlen);
+  std::transform(basis.Dims.begin(), basis.Dims.end(), Zsizes.begin(), [=](long long d) { return d * nrhs; });
+  comm.neighbor_bcast(Z.data(), Zsizes.data());
+  
   for (long long i = ibegin + nodes - 1; i >= ibegin; i--) {
     long long Mi = basis.Dims[i], Ni = basis.DimsLr[i], Ki = Mi - Ni;
     long long offseti = Xoffsets[i] * nrhs;
@@ -578,12 +587,11 @@ void UlvSolver::backwardSubstitute(long long nrhs, const std::complex<double> Y[
       long long j = A.ColIndexLocal[ij];
       long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
       long long offsetj = Xoffsets[j] * nrhs;
-      long long offsety = Yoffsets[j];
       std::array<const std::complex<double>*, 4> splitsij = matrixSplits(Mi, Ni, Nj, A[ij]);
       if (0 < Ki && (Ad[i] < j && j < ALocalCol[i].second))
         cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ki, nrhs, Kj, &minus_one, splitsij[0], Mi, &X[offsetj], Mj, &one, &X[offseti], Mi);
       if (0 < Nj)
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ki, nrhs, Nj, &minus_one, splitsij[2], Mi, &Y[offsety], lenY, &one, &X[offseti], Mi);
+        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ki, nrhs, Nj, &minus_one, splitsij[2], Mi, &Z[offsetj], Mj, &one, &X[offseti], Mi);
     }
 
     if (0 < Mi) {
@@ -592,21 +600,18 @@ void UlvSolver::backwardSubstitute(long long nrhs, const std::complex<double> Y[
     }
   }
 
+  std::fill(Z.begin(), Z.end(), zero);
   for (long long i = ibegin; i < ibegin + nodes; i++) {
     long long Mi = basis.Dims[i], Ni = basis.DimsLr[i], Ki = Mi - Ni;
     long long offseti = Xoffsets[i] * nrhs;
-    long long offsety = Yoffsets[i];
+    long long offsety = Yoffsets[i - ibegin];
     const std::complex<double>* Qr = &(basis.Q[i])[Mi * Ni];
     if (0 < Ni)
       cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Mi, nrhs, Ni, &one, basis.Q[i], Mi, &Y[offsety], lenY, &one, &Z[offseti], Mi);
     cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Mi, nrhs, Ki, &one, Qr, Mi, &X[offseti], Mi, &one, &Z[offseti], Mi);
   }
 
-  std::vector<long long> Zsizes(xlen);
-  std::transform(basis.Dims.begin(), basis.Dims.end(), Zsizes.begin(), [=](long long d) { return d * nrhs; });
-  comm.neighbor_bcast(Z.data(), Zsizes.data());
-
-  for (long long i = 0; i < xlen; i++) {
+  for (long long i = ibegin; i < ibegin + nodes; i++) {
     long long M = basis.Dims[i];
     long long offsetZ = Xoffsets[i] * nrhs;
     long long offsetOut = Xoffsets[i];
@@ -616,10 +621,15 @@ void UlvSolver::backwardSubstitute(long long nrhs, const std::complex<double> Y[
 }
 
 void SolveULV(long long nrhs, std::complex<double> X[], const UlvSolver matrix[], const ClusterBasis basis[], const CellComm comm[], long long levels) {
+  std::vector<long long> Ysizes(levels + 1);
+  std::vector<long long> Yoffset(levels + 1);
   std::vector<std::vector<std::complex<double>>> Y(levels + 1);
+
   for (long long l = 0; l <= levels; l++) {
-    long long vlen = nrhs * std::reduce(basis[l].Dims.begin(), basis[l].Dims.end());
-    Y[l] = std::vector<std::complex<double>>(vlen, std::complex<double>(0., 0.));
+    long long ibegin = comm[l].oLocal();
+    Ysizes[l] = std::reduce(basis[l].Dims.begin(), basis[l].Dims.end());
+    Yoffset[l] = std::reduce(basis[l].Dims.begin(), basis[l].Dims.begin() + ibegin, basis[l].childWriteOffset());
+    Y[l] = std::vector<std::complex<double>>(nrhs * Ysizes[l], std::complex<double>(0., 0.));
   }
 
   long long ibegin = comm[levels].oLocal();
@@ -630,12 +640,12 @@ void SolveULV(long long nrhs, std::complex<double> X[], const UlvSolver matrix[]
   MKL_Zomatcopy('C', 'N', lenX, nrhs, std::complex<double>(1., 0.), X, lenX, &(Y[levels])[offset], lenY);
 
   for (long long l = levels; l > 0; l--)
-    matrix[l].forwardSubstitute(nrhs, Y[l].data(), Y[l - 1].data(), basis[l], comm[l]);
+    matrix[l].forwardSubstitute(nrhs, Ysizes[l - 1], Y[l].data(), &(Y[l - 1])[Yoffset[l - 1]], basis[l], comm[l]);
 
-  matrix[0].forwardSubstitute(nrhs, Y[0].data(), Y[0].data(), basis[0], comm[0]);
-  matrix[0].backwardSubstitute(nrhs, Y[0].data(), Y[0].data(), basis[0], comm[0]);
+  matrix[0].forwardSubstitute(nrhs, Ysizes[0], Y[0].data(), Y[0].data(), basis[0], comm[0]);
+  matrix[0].backwardSubstitute(nrhs, Ysizes[0], Y[0].data(), Y[0].data(), basis[0], comm[0]);
 
   for (long long l = 1; l <= levels; l++)
-    matrix[l].backwardSubstitute(nrhs, Y[l - 1].data(), Y[l].data(), basis[l], comm[l]);
+    matrix[l].backwardSubstitute(nrhs, Ysizes[l - 1], &(Y[l - 1])[Yoffset[l - 1]], Y[l].data(), basis[l], comm[l]);
   MKL_Zomatcopy('C', 'N', lenX, nrhs, std::complex<double>(1., 0.), &(Y[levels])[offset], lenY, X, lenX);
 }
