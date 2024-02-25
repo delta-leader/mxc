@@ -42,10 +42,10 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
   
-  Laplace3D eval(1);
+  //Laplace3D eval(1);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
-  //Helmholtz3D eval(1.e-1, 1.);
+  Helmholtz3D eval(1.e-1, 1.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);

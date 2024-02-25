@@ -302,12 +302,12 @@ void captureAmulB(long long M, long long N, const long long K[], long long lenAB
   }
 }
 
-void mulQhAQ(long long M, long long N, std::complex<double>* A, long long K1, const std::complex<double>* Ql, long long K2, const std::complex<double>* Qr) {
-  if (0 < M && 0 < N) {
+void mulQhAQc(long long M, long long N, std::complex<double>* A, long long K1, const std::complex<double>* Ql, long long K2, const std::complex<double>* Qr) {
+  if (0 < K1 && 0 < K2) {
     std::vector<std::complex<double>> B(M * K2);
     std::complex<double> zero(0., 0.), one(1., 0.);
-    cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, K2, N, &one, A, M, Qr, N, &zero, &B[0], M);
-    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasNoTrans, K1, K2, M, &one, Ql, M, &B[0], M, &zero, A, K1);
+    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasTrans, K2, M, N, &one, Qr, N, A, M, &zero, &B[0], K2);
+    cblas_zgemm(CblasColMajor, CblasConjTrans, CblasTrans, K1, K2, M, &one, Ql, M, &B[0], K2, &zero, A, K1);
     std::fill(&A[K1 * K2], &A[M * N], zero);
   }
 }
@@ -362,7 +362,7 @@ void UlvSolver::preCompressA2(double epi, ClusterBasis& basis, const CellComm& c
       if (ybegin <= Ck[ij] && Ck[ij] < ybegin + nodes) {
         d = std::array<long long, 4>{ 
           basis.DimsLr[i], basis.DimsLr[j], basis.copyOffset(i), basis.copyOffset(j) };
-        mulQhAQ(CM, CN, C[ij], d[0], basis.Q[i], d[1], basis.Q[j]);
+        mulQhAQc(CM, CN, C[ij], d[0], basis.Q[i], d[1], basis.Q[j]);
       }
       else
         std::fill(C[ij], C[ij] + CM * CN, std::complex<double>(0., 0.));
@@ -403,7 +403,7 @@ void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
       long long j = A.ColIndexLocal[ij];
       long long AM = A.Dims[ij].first;
       long long AN = A.Dims[ij].second;
-      mulQhAQ(AM, AN, A[ij], AM, basis.Q[i + ibegin], AN, basis.Q[j]);
+      mulQhAQc(AM, AN, A[ij], AM, basis.Q[i + ibegin], AN, basis.Q[j]);
       A.DimsLr[ij] = std::array<long long, 4>{ 
         basis.DimsLr[i + ibegin], basis.DimsLr[j], basis.copyOffset(i + ibegin), basis.copyOffset(j) };
     }
@@ -607,8 +607,8 @@ void UlvSolver::backwardSubstitute(long long nrhs, long long lenY, const std::co
     long long offsety = Yoffsets[i - ibegin];
     const std::complex<double>* Qr = &(basis.Q[i])[Mi * Ni];
     if (0 < Ni)
-      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Mi, nrhs, Ni, &one, basis.Q[i], Mi, &Y[offsety], lenY, &one, &Z[offseti], Mi);
-    cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Mi, nrhs, Ki, &one, Qr, Mi, &X[offseti], Mi, &one, &Z[offseti], Mi);
+      cblas_zgemm(CblasColMajor, CblasTrans, CblasConjTrans, nrhs, Mi, Ni, &one, &Y[offsety], lenY, basis.Q[i], Mi, &one, &Z[offseti], nrhs);
+    cblas_zgemm(CblasColMajor, CblasTrans, CblasConjTrans, nrhs, Mi, Ki, &one, &X[offseti], Mi, Qr, Mi, &one, &Z[offseti], nrhs);
   }
 
   for (long long i = ibegin; i < ibegin + nodes; i++) {
@@ -616,7 +616,7 @@ void UlvSolver::backwardSubstitute(long long nrhs, long long lenY, const std::co
     long long offsetZ = Xoffsets[i] * nrhs;
     long long offsetOut = Xoffsets[i];
     if (0 < M)
-      MKL_Zomatcopy('C', 'N', M, nrhs, one, &Z[offsetZ], M, &X[offsetOut], lenX);
+      MKL_Zomatcopy('C', 'T', nrhs, M, one, &Z[offsetZ], nrhs, &X[offsetOut], lenX);
   }
 }
 
