@@ -433,6 +433,7 @@ std::array<const std::complex<double>*, 4> inline matrixSplits(long long M, long
 void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
+  long long xlen = comm.lenNeighbors();
 
   for (long long i = 0; i < nodes; i++)
     for (long long ij = A.RowIndex[i + ibegin]; ij < A.RowIndex[i + ibegin + 1]; ij++) {
@@ -450,21 +451,124 @@ void UlvSolver::factorizeA(const ClusterBasis& basis, const CellComm& comm) {
   comm.neighbor_bcast(A.Data.data(), A.elementsOnRow.data());
   comm.neighbor_bcast(DimsLrPtr, blocks4.data());
 
-  std::complex<double> one(1., 0.), minus_one(-1., 0.);
-  for (long long i = ibegin; i < (ibegin + nodes); i++) {
-    long long ii = A.DiagIndex[i];
-    long long AM = A.Dims[ii].first;
-    long long lenS = A.DimsLr[ii][0];
-    long long lenR = AM - lenS;
-    std::array<std::complex<double>*, 4> splitsD = matrixSplits(AM, lenS, lenS, A[ii]);
+  std::vector<long long> Iiters(xlen), Giters(xlen);
+  std::iota(Iiters.begin(), Iiters.begin() + ibegin, 0);
+  std::iota(Iiters.begin() + ibegin, Iiters.begin() + (xlen - nodes), ibegin + nodes);
+  std::iota(Iiters.begin() + (xlen - nodes), Iiters.end(), ibegin);
+  std::transform(Iiters.begin(), Iiters.end(), Giters.begin(), [&](long long i) { return comm.iGlobal(i); });
 
-    if (0 < lenR) {
-      LAPACKE_zgetrf(LAPACK_COL_MAJOR, lenR, lenR, splitsD[0], AM, Apiv[i].data());
-      if (0 < lenS) {
-        LAPACKE_zlaswp(LAPACK_COL_MAJOR, lenS, splitsD[2], AM, 1, lenR, Apiv[i].data(), 1);
-        cblas_ztrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, lenR, lenS, &one, splitsD[0], AM, splitsD[2], AM);
-        cblas_ztrsm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, lenS, lenR, &one, splitsD[0], AM, splitsD[1], AM);
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, lenS, lenS, lenR, &minus_one, splitsD[1], AM, splitsD[2], AM, &one, splitsD[3], AM);
+  std::complex<double> one(1., 0.), minus_one(-1., 0.);
+  for (long long iterI = 0; iterI < xlen; iterI++) {
+    long long i = Iiters[iterI];
+    long long Mi = basis.Dims[i], Ni = basis.DimsLr[i], Ki = Mi - Ni;
+    long long ii = A.DiagIndex[i];
+
+    if (0 < Ki) {
+      std::array<std::complex<double>*, 4> splitsII = matrixSplits(Mi, Ni, Ni, A[ii]);
+      LAPACKE_zgetrf(LAPACK_COL_MAJOR, Ki, Ki, splitsII[0], Mi, Apiv[i].data());
+
+      for (long long iterK = iterI + 1; iterK < xlen; iterK++) {
+        long long k = Iiters[iterK];
+        long long Mk = basis.Dims[k], Nk = basis.DimsLr[k], Kk = Mk - Nk;
+        long long ik = A(i, Giters[iterK]);
+        if (0 <= ik && 0 < Kk) {
+          std::array<std::complex<double>*, 4> splitsIK = matrixSplits(Mi, Ni, Nk, A[ik]);
+          LAPACKE_zlaswp(LAPACK_COL_MAJOR, Kk, splitsIK[0], Mi, 1, Ki, Apiv[i].data(), 1);
+          cblas_ztrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, Ki, Kk, &one, splitsII[0], Mi, splitsIK[0], Mi);
+        }
+      }
+
+      for (long long ik = A.RowIndex[i]; ik < A.RowIndex[i + 1]; ik++) {
+        long long Nk = A.DimsLr[ik][1];
+        if (0 < Nk) {
+          std::array<std::complex<double>*, 4> splitsIK = matrixSplits(Mi, Ni, Nk, A[ik]);
+          LAPACKE_zlaswp(LAPACK_COL_MAJOR, Nk, splitsIK[2], Mi, 1, Ki, Apiv[i].data(), 1);
+          cblas_ztrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, Ki, Nk, &one, splitsII[0], Mi, splitsIK[2], Mi);
+        }
+      }
+
+      for (long long iterJ = iterI + 1; iterJ < xlen; iterJ++) {
+        long long j = Iiters[iterJ];
+        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
+        long long ji = A(j, Giters[iterI]);
+        if (0 <= ji && 0 < Kj) {
+          std::array<std::complex<double>*, 4> splitsJI = matrixSplits(Mj, Nj, Ni, A[ji]);
+          cblas_ztrsm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, Kj, Ki, &one, splitsII[0], Mi, splitsJI[0], Mj);
+
+          for (long long iterK = iterI + 1; iterK < xlen; iterK++) {
+            long long k = Iiters[iterK];
+            long long Mk = basis.Dims[k], Nk = basis.DimsLr[k], Kk = Mk - Nk;
+            long long jk = A(j, Giters[iterK]);
+            long long ik = A(i, Giters[iterK]);
+            if (0 <= jk && 0 <= ik && 0 < Kk) {
+              std::array<std::complex<double>*, 4> splitsIK = matrixSplits(Mi, Ni, Nk, A[ik]);
+              std::array<std::complex<double>*, 4> splitsJK = matrixSplits(Mj, Nj, Nk, A[jk]);
+              cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Kj, Kk, Ki, &minus_one, splitsJI[0], Mj, splitsIK[0], Mi, &one, splitsJK[0], Mj);
+            }
+          }
+
+          for (long long ik = A.RowIndex[i]; ik < A.RowIndex[i + 1]; ik++) {
+            long long k = A.ColIndex[ik];
+            long long jk = A(j, k);
+            long long Nk = A.DimsLr[ik][1];
+            if (0 <= jk && 0 < Nk) {
+              std::array<std::complex<double>*, 4> splitsIK = matrixSplits(Mi, Ni, Nk, A[ik]);
+              std::array<std::complex<double>*, 4> splitsJK = matrixSplits(Mj, Nj, Nk, A[jk]);
+              cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Kj, Nk, Ki, &minus_one, splitsJI[0], Mj, splitsIK[2], Mi, &one, splitsJK[2], Mj);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  for (long long j = ibegin; j < (ibegin + nodes); j++) {
+    long long Mj = basis.Dims[j], Nj = basis.DimsLr[j];
+    if (0 < Nj) {
+      for (long long iterI = 0; iterI < xlen; iterI++) {
+        long long i = Iiters[iterI];
+        long long Mi = basis.Dims[i], Ni = basis.DimsLr[i], Ki = Mi - Ni;
+        long long ji = A(j, Giters[iterI]);
+        long long ii = A.DiagIndex[i];
+
+        if (0 <= ji && 0 < Ki) {
+          std::array<std::complex<double>*, 4> splitsJI = matrixSplits(Mj, Nj, Ni, A[ji]);
+          std::array<std::complex<double>*, 4> splitsII = matrixSplits(Mi, Ni, Ni, A[ii]);
+          cblas_ztrsm(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasNonUnit, Nj, Ki, &one, splitsII[0], Mi, splitsJI[1], Mj);
+
+          for (long long iterK = iterI + 1; iterK < xlen; iterK++) {
+            long long k = Iiters[iterK];
+            long long Mk = basis.Dims[k], Nk = basis.DimsLr[k], Kk = Mk - Nk;
+            long long ik = A(i, Giters[iterK]);
+            long long jk = A(j, Giters[iterK]);
+            if (0 <= ik && 0 <= jk && 0 < Kk) {
+              std::array<std::complex<double>*, 4> splitsIK = matrixSplits(Mi, Ni, Nk, A[ik]);
+              std::array<std::complex<double>*, 4> splitsJK = matrixSplits(Mj, Nj, Nk, A[jk]);
+              cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Nj, Kk, Ki, &minus_one, splitsJI[1], Mj, splitsIK[0], Mi, &one, splitsJK[1], Mj);
+            }
+          }
+
+          for (long long jk = A.RowIndex[j]; jk < A.RowIndex[j + 1]; jk++) {
+            long long k = A.ColIndexLocal[jk];
+            long long Nk = basis.DimsLr[k];
+            long long ik = A(i, A.ColIndex[jk]);
+            if (0 <= ik && 0 < Nk) {
+              std::array<std::complex<double>*, 4> splitsIK = matrixSplits(Mi, Ni, Nk, A[ik]);
+              std::array<std::complex<double>*, 4> splitsJK = matrixSplits(Mj, Nj, Nk, A[jk]);
+              cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Nj, Nk, Ki, &minus_one, splitsJI[1], Mj, splitsIK[2], Mi, &one, splitsJK[3], Mj);
+            }
+          }
+
+          for (long long jk = C.RowIndex[j]; jk < C.RowIndex[j + 1]; jk++) {
+            long long k = C.ColIndex[jk];
+            long long Nk = C.DimsLr[jk][1];
+            long long ik = A(i, k);
+            if (0 <= ik && 0 < Nk) {
+              std::array<std::complex<double>*, 4> splitsIK = matrixSplits(Mi, Ni, Nk, A[ik]);
+              cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Nj, Nk, Ki, &minus_one, splitsJI[1], Mj, splitsIK[2], Mi, &one, C[jk], Nj);
+            }
+          }
+        }
       }
     }
   }
@@ -594,7 +698,7 @@ void UlvSolver::backwardSubstitute(long long nrhs, long long lenY, const std::co
 
       for (long long ij = A.RowIndex[i]; ij < A.RowIndex[i + 1]; ij++) {
         long long j = A.ColIndexLocal[ij];
-        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
+        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j];
         long long offsetj = Xoffsets[j] * nrhs;
         std::array<const std::complex<double>*, 4> splitsij = matrixSplits(Mi, Ni, Nj, A[ij]);
         if (0 < Nj)
