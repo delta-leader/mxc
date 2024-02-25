@@ -108,20 +108,6 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = timer.first;
   timer.first = 0;
 
-  std::vector<UlvSolver> matrix(levels + 1);
-  matrix[levels] = UlvSolver(basis[levels].Dims.data(), cellNear, cellFar, cell_comm[levels]);
-  matrix[levels].loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
-  matrix[levels].preCompressA2(epi, basis[levels], cell_comm[levels]);
-  matrix[levels].factorizeA(basis[levels], cell_comm[levels]);
-
-  for (long long l = levels - 1; l >= 0; l--) {
-    basis[l].adjustLowerRankGrowth(basis[l + 1], cell_comm[l]);
-    matrix[l] = UlvSolver(basis[l].Dims.data(), cellNear, cellFar, cell_comm[l]);
-    matrix[l].loadDataInterNode(&cell[0], matrix[l + 1], cell_comm[l + 1], cell_comm[l]);
-    matrix[l].preCompressA2(epi, basis[l], cell_comm[l]);
-    matrix[l].factorizeA(basis[l], cell_comm[l]);
-  }
-
   long long llen = cell_comm[levels].lenLocal();
   long long gbegin = cell_comm[levels].oGlobal();
   long long body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
@@ -146,6 +132,20 @@ int main(int argc, char* argv[]) {
   mat_vec_reference(eval, lenX, Nbody, nrhs, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX * nrhs);
+
+  std::vector<UlvSolver> matrix(levels + 1);
+  matrix[levels] = UlvSolver(basis[levels].Dims.data(), cellNear, cellFar, cell_comm[levels]);
+  matrix[levels].loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
+  matrix[levels].preCompressA2(epi, basis[levels], cell_comm[levels]);
+  matrix[levels].factorizeA(basis[levels], cell_comm[levels]);
+
+  for (long long l = levels - 1; l >= 0; l--) {
+    basis[l].adjustLowerRankGrowth(basis[l + 1], cell_comm[l]);
+    matrix[l] = UlvSolver(basis[l].Dims.data(), cellNear, cellFar, cell_comm[l]);
+    matrix[l].loadDataInterNode(&cell[0], matrix[l + 1], cell_comm[l + 1], cell_comm[l]);
+    matrix[l].preCompressA2(epi, basis[l], cell_comm[l]);
+    matrix[l].factorizeA(basis[l], cell_comm[l]);
+  }
 
   SolveULV(nrhs, &X1[0], &matrix[0], &basis[0], &cell_comm[0], levels);
 
