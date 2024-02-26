@@ -12,7 +12,6 @@ class MatrixAccessor;
 
 class BlockSparseMatrix {
 public:
-  std::pair<long long, long long> LocalIndex;
   std::vector<long long> RowIndex;
   std::vector<long long> ColIndex;
   std::vector<long long> ColIndexLocal;
@@ -31,8 +30,6 @@ public:
   const std::complex<double>* operator[](long long i) const;
   std::complex<double>* operator[](long long i);
   long long operator()(long long y, long long x) const;
-  long long ijLower(long long i, long long* ij) const;
-  long long ijUpper(long long i, long long* ij) const;
 };
 
 class UlvSolver {

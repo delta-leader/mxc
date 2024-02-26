@@ -16,7 +16,6 @@ BlockSparseMatrix::BlockSparseMatrix(long long len, const std::pair<long long, l
   long long ibegin = comm.oLocal();
   long long ybegin = comm.oGlobal();
 
-  LocalIndex = std::make_pair(ibegin, ibegin + nodes);
   blocksOnRow = std::vector<long long>(xlen);
   elementsOnRow = std::vector<long long>(xlen);
   DiagIndex = std::vector<long long>(xlen);
@@ -76,52 +75,6 @@ std::complex<double>* BlockSparseMatrix::operator[](long long i) {
 long long BlockSparseMatrix::operator()(long long y, long long x) const {
   long long i = std::distance(&ColIndex[0], std::find(&ColIndex[RowIndex[y]], &ColIndex[RowIndex[y + 1]], x));
   return i < RowIndex[y + 1] ? i : -1;
-}
-
-long long BlockSparseMatrix::ijLower(long long i, long long* ij) const {
-  const long long* cols = &ColIndexLocal[RowIndex[i]];
-  const long long* cols_end = &ColIndexLocal[RowIndex[i + 1]];
-  long long diag = DiagIndex[i];
-
-  auto col_in_local = [=](long long col) { return LocalIndex.first <= col && col < LocalIndex.second; };
-  long long local = std::distance(&ColIndexLocal[0], std::find_if(cols, cols_end, col_in_local));
-  long long local_end = std::distance(&ColIndexLocal[0], std::find_if_not(&ColIndexLocal[local], cols_end, col_in_local));
-
-  std::vector<long long> lis(RowIndex[i + 1] - RowIndex[i]);
-  std::iota(lis.begin(), lis.end(), RowIndex[i]);
-
-  long long* start = ij;
-  if (i < LocalIndex.first)
-    ij = std::copy_if(lis.begin(), lis.end(), ij, [&](long long k) { return 0 <= ColIndexLocal[k] && k < diag; });
-  else if (LocalIndex.first <= i && i < LocalIndex.second)
-    ij = std::copy_if(lis.begin(), lis.end(), ij, [&](long long k) { return 0 <= ColIndexLocal[k] && (k < diag || local_end <= k); });
-  else
-    ij = std::copy_if(lis.begin(), lis.end(), ij, [&](long long k) { return 0 <= ColIndexLocal[k] && k < diag && (k < local || local_end <= k); });
-
-  return std::distance(start, ij);
-}
-
-long long BlockSparseMatrix::ijUpper(long long i, long long* ij) const {
-  const long long* cols = &ColIndexLocal[RowIndex[i]];
-  const long long* cols_end = &ColIndexLocal[RowIndex[i + 1]];
-  long long diag = DiagIndex[i];
-
-  auto col_in_local = [=](long long col) { return LocalIndex.first <= col && col < LocalIndex.second; };
-  long long local = std::distance(&ColIndexLocal[0], std::find_if(cols, cols_end, col_in_local));
-  long long local_end = std::distance(&ColIndexLocal[0], std::find_if_not(&ColIndexLocal[local], cols_end, col_in_local));
-
-  std::vector<long long> lis(RowIndex[i + 1] - RowIndex[i]);
-  std::iota(lis.begin(), lis.end(), RowIndex[i]);
-
-  long long* start = ij;
-  if (i < LocalIndex.first)
-    ij = std::copy_if(lis.begin(), lis.end(), ij, [&](long long k) { return 0 <= ColIndexLocal[k] && diag < k; });
-  else if (LocalIndex.first <= i && i < LocalIndex.second)
-    ij = std::copy_if(lis.begin(), lis.end(), ij, [&](long long k) { return 0 <= ColIndexLocal[k] && diag < k && k < local_end; });
-  else
-    ij = std::copy_if(lis.begin(), lis.end(), ij, [&](long long k) { return 0 <= ColIndexLocal[k] && (diag < k || (local <= k && k < local_end)); });
-
-  return std::distance(start, ij);
 }
 
 UlvSolver::UlvSolver(const long long Dims[], const CSR& Near, const CSR& Far, const CellComm& comm) {
@@ -607,32 +560,33 @@ void UlvSolver::forwardSubstitute(long long nrhs, long long lenY, std::complex<d
   std::transform(basis.Dims.begin(), basis.Dims.end(), Xsizes.begin(), [=](long long d) { return d * nrhs; });
   comm.neighbor_bcast(X, Xsizes.data());
 
-  std::vector<long long> Iiters(xlen);
+  std::vector<long long> Iiters(xlen), Giters(xlen);
   std::iota(Iiters.begin(), Iiters.begin() + ibegin, 0);
   std::iota(Iiters.begin() + ibegin, Iiters.begin() + (xlen - nodes), ibegin + nodes);
   std::iota(Iiters.begin() + (xlen - nodes), Iiters.end(), ibegin);
+  std::transform(Iiters.begin(), Iiters.end(), Giters.begin(), [&](long long i) { return comm.iGlobal(i); });
 
-  for (std::vector<long long>::iterator iter = Iiters.begin(); iter != Iiters.end(); iter++) {
-    long long i = *iter;
+  for (long long iterI = 0; iterI < xlen; iterI++) {
+    long long i = Iiters[iterI];
     long long Mi = basis.Dims[i], Ni = basis.DimsLr[i], Ki = Mi - Ni;
     long long offseti = Xoffsets[i] * nrhs;
-    long long Ad = A.DiagIndex[i];
+    long long ii = A.DiagIndex[i];
 
     if (0 < Ki) {
-      std::vector<long long> ijLis(A.RowIndex[i + 1] - A.RowIndex[i]);
-      std::vector<long long>::iterator LisEnd = ijLis.begin() + A.ijLower(i, &ijLis[0]);
-      
-      for (std::vector<long long>::iterator ij = ijLis.begin(); ij != LisEnd; ij++) {
-        long long j = A.ColIndexLocal[*ij];
-        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
-        long long offsetj = Xoffsets[j] * nrhs;
-        std::array<const std::complex<double>*, 4> splitsij = matrixSplits(Mi, Ni, Nj, A[*ij]);
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ki, nrhs, Kj, &minus_one, splitsij[0], Mi, &X[offsetj], Mj, &one, &X[offseti], Mi);
-      }
-
-      std::array<const std::complex<double>*, 4> splitsii = matrixSplits(Mi, Ni, Ni, A[Ad]);
+      std::array<const std::complex<double>*, 4> splitsII = matrixSplits(Mi, Ni, Ni, A[ii]);
       LAPACKE_zlaswp(LAPACK_COL_MAJOR, nrhs, &X[offseti], Mi, 1, Ki, Apiv[i].data(), 1);
-      cblas_ztrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, Ki, nrhs, &one, splitsii[0], Mi, &X[offseti], Mi);
+      cblas_ztrsm(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasUnit, Ki, nrhs, &one, splitsII[0], Mi, &X[offseti], Mi);
+
+      for (long long iterJ = iterI + 1; iterJ < xlen; iterJ++) {
+        long long j = Iiters[iterJ];
+        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
+        long long ji = A(j, Giters[iterI]);
+        long long offsetj = Xoffsets[j] * nrhs;
+        if (0 <= ji && 0 < Kj) {
+          std::array<const std::complex<double>*, 4> splitsJI = matrixSplits(Mj, Nj, Ni, A[ji]);
+          cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Kj, nrhs, Ki, &minus_one, splitsJI[0], Mj, &X[offseti], Mi, &one, &X[offsetj], Mj);
+        }
+      }
     }
   }
 
@@ -645,8 +599,8 @@ void UlvSolver::forwardSubstitute(long long nrhs, long long lenY, std::complex<d
         long long j = A.ColIndexLocal[ij];
         long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
         long long offsetj = Xoffsets[j] * nrhs;
-        std::array<const std::complex<double>*, 4> splitsij = matrixSplits(Mi, Ni, Nj, A[ij]);
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ni, nrhs, Kj, &minus_one, splitsij[1], Mi, &X[offsetj], Mj, &one, &Y[offsety], lenY);
+        std::array<const std::complex<double>*, 4> splitsIJ = matrixSplits(Mi, Ni, Nj, A[ij]);
+        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ni, nrhs, Kj, &minus_one, splitsIJ[1], Mi, &X[offsetj], Mj, &one, &Y[offsety], lenY);
       }
   }
 }
@@ -678,35 +632,26 @@ void UlvSolver::backwardSubstitute(long long nrhs, long long lenY, const std::co
   std::vector<long long> Zsizes(xlen);
   std::transform(basis.Dims.begin(), basis.Dims.end(), Zsizes.begin(), [=](long long d) { return d * nrhs; });
   comm.neighbor_bcast(Z.data(), Zsizes.data());
-  
+
   for (long long i = ibegin + nodes - 1; i >= ibegin; i--) {
     long long Mi = basis.Dims[i], Ni = basis.DimsLr[i], Ki = Mi - Ni;
     long long offseti = Xoffsets[i] * nrhs;
-    long long Ad = A.DiagIndex[i];
+    long long ii = A.DiagIndex[i];
 
     if (0 < Ki) {
-      std::vector<long long> ijLis(A.RowIndex[i + 1] - A.RowIndex[i]);
-      std::vector<long long>::iterator LisEnd = ijLis.begin() + A.ijUpper(i, &ijLis[0]);
-
-      for (std::vector<long long>::iterator ij = ijLis.begin(); ij != LisEnd; ij++) {
-        long long j = A.ColIndexLocal[*ij];
-        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
-        long long offsetj = Xoffsets[j] * nrhs;
-        std::array<const std::complex<double>*, 4> splitsij = matrixSplits(Mi, Ni, Nj, A[*ij]);
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ki, nrhs, Kj, &minus_one, splitsij[0], Mi, &X[offsetj], Mj, &one, &X[offseti], Mi);
-      }
-
       for (long long ij = A.RowIndex[i]; ij < A.RowIndex[i + 1]; ij++) {
         long long j = A.ColIndexLocal[ij];
-        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j];
+        long long Mj = basis.Dims[j], Nj = basis.DimsLr[j], Kj = Mj - Nj;
         long long offsetj = Xoffsets[j] * nrhs;
-        std::array<const std::complex<double>*, 4> splitsij = matrixSplits(Mi, Ni, Nj, A[ij]);
+        std::array<const std::complex<double>*, 4> splitsIJ = matrixSplits(Mi, Ni, Nj, A[ij]);
+        if (0 < Kj && (i < j && j < ibegin + nodes))
+          cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ki, nrhs, Kj, &minus_one, splitsIJ[0], Mi, &X[offsetj], Mj, &one, &X[offseti], Mi);
         if (0 < Nj)
-          cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ki, nrhs, Nj, &minus_one, splitsij[2], Mi, &Z[offsetj], Mj, &one, &X[offseti], Mi);
+          cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, Ki, nrhs, Nj, &minus_one, splitsIJ[2], Mi, &Z[offsetj], Mj, &one, &X[offseti], Mi);
       }
 
-      std::array<const std::complex<double>*, 4> splitsii = matrixSplits(Mi, Ni, Ni, A[Ad]);
-      cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, Ki, nrhs, &one, splitsii[0], Mi, &X[offseti], Mi);
+      std::array<const std::complex<double>*, 4> splitsII = matrixSplits(Mi, Ni, Ni, A[ii]);
+      cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, Ki, nrhs, &one, splitsII[0], Mi, &X[offseti], Mi);
     }
   }
 

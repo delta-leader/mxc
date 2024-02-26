@@ -3,6 +3,8 @@
 #include <iostream>
 #include <fstream>
 #include <random>
+#include <array>
+#include <algorithm>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -25,18 +27,16 @@ void uniform_unit_cube(double* bodies, long long nbodies, double diameter, long 
   }
 }
 
-void uniform_unit_cube_rnd(double* bodies, long long nbodies, long long dim, unsigned int seed) {
-  if (seed > 0)
-    srand(seed);
+void uniform_unit_cube_rnd(double* bodies, long long nbodies, double diameter, long long dim, unsigned int seed) {
+  std::mt19937 gen(seed);
+  std::uniform_real_distribution uniform_dist(0., diameter);
 
-  for (long long i = 0; i < nbodies; i++) {
-    double r0 = dim > 0 ? ((double)rand() / RAND_MAX) : 0.;
-    double r1 = dim > 1 ? ((double)rand() / RAND_MAX) : 0.;
-    double r2 = dim > 2 ? ((double)rand() / RAND_MAX) : 0.;
-    bodies[i * 3] = r0;
-    bodies[i * 3 + 1] = r1;
-    bodies[i * 3 + 2] = r2;
-  }
+  std::array<double, 3>* b3 = reinterpret_cast<std::array<double, 3>*>(bodies);
+  std::array<double, 3>* b3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[3 * nbodies]);
+  std::for_each(b3, b3_end, [&](std::array<double, 3>& body) {
+    for (int i = 0; i < 3; i++)
+      body[i] = i < dim ? uniform_dist(gen) : 0.;
+  });
 }
 
 void mesh_unit_cube(double* bodies, long long nbodies) {
