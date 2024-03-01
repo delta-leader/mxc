@@ -29,7 +29,6 @@ int main(int argc, char* argv[]) {
   double epi = argc > 4 ? atof(argv[4]) : 1e-10;
   long long rank = argc > 5 ? atoll(argv[5]) : 100;
   long long nrhs = argc > 6 ? atoll(argv[6]) : 2;
-  const char* fname = argc > 7 ? argv[7] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   long long levels = (long long)log2((double)Nbody / leaf_size);
@@ -49,24 +48,16 @@ int main(int argc, char* argv[]) {
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);
-  std::vector<Cell> cell(ncells);
+  Cells cell(ncells);
 
   std::vector<CellComm> cell_comm(levels + 1);
   std::vector<ClusterBasis> basis(levels + 1);
 
-  if (fname == nullptr) {
-    //mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
-    //mesh_unit_cube(&body[0], Nbody);
-    uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
-    //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
-    buildTree(&cell[0], &body[0], Nbody, levels);
-  }
-  else {
-    std::vector<long long> buckets(Nleaf);
-    read_sorted_bodies(&Nbody, Nleaf, &body[0], &buckets[0], fname);
-    //buildTreeBuckets(cell, body, buckets, levels);
-    buildTree(&cell[0], &body[0], Nbody, levels);
-  }
+  //mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
+  //mesh_unit_cube(&body[0], Nbody);
+  uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
+  //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
+  buildTree(&cell[0], &body[0], Nbody, levels);
 
   std::mt19937 gen(999);
   std::uniform_real_distribution uniform_dist(0., 1.);

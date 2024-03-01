@@ -5,7 +5,6 @@
 
 #include <cmath>
 #include <algorithm>
-#include <array>
 
 void get_bounds(const double* bodies, long long nbodies, double R[], double C[]) {
   double Xmin[3];
@@ -16,13 +15,13 @@ void get_bounds(const double* bodies, long long nbodies, double R[], double C[])
 
   for (long long i = 1; i < nbodies; i++) {
     const double* x_bi = &bodies[i * 3];
-    Xmin[0] = fmin(x_bi[0], Xmin[0]);
-    Xmin[1] = fmin(x_bi[1], Xmin[1]);
-    Xmin[2] = fmin(x_bi[2], Xmin[2]);
+    Xmin[0] = std::min(x_bi[0], Xmin[0]);
+    Xmin[1] = std::min(x_bi[1], Xmin[1]);
+    Xmin[2] = std::min(x_bi[2], Xmin[2]);
 
-    Xmax[0] = fmax(x_bi[0], Xmax[0]);
-    Xmax[1] = fmax(x_bi[1], Xmax[1]);
-    Xmax[2] = fmax(x_bi[2], Xmax[2]);
+    Xmax[0] = std::max(x_bi[0], Xmax[0]);
+    Xmax[1] = std::max(x_bi[1], Xmax[1]);
+    Xmax[2] = std::max(x_bi[2], Xmax[2]);
   }
 
   C[0] = (Xmin[0] + Xmax[0]) / 2.;
@@ -38,14 +37,48 @@ void get_bounds(const double* bodies, long long nbodies, double R[], double C[])
   R[2] = (d2 == 0. && Xmin[2] == 0.) ? 0. : (1.e-8 + d2 / 2.);
 }
 
-void sort_bodies(double* bodies, long long nbodies, long long sdim) {
-  std::array<double, 3>* bodies3 = reinterpret_cast<std::array<double, 3>*>(bodies);
-  std::array<double, 3>* bodies3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[3 * nbodies]);
-  std::sort(bodies3, bodies3_end, [=](std::array<double, 3>& i, std::array<double, 3>& j)->bool {
-    double x = i[sdim];
-    double y = j[sdim];
-    return x < y;
-  });
+void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels) {
+  cells[0].Body[0] = 0;
+  cells[0].Body[1] = nbodies;
+  get_bounds(bodies, nbodies, cells[0].R.data(), cells[0].C.data());
+
+  long long nleaf = (long long)1 << levels;
+  long long len = 1;
+  for (long long i = 0; i < nleaf - 1; i++) {
+    Cell& ci = cells[i];
+    long long sdim = 0;
+    double maxR = ci.R[0];
+    if (ci.R[1] > maxR)
+    { sdim = 1; maxR = ci.R[1]; }
+    if (ci.R[2] > maxR)
+    { sdim = 2; maxR = ci.R[2]; }
+
+    long long i_begin = ci.Body[0];
+    long long i_end = ci.Body[1];
+    long long nbody_i = i_end - i_begin;
+
+    std::array<double, 3>* bodies3 = reinterpret_cast<std::array<double, 3>*>(&bodies[i_begin * 3]);
+    std::array<double, 3>* bodies3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[i_end * 3]);
+    std::sort(bodies3, bodies3_end, 
+      [=](std::array<double, 3>& i, std::array<double, 3>& j) { return i[sdim] < j[sdim]; });
+    long long loc = i_begin + nbody_i / 2;
+
+    Cell& c0 = cells[len];
+    Cell& c1 = cells[len + 1];
+    ci.Child[0] = len;
+    ci.Child[1] = len + 2;
+    len = len + 2;
+
+    c0.Body[0] = i_begin;
+    c0.Body[1] = loc;
+    c0.Parent = i;
+    c1.Body[0] = loc;
+    c1.Body[1] = i_end;
+    c1.Parent = i;
+
+    get_bounds(&bodies[i_begin * 3], loc - i_begin, c0.R.data(), c0.C.data());
+    get_bounds(&bodies[loc * 3], i_end - loc, c1.R.data(), c1.C.data());
+  }
 }
 
 int admis_check(double theta, const double C1[], const double C2[], const double R1[], const double R2[]) {
@@ -73,76 +106,8 @@ int admis_check(double theta, const double C1[], const double C2[], const double
   return (int)(dC > dR);
 }
 
-void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels) {
-  cells[0].Body[0] = 0;
-  cells[0].Body[1] = nbodies;
-  get_bounds(bodies, nbodies, cells[0].R, cells[0].C);
-
-  long long nleaf = (long long)1 << levels;
-  long long len = 1;
-  for (long long i = 0; i < nleaf - 1; i++) {
-    Cell& ci = cells[i];
-    long long sdim = 0;
-    double maxR = ci.R[0];
-    if (ci.R[1] > maxR)
-    { sdim = 1; maxR = ci.R[1]; }
-    if (ci.R[2] > maxR)
-    { sdim = 2; maxR = ci.R[2]; }
-
-    long long i_begin = ci.Body[0];
-    long long i_end = ci.Body[1];
-    long long nbody_i = i_end - i_begin;
-    sort_bodies(&bodies[i_begin * 3], nbody_i, sdim);
-    long long loc = i_begin + nbody_i / 2;
-
-    Cell& c0 = cells[len];
-    Cell& c1 = cells[len + 1];
-    ci.Child[0] = len;
-    ci.Child[1] = len + 2;
-    len = len + 2;
-
-    c0.Body[0] = i_begin;
-    c0.Body[1] = loc;
-    c0.Parent = i;
-    c1.Body[0] = loc;
-    c1.Body[1] = i_end;
-    c1.Parent = i;
-
-    get_bounds(&bodies[i_begin * 3], loc - i_begin, c0.R, c0.C);
-    get_bounds(&bodies[loc * 3], i_end - loc, c1.R, c1.C);
-  }
-}
-
-void buildTreeBuckets(Cell* cells, const double* bodies, const long long buckets[], long long levels) {
-  long long nleaf = (long long)1 << levels;
-  long long count = 0;
-  for (long long i = 0; i < nleaf; i++) {
-    long long ci = i + nleaf - 1;
-    cells[ci].Child[0] = -1;
-    cells[ci].Child[1] = -1;
-    cells[ci].Body[0] = count;
-    cells[ci].Body[1] = count + buckets[i];
-    get_bounds(&bodies[count * 3], buckets[i], cells[ci].R, cells[ci].C);
-    count = count + buckets[i];
-  }
-
-  for (long long i = nleaf - 2; i >= 0; i--) {
-    long long c0 = (i << 1) + 1;
-    long long c1 = (i << 1) + 2;
-    long long begin = cells[c0].Body[0];
-    long long len = cells[c1].Body[1] - begin;
-    cells[i].Child[0] = c0;
-    cells[i].Child[1] = c0 + 2;
-    cells[i].Body[0] = begin;
-    cells[i].Body[1] = begin + len;
-    cells[c0].Parent = i;
-    cells[c1].Parent = i;
-    get_bounds(&bodies[begin * 3], len, cells[i].R, cells[i].C);
-  }
-}
-
 void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const Cell cells[], long long i, long long j, double theta) {
-  int admis = admis_check(theta, cells[i].C, cells[j].C, cells[i].R, cells[j].R);
+  int admis = admis_check(theta, cells[i].C.data(), cells[j].C.data(), cells[i].R.data(), cells[j].R.data());
   int write_far = NoF == 'F' || NoF == 'f';
   int write_near = NoF == 'N' || NoF == 'n';
   if (admis ? write_far : write_near)

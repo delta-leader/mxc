@@ -2,11 +2,15 @@
 #pragma once
 
 #include <vector>
+#include <array>
 
 class Cell {
 public:
-  long long Child[2], Parent, Body[2];
-  double R[3], C[3];
+  long long Parent;
+  std::array<long long, 2> Child;
+  std::array<long long, 2> Body;
+  std::array<double, 3> R;
+  std::array<double, 3> C;
 
   Cell();
 };
@@ -19,6 +23,6 @@ public:
   CSR(char NoF, long long ncells, const Cell* cells, double theta);
 };
 
-void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels);
+typedef std::vector<Cell> Cells;
 
-void buildTreeBuckets(Cell* cells, const double* bodies, const long long buckets[], long long levels);
+void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels);
