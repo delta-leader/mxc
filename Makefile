@@ -5,8 +5,8 @@ LDFLAGS	= -L${MKLROOT}/lib -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_sequential
 
 OBJDIR	= ./obj
 
-HEADER	= basis.hpp build_tree.hpp comm.hpp geometry.hpp kernel.hpp solver.hpp
-SRCS	= main.cpp basis.cpp build_tree.cpp comm.cpp kernel.cpp solver.cpp
+HEADER	= basis.hpp build_tree.hpp comm.hpp kernel.hpp
+SRCS	= basis.cpp build_tree.cpp comm.cpp kernel.cpp main.cpp
 
 OBJS 	= $(addprefix $(OBJDIR)/,$(patsubst %.cpp,%.o,$(SRCS)))
 
