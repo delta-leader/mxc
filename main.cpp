@@ -4,7 +4,6 @@
 #include <build_tree.hpp>
 #include <basis.hpp>
 #include <comm.hpp>
-#include <solver.hpp>
 
 #include <random>
 #include <algorithm>
@@ -128,52 +127,12 @@ int main(int argc, char* argv[]) {
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX * nrhs);
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  double factor_time = MPI_Wtime(), factor_comm_time;
-
-  std::vector<UlvSolver> matrix(levels + 1);
-  matrix[levels] = UlvSolver(basis[levels].Dims.data(), cellNear, cellFar, cell_comm[levels]);
-  matrix[levels].loadDataLeaf(eval, &cell[0], &body[0], cell_comm[levels]);
-  matrix[levels].preCompressA2(epi, basis[levels], cell_comm[levels]);
-  matrix[levels].factorizeA(basis[levels], cell_comm[levels]);
-
-  for (long long l = levels - 1; l >= 0; l--) {
-    basis[l].adjustLowerRankGrowth(basis[l + 1], cell_comm[l]);
-    matrix[l] = UlvSolver(basis[l].Dims.data(), cellNear, cellFar, cell_comm[l]);
-    matrix[l].loadDataInterNode(&cell[0], matrix[l + 1], cell_comm[l + 1], cell_comm[l]);
-    matrix[l].preCompressA2(epi, basis[l], cell_comm[l]);
-    matrix[l].factorizeA(basis[l], cell_comm[l]);
-  }
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  factor_time = MPI_Wtime() - factor_time;
-  factor_comm_time = timer.first;
-  timer.first = 0;
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  double subst_time = MPI_Wtime(), subst_comm_time;
-
-  SolveULV(nrhs, &X1[0], &matrix[0], &basis[0], &cell_comm[0], levels);
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  subst_time = MPI_Wtime() - subst_time;
-  subst_comm_time = timer.first;
-  timer.first = 0;
-
-  double serr = 0.;
-  for (long long i = 0; i < nrhs; i++)
-    std::copy(&Xbody[i * Nbody] + body_local[0], &Xbody[i * Nbody] + body_local[1], &X2[i * lenX]);
-  solveRelErr(&serr, &X1[0], &X2[0], lenX * nrhs);
-
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "Solver Err: " << serr << std::endl << std::endl;
     std::cout << "H-Matrix: " << h_construct_time << std::endl;
     std::cout << "H^2-Matrix: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "Matvec: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec: " << refmatvec_time << std::endl;
-    std::cout << "H^2-Matrix Factor: " << factor_time << ", " << factor_comm_time << std::endl;
-    std::cout << "Substitution: " << subst_time << ", " << subst_comm_time << std::endl;
   }
 
   for (MPI_Comm& c : mpi_comms)

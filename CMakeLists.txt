@@ -16,7 +16,7 @@ find_package(MKL REQUIRED)
 find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
 
-add_executable(main.app main.cpp kernel.cpp basis.cpp comm.cpp build_tree.cpp solver.cpp)
+add_executable(main.app main.cpp kernel.cpp basis.cpp comm.cpp build_tree.cpp)
 target_compile_definitions(main.app PRIVATE MKL_ILP64 MKL_Complex16=std::complex<double>)
 target_include_directories(main.app PRIVATE ./)
 target_link_libraries(main.app MPI::MPI_CXX OpenMP::OpenMP_CXX MKL::MKL)
