@@ -5,68 +5,45 @@
 #include <algorithm>
 
 void get_bounds(const double* bodies, long long nbodies, double R[], double C[]) {
-  double Xmin[3];
-  double Xmax[3];
-  Xmin[0] = Xmax[0] = bodies[0];
-  Xmin[1] = Xmax[1] = bodies[1];
-  Xmin[2] = Xmax[2] = bodies[2];
+  const std::array<double, 3>* bodies3 = reinterpret_cast<const std::array<double, 3>*>(&bodies[0]);
+  const std::array<double, 3>* bodies3_end = reinterpret_cast<const std::array<double, 3>*>(&bodies[nbodies * 3]);
 
-  for (long long i = 1; i < nbodies; i++) {
-    const double* x_bi = &bodies[i * 3];
-    Xmin[0] = std::min(x_bi[0], Xmin[0]);
-    Xmin[1] = std::min(x_bi[1], Xmin[1]);
-    Xmin[2] = std::min(x_bi[2], Xmin[2]);
-
-    Xmax[0] = std::max(x_bi[0], Xmax[0]);
-    Xmax[1] = std::max(x_bi[1], Xmax[1]);
-    Xmax[2] = std::max(x_bi[2], Xmax[2]);
+  double Xmin[3], Xmax[3];
+  for (int i = 0; i < 3; i++) {
+    auto minmax = std::minmax_element(bodies3, bodies3_end, 
+      [=](const std::array<double, 3>& x, const std::array<double, 3>& y) { return x[i] < y[i]; });
+    Xmin[i] = (*minmax.first)[i];
+    Xmax[i] = (*minmax.second)[i];
   }
 
-  C[0] = (Xmin[0] + Xmax[0]) / 2.;
-  C[1] = (Xmin[1] + Xmax[1]) / 2.;
-  C[2] = (Xmin[2] + Xmax[2]) / 2.;
-
-  double d0 = Xmax[0] - Xmin[0];
-  double d1 = Xmax[1] - Xmin[1];
-  double d2 = Xmax[2] - Xmin[2];
-
-  R[0] = (d0 == 0. && Xmin[0] == 0.) ? 0. : (1.e-8 + d0 / 2.);
-  R[1] = (d1 == 0. && Xmin[1] == 0.) ? 0. : (1.e-8 + d1 / 2.);
-  R[2] = (d2 == 0. && Xmin[2] == 0.) ? 0. : (1.e-8 + d2 / 2.);
+  std::transform(Xmin, &Xmin[3], Xmax, C, [](double min, double max) { return (min + max) * 0.5; });
+  std::transform(Xmin, &Xmin[3], Xmax, R, [](double min, double max) { return (min == max && min == 0.) ? 0. : ((max - min) * 0.5 + 1.e-8); });
 }
 
-void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels) {
+void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long levels) {
   cells[0].Body[0] = 0;
   cells[0].Body[1] = nbodies;
   get_bounds(bodies, nbodies, cells[0].R.data(), cells[0].C.data());
 
   long long nleaf = (long long)1 << levels;
-  long long len = 1;
   for (long long i = 0; i < nleaf - 1; i++) {
     Cell& ci = cells[i];
-    long long sdim = 0;
-    double maxR = ci.R[0];
-    if (ci.R[1] > maxR)
-    { sdim = 1; maxR = ci.R[1]; }
-    if (ci.R[2] > maxR)
-    { sdim = 2; maxR = ci.R[2]; }
-
+    long long sdim = std::distance(&ci.R[0], std::max_element(&ci.R[0], &ci.R[3]));
     long long i_begin = ci.Body[0];
     long long i_end = ci.Body[1];
-    long long nbody_i = i_end - i_begin;
 
     std::array<double, 3>* bodies3 = reinterpret_cast<std::array<double, 3>*>(&bodies[i_begin * 3]);
     std::array<double, 3>* bodies3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[i_end * 3]);
     std::sort(bodies3, bodies3_end, 
       [=](std::array<double, 3>& i, std::array<double, 3>& j) { return i[sdim] < j[sdim]; });
-    long long loc = i_begin + nbody_i / 2;
 
+    long long len = (i << 1) + 1;
     Cell& c0 = cells[len];
     Cell& c1 = cells[len + 1];
     ci.Child[0] = len;
     ci.Child[1] = len + 2;
-    len = len + 2;
 
+    long long loc = i_begin + (i_end - i_begin) / 2;
     c0.Body[0] = i_begin;
     c0.Body[1] = loc;
     c0.Parent = i;
@@ -79,10 +56,10 @@ void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels)
   }
 }
 
-void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const Cell cells[], long long i, long long j, double theta) {
-  double dC = std::transform_reduce(&cells[i].C[0], &cells[i].C[3], &cells[j].C[0], (double)0., std::plus<double>(), [](double x, double y) { return (x - y) * (x - y); });
-  double dR1 = std::transform_reduce(&cells[i].R[0], &cells[i].R[3], &cells[i].R[0], (double)0., std::plus<double>(), std::multiplies<double>());
-  double dR2 = std::transform_reduce(&cells[j].R[0], &cells[j].R[3], &cells[j].R[0], (double)0., std::plus<double>(), std::multiplies<double>());
+void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const Cell ci[], long long i, const Cell cj[], long long j, double theta) {
+  double dC = std::transform_reduce(&ci[i].C[0], &ci[i].C[3], &cj[j].C[0], (double)0., std::plus<double>(), [](double x, double y) { return (x - y) * (x - y); });
+  double dR1 = std::transform_reduce(&ci[i].R[0], &ci[i].R[3], &ci[i].R[0], (double)0., std::plus<double>(), std::multiplies<double>());
+  double dR2 = std::transform_reduce(&cj[j].R[0], &cj[j].R[3], &cj[j].R[0], (double)0., std::plus<double>(), std::multiplies<double>());
 
   bool admis = dC > (theta * (dR1 + dR2));
   bool write_far = NoF == 'F' || NoF == 'f';
@@ -90,15 +67,16 @@ void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const
   if (admis ? write_far : write_near)
     rels.emplace_back(i, j);
   
-  if (!admis && cells[i].Child[0] >= 0 && cells[j].Child[0] >= 0)
-    for (long long k = cells[i].Child[0]; k < cells[i].Child[1]; k++)
-      for (long long l = cells[j].Child[0]; l < cells[j].Child[1]; l++)
-        getList(NoF, rels, cells, k, l, theta);
+  if (!admis && ci[i].Child[0] >= 0 && cj[j].Child[0] >= 0)
+    for (long long k = ci[i].Child[0]; k < ci[i].Child[1]; k++)
+      for (long long l = cj[j].Child[0]; l < cj[j].Child[1]; l++)
+        getList(NoF, rels, ci, k, cj, l, theta);
 }
 
-CSR::CSR(char NoF, long long ncells, const Cell* cells, double theta) {
+CSR::CSR(char NoF, const Cells& ci, const Cells& cj, double theta) {
+  long long ncells = ci.size();
   std::vector<std::pair<long long, long long>> LIL;
-  getList(NoF, LIL, cells, 0, 0, theta);
+  getList(NoF, LIL, &ci[0], 0, &cj[0], 0, theta);
   std::sort(LIL.begin(), LIL.end());
 
   long long len = LIL.size();

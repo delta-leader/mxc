@@ -39,7 +39,7 @@ void uniform_unit_cube_rnd(double* bodies, long long nbodies, double diameter, l
   });
 }
 
-void mesh_unit_sphere(double* bodies, long long nbodies, double r) {
+void mesh_sphere(double* bodies, long long nbodies, double r) {
   const double phi = M_PI * (3. - std::sqrt(5.));  // golden angle in radians
   const double d = r + r;
   const double r2 = r * r;

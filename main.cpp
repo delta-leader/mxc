@@ -52,11 +52,10 @@ int main(int argc, char* argv[]) {
   std::vector<CellComm> cell_comm(levels + 1);
   std::vector<ClusterBasis> basis(levels + 1);
 
-  //mesh_unit_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
-  //mesh_unit_cube(&body[0], Nbody);
+  //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
   uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
-  buildTree(&cell[0], &body[0], Nbody, levels);
+  buildBinaryTree(&cell[0], &body[0], Nbody, levels);
 
   std::mt19937 gen(999);
   std::uniform_real_distribution uniform_dist(0., 1.);
@@ -68,8 +67,8 @@ int main(int argc, char* argv[]) {
   ncells = Nleaf + 1;
   levels = 1;*/
 
-  CSR cellNear('N', ncells, &cell[0], theta);
-  CSR cellFar('F', ncells, &cell[0], theta);
+  CSR cellNear('N', cell, cell, theta);
+  CSR cellFar('F', cell, cell, theta);
 
   std::pair<double, double> timer(0, 0);
   std::vector<MPI_Comm> mpi_comms;
