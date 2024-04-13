@@ -1,5 +1,4 @@
-﻿
-cmake_minimum_required (VERSION 3.18)
+﻿cmake_minimum_required (VERSION 3.18)
 
 set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_CXX_STANDARD 17)
@@ -13,11 +12,13 @@ set(MKL_INTERFACE_FULL intel_ilp64)
 set(MKL_THREADING sequential)
 
 find_package(MKL REQUIRED)
-find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
+find_package(MPI REQUIRED)
 
-add_executable(main.app main.cpp kernel.cpp basis.cpp comm.cpp build_tree.cpp)
-target_compile_definitions(main.app PRIVATE MKL_ILP64 MKL_Complex16=std::complex<double>)
+file(GLOB sources "*.cpp")
+file(GLOB headers "*.hpp")
+
+add_executable(main.app ${sources} ${headers})
 target_include_directories(main.app PRIVATE ./)
-target_link_libraries(main.app MPI::MPI_CXX OpenMP::OpenMP_CXX MKL::MKL)
-
+target_compile_definitions(main.app PRIVATE MKL_ILP64 MKL_Complex16=std::complex<double>)
+target_link_libraries(main.app MKL::MKL MPI::MPI_CXX OpenMP::OpenMP_CXX)

@@ -12,7 +12,7 @@ public:
   std::array<double, 3> R;
   std::array<double, 3> C;
 
-  Cell();
+  Cell() : Parent(-1), Child(std::array<long long, 2>{ -1, -1 }), Body(std::array<long long, 2>{ -1, -1 }), R(std::array<double, 3>{ 0., 0., 0. }), C(std::array<double, 3>{ 0., 0., 0. }) {}
 };
 
 class CSR {

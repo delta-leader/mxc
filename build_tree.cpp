@@ -1,9 +1,7 @@
 
 #include <build_tree.hpp>
-#include <basis.hpp>
-#include <comm.hpp>
-
 #include <cmath>
+#include <numeric>
 #include <algorithm>
 
 void get_bounds(const double* bodies, long long nbodies, double R[], double C[]) {
@@ -81,35 +79,14 @@ void buildTree(Cell* cells, double* bodies, long long nbodies, long long levels)
   }
 }
 
-int admis_check(double theta, const double C1[], const double C2[], const double R1[], const double R2[]) {
-  double dCi[3];
-  dCi[0] = C1[0] - C2[0];
-  dCi[1] = C1[1] - C2[1];
-  dCi[2] = C1[2] - C2[2];
-
-  dCi[0] = dCi[0] * dCi[0];
-  dCi[1] = dCi[1] * dCi[1];
-  dCi[2] = dCi[2] * dCi[2];
-
-  double dRi[3];
-  dRi[0] = R1[0] * R1[0];
-  dRi[1] = R1[1] * R1[1];
-  dRi[2] = R1[2] * R1[2];
-
-  double dRj[3];
-  dRj[0] = R2[0] * R2[0];
-  dRj[1] = R2[1] * R2[1];
-  dRj[2] = R2[2] * R2[2];
-
-  double dC = dCi[0] + dCi[1] + dCi[2];
-  double dR = (dRi[0] + dRi[1] + dRi[2] + dRj[0] + dRj[1] + dRj[2]) * theta;
-  return (int)(dC > dR);
-}
-
 void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const Cell cells[], long long i, long long j, double theta) {
-  int admis = admis_check(theta, cells[i].C.data(), cells[j].C.data(), cells[i].R.data(), cells[j].R.data());
-  int write_far = NoF == 'F' || NoF == 'f';
-  int write_near = NoF == 'N' || NoF == 'n';
+  double dC = std::transform_reduce(&cells[i].C[0], &cells[i].C[3], &cells[j].C[0], (double)0., std::plus<double>(), [](double x, double y) { return (x - y) * (x - y); });
+  double dR1 = std::transform_reduce(&cells[i].R[0], &cells[i].R[3], &cells[i].R[0], (double)0., std::plus<double>(), std::multiplies<double>());
+  double dR2 = std::transform_reduce(&cells[j].R[0], &cells[j].R[3], &cells[j].R[0], (double)0., std::plus<double>(), std::multiplies<double>());
+
+  bool admis = dC > (theta * (dR1 + dR2));
+  bool write_far = NoF == 'F' || NoF == 'f';
+  bool write_near = NoF == 'N' || NoF == 'n';
   if (admis ? write_far : write_near)
     rels.emplace_back(i, j);
   
@@ -117,13 +94,6 @@ void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const
     for (long long k = cells[i].Child[0]; k < cells[i].Child[1]; k++)
       for (long long l = cells[j].Child[0]; l < cells[j].Child[1]; l++)
         getList(NoF, rels, cells, k, l, theta);
-}
-
-Cell::Cell() {
-  Child[0] = Child[1] = Parent = -1;
-  Body[0] = Body[1] = -1;
-  C[0] = C[1] = C[2] = 0.;
-  R[0] = R[1] = R[2] = 0.;
 }
 
 CSR::CSR(char NoF, long long ncells, const Cell* cells, double theta) {
