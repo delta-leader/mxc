@@ -196,47 +196,42 @@ long long ClusterBasis::childWriteOffset() const {
 }
 
 MatVec::MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CellComm comm[], long long levels) :
-  EvalFunc(&eval), Basis(basis), Bodies(bodies), Cells(cells), Near(&near), Comm(comm), Levels(levels) {
-}
-
-void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
-  long long lbegin = Comm[Levels].oLocal();
-  long long llen = Comm[Levels].lenLocal();
-
-  std::vector<std::vector<std::complex<double>>> rhsX(Levels + 1), rhsY(Levels + 1);
-  std::vector<std::vector<long long>> offsets(Levels + 1);
-  std::vector<std::vector<std::pair<std::complex<double>*, long long>>> rhsXoptr(Levels + 1), rhsYoptr(Levels + 1);
-
-  for (long long l = Levels; l >= 0; l--) {
-    long long xlen = Comm[l].lenNeighbors();
+  offsets(levels + 1), upperIndex(levels + 1), upperOffsets(levels + 1), EvalFunc(&eval), Basis(basis), Bodies(bodies), Cells(cells), Near(&near), Comm(comm), Levels(levels) {
+  
+  for (long long l = levels; l >= 0; l--) {
+    long long xlen = comm[l].lenNeighbors();
     offsets[l] = std::vector<long long>(xlen + 1, 0);
-    std::inclusive_scan(Basis[l].Dims.begin(), Basis[l].Dims.end(), offsets[l].begin() + 1);
+    upperIndex[l] = std::vector<long long>(xlen, 0);
+    upperOffsets[l] = std::vector<long long>(xlen, 0);
+    std::inclusive_scan(basis[l].Dims.begin(), basis[l].Dims.end(), offsets[l].begin() + 1);
 
-    rhsX[l] = std::vector<std::complex<double>>(offsets[l][xlen] * nrhs, std::complex<double>(0., 0.));
-    rhsY[l] = std::vector<std::complex<double>>(offsets[l][xlen] * nrhs, std::complex<double>(0., 0.));
-    rhsXoptr[l] = std::vector<std::pair<std::complex<double>*, long long>>(xlen, std::make_pair(nullptr, 0));
-    rhsYoptr[l] = std::vector<std::pair<std::complex<double>*, long long>>(xlen, std::make_pair(nullptr, 0));
-
-    if (l < Levels)
+    if (l < levels)
       for (long long i = 0; i < xlen; i++) {
-        long long ci = Comm[l].iGlobal(i);
-        long long child = Comm[l + 1].iLocal(Cells[ci].Child[0]);
-        long long clen = Cells[ci].Child[1] - Cells[ci].Child[0];
+        long long ci = comm[l].iGlobal(i);
+        long long child = comm[l + 1].iLocal(cells[ci].Child[0]);
+        long long clen = cells[ci].Child[1] - cells[ci].Child[0];
 
         if (child >= 0 && clen > 0) {
-          std::vector<long long> offsets_child(clen + 1, 0);
-          std::inclusive_scan(&Basis[l + 1].DimsLr[child], &Basis[l + 1].DimsLr[child + clen], offsets_child.begin() + 1);
-          long long ldi = Basis[l].Dims[i];
-          std::transform(offsets_child.begin(), offsets_child.begin() + clen, &rhsXoptr[l + 1][child], 
-            [&](const long long d) { return std::make_pair(rhsX[l].data() + nrhs * offsets[l][i] + d, ldi); });
-          std::transform(offsets_child.begin(), offsets_child.begin() + clen, &rhsYoptr[l + 1][child], 
-            [&](const long long d) { return std::make_pair(rhsY[l].data() + nrhs * offsets[l][i] + d, ldi); });
+          std::fill(&upperIndex[l + 1][child], &upperIndex[l + 1][child + clen], i);
+          std::exclusive_scan(&basis[l + 1].DimsLr[child], &basis[l + 1].DimsLr[child + clen], &upperOffsets[l + 1][child], 0);
         }
       }
   }
+}
+
+void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
+  std::vector<std::vector<std::complex<double>>> rhsX(Levels + 1), rhsY(Levels + 1);
+  for (long long l = Levels; l >= 0; l--) {
+    long long xlen = Comm[l].lenNeighbors();
+    rhsX[l] = std::vector<std::complex<double>>(offsets[l][xlen] * nrhs, std::complex<double>(0., 0.));
+    rhsY[l] = std::vector<std::complex<double>>(offsets[l][xlen] * nrhs, std::complex<double>(0., 0.));
+  }
+
+  long long lbegin = Comm[Levels].oLocal();
+  long long llen = Comm[Levels].lenLocal();
+  long long Y = 0, lenX = std::reduce(&Basis[Levels].Dims[lbegin], &Basis[Levels].Dims[lbegin + llen]);
 
   const std::complex<double> one(1., 0.), zero(0., 0.);
-  long long Y = 0, lenX = std::reduce(&Basis[Levels].Dims[lbegin], &Basis[Levels].Dims[lbegin + llen]);
   for (long long i = 0; i < llen; i++) {
     long long M = Basis[Levels].Dims[lbegin + i];
     std::complex<double>* Xptr = rhsX[Levels].data() + nrhs * offsets[Levels][lbegin + i];
@@ -252,14 +247,18 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
     long long lenI = nrhs * std::reduce(&Basis[i].Dims[0], &Basis[i].Dims[xlen]);
     Comm[i].level_merge(rhsX[i].data(), lenI);
 
-    for (long long y = 0; y < iboxes; y++) {
-      long long M = Basis[i].Dims[y + ibegin];
-      long long N = Basis[i].DimsLr[y + ibegin];
-      std::complex<double>* Xptr = rhsX[i].data() + nrhs * offsets[i][ibegin + y];
-      if (0 < N)
-        cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, nrhs, M, &one, Basis[i].Q[y + ibegin], M, 
-          Xptr, M, &zero, rhsXoptr[i][y + ibegin].first, rhsXoptr[i][y + ibegin].second);
-    }
+    if (0 < i)
+      for (long long y = 0; y < iboxes; y++) {
+        long long M = Basis[i].Dims[y + ibegin];
+        long long N = Basis[i].DimsLr[y + ibegin];
+        long long U = upperIndex[i][y + ibegin];
+        long long L = Basis[i - 1].Dims[U];
+
+        const std::complex<double>* Xptr = rhsX[i].data() + nrhs * offsets[i][ibegin + y];
+        std::complex<double>* XOptr = rhsX[i - 1].data() + nrhs * offsets[i - 1][U] + upperOffsets[i][ibegin + y];
+        if (0 < N)
+          cblas_zgemm(CblasColMajor, CblasTrans, CblasNoTrans, N, nrhs, M, &one, Basis[i].Q[y + ibegin], M, Xptr, M, &zero, XOptr, L);
+      }
   }
 
   for (long long i = Levels; i >= 0; i--) {
@@ -276,17 +275,23 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
     for (long long y = 0; y < iboxes; y++) {
       long long M = Basis[i].Dims[y + ibegin];
       long long K = Basis[i].DimsLr[y + ibegin];
+      long long UY = upperIndex[i][y + ibegin];
+      long long LY = Basis[i - 1].Dims[UY];
+
       std::complex<double>* Yptr = rhsY[i].data() + nrhs * offsets[i][ibegin + y];
+      std::complex<double>* YOptr = rhsY[i - 1].data() + nrhs * offsets[i - 1][UY] + upperOffsets[i][ibegin + y];
 
       if (0 < K) {
         for (long long yx = Basis[i].CRows[y]; yx < Basis[i].CRows[y + 1]; yx++) {
           long long x = Basis[i].CColsLocal[yx];
           long long N = Basis[i].DimsLr[x];
-            cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, K, nrhs, N, &one, Basis[i].C[yx], K, 
-              rhsXoptr[i][x].first, rhsXoptr[i][x].second, &one, rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second);
+          long long UX = upperIndex[i][x];
+          long long LX = Basis[i - 1].Dims[UX];
+
+          const std::complex<double>* XOptr = rhsX[i - 1].data() + nrhs * offsets[i - 1][UX] + upperOffsets[i][x];
+          cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, K, nrhs, N, &one, Basis[i].C[yx], K, XOptr, LX, &one, YOptr, LY);
         }
-        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, nrhs, K, &one, Basis[i].Q[y + ibegin], M, 
-          rhsYoptr[i][y + ibegin].first, rhsYoptr[i][y + ibegin].second, &zero, Yptr, M);
+        cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, nrhs, K, &one, Basis[i].Q[y + ibegin], M, YOptr, LY, &zero, Yptr, M);
       }
     }
   }
@@ -298,10 +303,12 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
       long long x_loc = Comm[Levels].iLocal(x);
       long long M = Cells[y + gbegin].Body[1] - Cells[y + gbegin].Body[0];
       long long N = Cells[x].Body[1] - Cells[x].Body[0];
+
       std::complex<double>* Yptr = rhsY[Levels].data() + nrhs * offsets[Levels][lbegin + y];
       const std::complex<double>* Xptr = rhsX[Levels].data() + nrhs * offsets[Levels][x_loc];
       mat_vec_reference(*EvalFunc, M, N, nrhs, Yptr, Xptr, &Bodies[3 * Cells[y + gbegin].Body[0]], &Bodies[3 * Cells[x].Body[0]]);
     }
+  
   Y = 0;
   for (long long i = 0; i < llen; i++) {
     long long M = Basis[Levels].Dims[lbegin + i];

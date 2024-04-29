@@ -56,6 +56,10 @@ public:
 
 class MatVec {
 private:
+  std::vector<std::vector<long long>> offsets;
+  std::vector<std::vector<long long>> upperIndex;
+  std::vector<std::vector<long long>> upperOffsets;
+
   const MatrixAccessor* EvalFunc;
   const ClusterBasis* Basis;
   const double* Bodies;
