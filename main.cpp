@@ -1,7 +1,7 @@
 
 #include <kernel.hpp>
 #include <build_tree.hpp>
-#include <basis.hpp>
+#include <h2matrix.hpp>
 #include <comm.hpp>
 
 #include <random>
@@ -48,10 +48,10 @@ int main(int argc, char* argv[]) {
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);
-  Cells cell(ncells);
+  std::vector<Cell> cell(ncells);
 
   std::vector<CellComm> cell_comm(levels + 1);
-  std::vector<ClusterBasis> basis(levels + 1);
+  std::vector<H2Matrix> basis(levels + 1);
 
   //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
   uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
@@ -90,9 +90,9 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
 
-  basis[levels] = ClusterBasis(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[levels], cell_comm[levels], basis[levels], cell_comm[levels]);
+  basis[levels] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[levels], cell_comm[levels], basis[levels], cell_comm[levels]);
   for (long long l = levels - 1; l >= 0; l--)
-    basis[l] = ClusterBasis(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[l], cell_comm[l], basis[l + 1], cell_comm[l + 1]);
+    basis[l] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[l], cell_comm[l], basis[l + 1], cell_comm[l + 1]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;

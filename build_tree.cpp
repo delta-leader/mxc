@@ -73,7 +73,7 @@ void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const
         getList(NoF, rels, ci, k, cj, l, theta);
 }
 
-CSR::CSR(char NoF, const Cells& ci, const Cells& cj, double theta) {
+CSR::CSR(char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, double theta) {
   long long ncells = ci.size();
   std::vector<std::pair<long long, long long>> LIL;
   getList(NoF, LIL, &ci[0], 0, &cj[0], 0, theta);

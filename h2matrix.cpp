@@ -1,4 +1,4 @@
-#include <basis.hpp>
+#include <h2matrix.hpp>
 #include <build_tree.hpp>
 #include <comm.hpp>
 #include <kernel.hpp>
@@ -82,7 +82,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   return rank;
 }
 
-ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
+H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const H2Matrix& prev_basis, const CellComm& prev_comm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -211,11 +211,11 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
     }
 }
 
-long long ClusterBasis::copyOffset(long long i) const {
+long long H2Matrix::copyOffset(long long i) const {
   return std::reduce(&DimsLr[std::max((long long)0, i - ParentSequenceNum[i])], &DimsLr[i], (long long)0);
 }
 
-MatVec::MatVec(const ClusterBasis basis[], const Cell cells[], const CellComm comm[], long long levels) :
+MatVec::MatVec(const H2Matrix basis[], const Cell cells[], const CellComm comm[], long long levels) :
   offsets(levels + 1), upperIndex(levels + 1), upperOffsets(levels + 1), Basis(basis), Comm(comm), Levels(levels) {
   
   for (long long l = levels; l >= 0; l--) {

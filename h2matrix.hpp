@@ -22,7 +22,7 @@ public:
   const double* fbodies_at_i(long long i) const;
 };
 
-class ClusterBasis {
+class H2Matrix {
 private:
   std::vector<std::complex<double>> Qdata;
   std::vector<std::complex<double>> Cdata;
@@ -46,8 +46,8 @@ public:
   std::vector<long long> ACols;
   std::vector<const std::complex<double>*> A;
   
-  ClusterBasis() {}
-  ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
+  H2Matrix() {}
+  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const H2Matrix& prev_basis, const CellComm& prev_comm);
   long long copyOffset(long long i) const;
 };
 
@@ -57,12 +57,12 @@ private:
   std::vector<std::vector<long long>> upperIndex;
   std::vector<std::vector<long long>> upperOffsets;
 
-  const ClusterBasis* Basis;
+  const H2Matrix* Basis;
   const CellComm* Comm;
   long long Levels;
 
 public:
-  MatVec(const ClusterBasis basis[], const Cell cells[], const CellComm comm[], long long levels);
+  MatVec(const H2Matrix basis[], const Cell cells[], const CellComm comm[], long long levels);
 
   void operator() (long long nrhs, std::complex<double> X[]) const;
 };
