@@ -27,15 +27,12 @@ private:
   std::vector<std::complex<double>> Qdata;
   std::vector<std::complex<double>> Rdata;
   std::vector<std::complex<double>> Cdata;
+  std::vector<std::complex<double>> Adata;
 
   std::vector<double> Sdata;
   std::vector<const double*> S;
   std::vector<long long> ParentSequenceNum;
   std::vector<long long> elementsOnRow;
-  std::vector<long long> localChildOffsets;
-  std::vector<long long> localChildLrDims;
-  long long localChildIndex;
-  long long selfChildIndex;
 
 public:
   std::vector<long long> Dims;
@@ -45,13 +42,15 @@ public:
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
-  std::vector<long long> CColsLocal;
   std::vector<const std::complex<double>*> C;
+
+  std::vector<long long> ARows;
+  std::vector<long long> ACols;
+  std::vector<const std::complex<double>*> A;
   
   ClusterBasis() {}
-  ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
+  ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm);
   long long copyOffset(long long i) const;
-  long long childWriteOffset() const;
 };
 
 class MatVec {
@@ -60,16 +59,12 @@ private:
   std::vector<std::vector<long long>> upperIndex;
   std::vector<std::vector<long long>> upperOffsets;
 
-  const MatrixAccessor* EvalFunc;
   const ClusterBasis* Basis;
-  const double* Bodies;
-  const Cell* Cells;
-  const CSR* Near;
   const CellComm* Comm;
   long long Levels;
 
 public:
-  MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CellComm comm[], long long levels);
+  MatVec(const ClusterBasis basis[], const Cell cells[], const CellComm comm[], long long levels);
 
   void operator() (long long nrhs, std::complex<double> X[]) const;
 };

@@ -90,9 +90,9 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
 
-  basis[levels] = ClusterBasis(eval, epi, &cell[0], cellFar, &body[0], wsa[levels], cell_comm[levels], basis[levels], cell_comm[levels]);
+  basis[levels] = ClusterBasis(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[levels], cell_comm[levels], basis[levels], cell_comm[levels]);
   for (long long l = levels - 1; l >= 0; l--)
-    basis[l] = ClusterBasis(eval, epi, &cell[0], cellFar, &body[0], wsa[l], cell_comm[l], basis[l + 1], cell_comm[l + 1]);
+    basis[l] = ClusterBasis(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[l], cell_comm[l], basis[l + 1], cell_comm[l + 1]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> X1(lenX * nrhs, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX * nrhs, std::complex<double>(0., 0.));
 
-  MatVec mv(eval, &basis[0], &body[0], &cell[0], cellNear, &cell_comm[0], levels);
+  MatVec mv(&basis[0], &cell[0], &cell_comm[0], levels);
   for (long long i = 0; i < nrhs; i++)
     std::copy(&Xbody[i * Nbody] + body_local[0], &Xbody[i * Nbody] + body_local[1], &X1[i * lenX]);
 

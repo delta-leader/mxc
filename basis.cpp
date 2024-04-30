@@ -82,20 +82,19 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   return rank;
 }
 
-ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
+ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const ClusterBasis& prev_basis, const CellComm& prev_comm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long ybegin = comm.oGlobal();
 
   long long ychild = cells[ybegin].Child[0];
-  localChildIndex = prev_comm.iLocal(ychild);
-  selfChildIndex = 0 <= ychild ? (prev_comm.oGlobal() - ychild) : 0;
-  localChildOffsets = std::vector<long long>(nodes + 1);
+  long long localChildIndex = prev_comm.iLocal(ychild);
+  std::vector<long long> localChildOffsets(nodes + 1);
   localChildOffsets[0] = 0;
   std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return c.Child[1] - ychild; });
 
-  localChildLrDims = std::vector<long long>(localChildOffsets.back());
+  std::vector<long long> localChildLrDims(localChildOffsets.back());
   std::copy(&prev_basis.DimsLr[localChildIndex], &prev_basis.DimsLr[localChildIndex + localChildLrDims.size()], localChildLrDims.begin());
 
   Dims = std::vector<long long>(xlen, 0);
@@ -135,25 +134,54 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   std::transform(Soffsets.begin(), Soffsets.begin() + xlen, S.begin(), [&](const long long d) { return &Sdata[d]; });
 
   for (long long i = 0; i < nodes; i++) {
-    long long dim = Dims[i + ibegin];
-    std::complex<double>* matrix = &Qdata[Qoffsets[i + ibegin]];
-    double* ske = &Sdata[Soffsets[i + ibegin]];
-
     long long ci = i + ybegin;
     long long childi = localChildIndex + localChildOffsets[i];
     long long cend = localChildIndex + localChildOffsets[i + 1];
+    double* ske_i = &Sdata[Soffsets[i + ibegin]];
 
     if (cend <= childi)
-      std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske);
+      std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske_i);
     for (long long j = childi; j < cend; j++) {
       long long offset = prev_basis.copyOffset(j);
       long long len = prev_basis.DimsLr[j];
-      std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske[offset * 3]);
+      std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske_i[offset * 3]);
     }
+  }
+  comm.neighbor_bcast(Sdata.data(), Ssizes.data());
+
+  ARows = std::vector<long long>(&Near.RowIndex[ybegin], &Near.RowIndex[ybegin + nodes + 1]);
+  ACols = std::vector<long long>(&Near.ColIndex[ARows[0]], &Near.ColIndex[ARows[nodes]]);
+  long long offset = ARows[0];
+  std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
+  std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
+
+  std::vector<long long> Asizes(ARows[nodes]), Aoffsets(ARows[nodes] + 1);
+  for (long long i = 0; i < nodes; i++)
+    std::transform(&ACols[ARows[i]], &ACols[ARows[i + 1]], &Asizes[ARows[i]], 
+      [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
+  std::inclusive_scan(Asizes.begin(), Asizes.end(), Aoffsets.begin() + 1);
+  Aoffsets[0] = 0;
+
+  A = std::vector<const std::complex<double>*>(ARows[nodes]);
+  Adata = std::vector<std::complex<double>>(Aoffsets.back());
+  std::transform(Aoffsets.begin(), Aoffsets.begin() + ARows[nodes], A.begin(), [&](const long long d) { return &Adata[d]; });
+
+  for (long long i = 0; i < nodes; i++)
+    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+      long long j = ACols[ij];
+      long long M = Dims[i + ibegin];
+      long long N = Dims[j];
+      gen_matrix(eval, M, N, S[i + ibegin], S[j], &Adata[Aoffsets[ij]]);
+    }
+
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    std::complex<double>* matrix = &Qdata[Qoffsets[i + ibegin]];
+    double* ske_i = &Sdata[Soffsets[i + ibegin]];
 
     long long fsize = wsa.fbodies_size_at_i(i);
     const double* fbodies = wsa.fbodies_at_i(i);
-    long long rank = compute_basis(eval, epi, dim, fsize, ske, fbodies, matrix);
+    long long rank = compute_basis(eval, epi, M, fsize, ske_i, fbodies, matrix);
     DimsLr[i + ibegin] = rank;
   }
 
@@ -163,14 +191,13 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
 
   CRows = std::vector<long long>(&Far.RowIndex[ybegin], &Far.RowIndex[ybegin + nodes + 1]);
   CCols = std::vector<long long>(&Far.ColIndex[CRows[0]], &Far.ColIndex[CRows[nodes]]);
-  CColsLocal = std::vector<long long>(CRows.back());
-  long long offset = CRows[0];
+  offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
-  std::transform(CCols.begin(), CCols.end(), CColsLocal.begin(), [&](long long col) { return comm.iLocal(col); });
+  std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
 
   std::vector<long long> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
-    std::transform(&CColsLocal[CRows[i]], &CColsLocal[CRows[i + 1]], &Csizes[CRows[i]], 
+    std::transform(&CCols[CRows[i]], &CCols[CRows[i + 1]], &Csizes[CRows[i]], 
       [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
   std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
   Coffsets[0] = 0;
@@ -181,9 +208,9 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
 
   for (long long i = 0; i < nodes; i++)
     for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
-      long long j = CColsLocal[ij];
-      long long m = DimsLr[i + ibegin], n = DimsLr[j];
-      gen_matrix(eval, m, n, S[i + ibegin], S[j], &Cdata[Coffsets[ij]]);
+      long long j = CCols[ij];
+      long long M = DimsLr[i + ibegin], N = DimsLr[j];
+      gen_matrix(eval, M, N, S[i + ibegin], S[j], &Cdata[Coffsets[ij]]);
     }
 }
 
@@ -191,12 +218,8 @@ long long ClusterBasis::copyOffset(long long i) const {
   return std::reduce(&DimsLr[std::max((long long)0, i - ParentSequenceNum[i])], &DimsLr[i], (long long)0);
 }
 
-long long ClusterBasis::childWriteOffset() const {
-  return std::reduce(localChildLrDims.begin(), localChildLrDims.begin() + selfChildIndex, (long long)0);
-}
-
-MatVec::MatVec(const MatrixAccessor& eval, const ClusterBasis basis[], const double bodies[], const Cell cells[], const CSR& near, const CellComm comm[], long long levels) :
-  offsets(levels + 1), upperIndex(levels + 1), upperOffsets(levels + 1), EvalFunc(&eval), Basis(basis), Bodies(bodies), Cells(cells), Near(&near), Comm(comm), Levels(levels) {
+MatVec::MatVec(const ClusterBasis basis[], const Cell cells[], const CellComm comm[], long long levels) :
+  offsets(levels + 1), upperIndex(levels + 1), upperOffsets(levels + 1), Basis(basis), Comm(comm), Levels(levels) {
   
   for (long long l = levels; l >= 0; l--) {
     long long xlen = comm[l].lenNeighbors();
@@ -283,7 +306,7 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
 
       if (0 < K) {
         for (long long yx = Basis[i].CRows[y]; yx < Basis[i].CRows[y + 1]; yx++) {
-          long long x = Basis[i].CColsLocal[yx];
+          long long x = Basis[i].CCols[yx];
           long long N = Basis[i].DimsLr[x];
           long long UX = upperIndex[i][x];
           long long LX = Basis[i - 1].Dims[UX];
@@ -296,17 +319,15 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
     }
   }
 
-  long long gbegin = Comm[Levels].oGlobal();
   for (long long y = 0; y < llen; y++)
-    for (long long yx = Near->RowIndex[y + gbegin]; yx < Near->RowIndex[y + gbegin + 1]; yx++) {
-      long long x = Near->ColIndex[yx];
-      long long x_loc = Comm[Levels].iLocal(x);
-      long long M = Cells[y + gbegin].Body[1] - Cells[y + gbegin].Body[0];
-      long long N = Cells[x].Body[1] - Cells[x].Body[0];
+    for (long long yx = Basis[Levels].ARows[y]; yx < Basis[Levels].ARows[y + 1]; yx++) {
+      long long x = Basis[Levels].ACols[yx];
+      long long M = Basis[Levels].Dims[lbegin + y];
+      long long N = Basis[Levels].Dims[x];
 
       std::complex<double>* Yptr = rhsY[Levels].data() + nrhs * offsets[Levels][lbegin + y];
-      const std::complex<double>* Xptr = rhsX[Levels].data() + nrhs * offsets[Levels][x_loc];
-      mat_vec_reference(*EvalFunc, M, N, nrhs, Yptr, Xptr, &Bodies[3 * Cells[y + gbegin].Body[0]], &Bodies[3 * Cells[x].Body[0]]);
+      const std::complex<double>* Xptr = rhsX[Levels].data() + nrhs * offsets[Levels][x];
+      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, M, nrhs, N, &one, Basis[Levels].A[yx], M, Xptr, N, &one, Yptr, M);
     }
   
   Y = 0;
