@@ -25,7 +25,6 @@ public:
 class ClusterBasis {
 private:
   std::vector<std::complex<double>> Qdata;
-  std::vector<std::complex<double>> Rdata;
   std::vector<std::complex<double>> Cdata;
   std::vector<std::complex<double>> Adata;
 
@@ -38,7 +37,6 @@ public:
   std::vector<long long> Dims;
   std::vector<long long> DimsLr;
   std::vector<const std::complex<double>*> Q;
-  std::vector<std::complex<double>*> R;
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;

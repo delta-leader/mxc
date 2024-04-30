@@ -103,7 +103,6 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   elementsOnRow = std::vector<long long>(xlen);
   S = std::vector<const double*>(xlen);
   Q = std::vector<const std::complex<double>*>(xlen);
-  R = std::vector<std::complex<double>*>(xlen);
 
   std::transform(&cells[ybegin], &cells[ybegin + nodes], &ParentSequenceNum[ibegin], 
     [&](const Cell& c) { return 0 <= c.Parent ? std::distance(&cells[cells[c.Parent].Child[0]], &c) : 0; });
@@ -122,9 +121,7 @@ ClusterBasis::ClusterBasis(const MatrixAccessor& eval, double epi, const Cell ce
   std::inclusive_scan(elementsOnRow.begin(), elementsOnRow.end(), Qoffsets.begin() + 1);
   Qoffsets[0] = 0;
   Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
-  Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
   std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const long long d) { return &Qdata[d]; });
-  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const long long d) { return &Rdata[d]; });
 
   std::vector<long long> Ssizes(xlen), Soffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), Ssizes.begin(), [](const long long d) { return 3 * d; });
