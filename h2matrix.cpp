@@ -400,9 +400,10 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
 
       dotp[0] = std::transform_reduce(w.begin(), w.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
       Comm[Levels].level_sum(&dotp[0], 1);
-      H[(i + 1) + i * (m + 1)] = dotp[0];
 
-      scale = 1. / dotp[0];
+      double normw = std::sqrt(dotp[0].real());
+      H[(i + 1) + i * (m + 1)] = normw;
+      scale = 1. / normw;
       cblas_zaxpy(lenX, &scale, &w[0], 1, &v[(i + 1) * lenX], 1);
     }
 
