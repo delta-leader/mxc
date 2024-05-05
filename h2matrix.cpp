@@ -353,20 +353,16 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
   const std::complex<double> zero(0., 0.);
   const double machine_epsilon = std::numeric_limits<double>::epsilon();
 
-  auto conj_self_mul = [](const std::complex<double>& a) { return std::conj(a) * a; };
-  auto conj_mul = [](const std::complex<double>& a, const std::complex<double>& b) { return std::conj(a) * b; };
-  auto plus = std::plus<std::complex<double>>();
-
   std::copy(B, &B[lenX], w.begin());
   M.solve(1, &w[0]);
-  dotp[0] = std::transform_reduce(w.begin(), w.end(), zero, plus, conj_self_mul);
+  cblas_zdotc_sub(lenX, &w[0], 1, &w[0], 1, &dotp[0]);
 
   std::copy(X, &X[lenX], w.begin());
   std::copy(B, &B[lenX], r.begin());
   this->operator()(1, &w[0]);
   cblas_zaxpy(lenX, &minus_one, &w[0], 1, &r[0], 1);
   M.solve(1, &r[0]);
-  dotp[1] = std::transform_reduce(r.begin(), r.end(), zero, plus, conj_self_mul);
+  cblas_zdotc_sub(lenX, &r[0], 1, &r[0], 1, &dotp[1]);
 
   Comm[Levels].level_sum(&dotp[0], 2);
   double normb = std::sqrt(dotp[0].real());
@@ -392,7 +388,7 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
       M.solve(1, &w[0]);
 
       for (long long k = 0; k <= i; k++)
-        dotp[k] = std::transform_reduce(&v[k * lenX], &v[(k + 1) * lenX], &w[0], zero, plus, conj_mul);
+        cblas_zdotc_sub(lenX, &v[k * lenX], 1, &w[0], 1, &dotp[k]);
       Comm[Levels].level_sum(&dotp[0], i + 1);
 
       for (long long k = 0; k <= i; k++) {
@@ -401,7 +397,7 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
         cblas_zaxpy(lenX, &scale, &v[k * lenX], 1, &w[0], 1);
       }
 
-      dotp[0] = std::transform_reduce(w.begin(), w.end(), zero, plus, conj_self_mul);
+      cblas_zdotc_sub(lenX, &w[0], 1, &w[0], 1, &dotp[0]);
       Comm[Levels].level_sum(&dotp[0], 1);
 
       double normw = std::sqrt(dotp[0].real());
@@ -411,6 +407,7 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
     }
 
     std::fill(s.begin(), s.end(), zero);
+    std::fill(jpvt.begin(), jpvt.end(), 0);
     s[0] = beta;
 
     long long rank = 0;
@@ -422,7 +419,7 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
     this->operator()(1, &w[0]);
     cblas_zaxpy(lenX, &minus_one, &w[0], 1, &r[0], 1);
     M.solve(1, &r[0]);
-    dotp[0] = std::transform_reduce(r.begin(), r.end(), zero, plus, conj_self_mul);
+    cblas_zdotc_sub(lenX, &r[0], 1, &r[0], 1, &dotp[0]);
     Comm[Levels].level_sum(&dotp[0], 1);
 
     beta = std::sqrt(dotp[0].real());
