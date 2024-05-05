@@ -127,6 +127,10 @@ int main(int argc, char* argv[]) {
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX * nrhs);
 
+  Preconditioner M;
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  mv.solveGMRES(epi, M, &X1[0], &X2[0], 20, 100);
+
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
     std::cout << "H-Matrix: " << h_construct_time << std::endl;

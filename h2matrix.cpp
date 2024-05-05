@@ -249,7 +249,7 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
 
   long long lbegin = Comm[Levels].oLocal();
   long long llen = Comm[Levels].lenLocal();
-  long long Y = 0, lenX = std::reduce(&Basis[Levels].Dims[lbegin], &Basis[Levels].Dims[lbegin + llen]);
+  long long Y = 0, lenX = offsets[Levels][lbegin + llen] - offsets[Levels][lbegin];
 
   const std::complex<double> one(1., 0.), zero(0., 0.);
   for (long long i = 0; i < llen; i++) {
@@ -264,7 +264,7 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
     long long iboxes = Comm[i].lenLocal();
     long long xlen = Comm[i].lenNeighbors();
 
-    long long lenI = nrhs * std::reduce(&Basis[i].Dims[0], &Basis[i].Dims[xlen]);
+    long long lenI = nrhs * offsets[i][xlen];
     Comm[i].level_merge(rhsX[i].data(), lenI);
 
     if (0 < i)
@@ -334,4 +334,36 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
     MKL_Zomatcopy('C', 'N', M, nrhs, one, Yptr, M, &X[Y], lenX);
     Y = Y + M;
   }
+}
+
+void MatVec::solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long restarts, long long max_iter) const {
+  long long lbegin = Comm[Levels].oLocal();
+  long long llen = Comm[Levels].lenLocal();
+  long long lenX = offsets[Levels][lbegin + llen] - offsets[Levels][lbegin];
+
+  std::vector<std::complex<double>> w(lenX), r(lenX);
+  std::vector<std::complex<double>> s(restarts + 1), y(restarts);
+  std::vector<std::complex<double>> H(restarts * (restarts + 1));
+  std::vector<std::complex<double>> v(lenX * (restarts + 1));
+  std::vector<std::complex<double>> dotp(restarts);
+  const std::complex<double> minus_one(-1., 0.);
+
+  auto conj_self_mul = [](const std::complex<double>& a) { return std::conj(a) * a; };
+  auto conj_mul = [](const std::complex<double>& a, const std::complex<double>& b) { return std::conj(a) * b; };
+
+  std::copy(B, &B[lenX], w.begin());
+  M.solve(1, &w[0]);
+  dotp[0] = std::transform_reduce(w.begin(), w.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
+
+  std::copy(X, &X[lenX], w.begin());
+  std::copy(B, &B[lenX], r.begin());
+  this->operator()(1, &w[0]);
+  cblas_zaxpy(lenX, &minus_one, &w[0], 1, &r[0], 1);
+  M.solve(1, &r[0]);
+  dotp[1] = std::transform_reduce(r.begin(), r.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
+
+  Comm[Levels].level_sum(&dotp[0], 2);
+  double normb = std::sqrt(dotp[0].real());
+  double beta = std::sqrt(dotp[1].real());
+  
 }

@@ -51,6 +51,12 @@ public:
   long long copyOffset(long long i) const;
 };
 
+class Preconditioner {
+public:
+  Preconditioner() {};
+  virtual void solve(long long, std::complex<double>[]) const {};
+};
+
 class MatVec {
 private:
   std::vector<std::vector<long long>> offsets;
@@ -65,4 +71,5 @@ public:
   MatVec(const H2Matrix basis[], const Cell cells[], const CellComm comm[], long long levels);
 
   void operator() (long long nrhs, std::complex<double> X[]) const;
+  void solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long restarts, long long max_iter) const;
 };

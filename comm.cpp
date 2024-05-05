@@ -93,6 +93,7 @@ CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[]
   long long p_next = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_rank], Mapping[mpi_rank]));
   MergeComm.first = (int)(mpi_rank == p && p_next == p);
   MergeComm.second = MPI_Comm_split_unique(unique_comms, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
+  AllReduceComm = MPI_Comm_split_unique(unique_comms, mpi_rank == p ? 1 : MPI_UNDEFINED, mpi_rank, world);
   DupComm = MPI_Comm_split_unique(unique_comms, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 }
 
@@ -151,6 +152,15 @@ template<typename T> inline void CellComm::level_merge(T* data, long long len) c
   }
 }
 
+template<typename T> inline void CellComm::level_sum(T* data, long long len) const {
+  record_mpi();
+  if (AllReduceComm != MPI_COMM_NULL)
+    MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, AllReduceComm);
+  if (DupComm != MPI_COMM_NULL)
+    MPI_Bcast(data, len, get_mpi_datatype<T>(), 0, DupComm);
+  record_mpi();
+}
+
 template<typename T> inline void CellComm::neighbor_bcast(T* data, const long long box_dims[]) const {
   std::vector<long long> offsets(Boxes.size() + 1, 0);
   for (long long p = 0; p < (long long)Boxes.size(); p++) {
@@ -192,6 +202,10 @@ template<typename T> inline void CellComm::neighbor_reduce(T* data, const long l
 
 void CellComm::level_merge(std::complex<double>* data, long long len) const {
   level_merge<std::complex<double>>(data, len);
+}
+
+void CellComm::level_sum(std::complex<double>* data, long long len) const {
+  level_sum<std::complex<double>>(data, len);
 }
 
 void CellComm::neighbor_bcast(long long* data, const long long box_dims[]) const {
