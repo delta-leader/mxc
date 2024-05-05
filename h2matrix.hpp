@@ -71,5 +71,5 @@ public:
   MatVec(const H2Matrix basis[], const Cell cells[], const CellComm comm[], long long levels);
 
   void operator() (long long nrhs, std::complex<double> X[]) const;
-  void solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long restarts, long long max_iter) const;
+  std::pair<double, long long> solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long restarts, long long max_iter) const;
 };

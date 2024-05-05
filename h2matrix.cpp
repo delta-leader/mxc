@@ -336,16 +336,19 @@ void MatVec::operator() (long long nrhs, std::complex<double> X[]) const {
   }
 }
 
-void MatVec::solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long restarts, long long max_iter) const {
+std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long m, long long max_iter) const {
   long long lbegin = Comm[Levels].oLocal();
   long long llen = Comm[Levels].lenLocal();
   long long lenX = offsets[Levels][lbegin + llen] - offsets[Levels][lbegin];
 
   std::vector<std::complex<double>> w(lenX), r(lenX);
-  std::vector<std::complex<double>> s(restarts + 1), y(restarts);
-  std::vector<std::complex<double>> H(restarts * (restarts + 1));
-  std::vector<std::complex<double>> v(lenX * (restarts + 1));
-  std::vector<std::complex<double>> dotp(restarts);
+  std::vector<std::complex<double>> s(m + 1);
+  std::vector<std::complex<double>> H(m * (m + 1));
+  std::vector<std::complex<double>> v(lenX * (m + 1));
+
+  std::vector<std::complex<double>> dotp(m + 1);
+  std::vector<long long> jpvt(m);
+  const std::complex<double> one(1., 0.);
   const std::complex<double> minus_one(-1., 0.);
 
   auto conj_self_mul = [](const std::complex<double>& a) { return std::conj(a) * a; };
@@ -366,4 +369,63 @@ void MatVec::solveGMRES(double tol, const Preconditioner& M, std::complex<double
   double normb = std::sqrt(dotp[0].real());
   double beta = std::sqrt(dotp[1].real());
   
+  if (normb == 0.)
+    normb = 1.;
+  
+  double resid = beta / normb;
+  if (resid <= tol)
+    return std::make_pair(resid, 0);
+
+  for (long long j = 1; j <= max_iter; j++) {
+    std::fill(v.begin(), v.end(), std::complex<double>(0., 0.));
+    std::fill(H.begin(), H.end(), std::complex<double>(0., 0.));
+
+    std::complex<double> scale(1. / beta, 0.);
+    cblas_zaxpy(lenX, &scale, &r[0], 1, &v[0], 1);
+    
+    for (long long i = 0; i < m; i++) {
+      std::copy(&v[i * lenX], &v[(i + 1) * lenX], w.begin());
+      this->operator()(1, &w[0]);
+      M.solve(1, &w[0]);
+
+      for (long long k = 0; k <= i; k++)
+        dotp[k] = std::transform_reduce(&v[k * lenX], &v[(k + 1) * lenX], &w[0], std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_mul);
+      Comm[Levels].level_sum(&dotp[0], i + 1);
+
+      for (long long k = 0; k <= i; k++) {
+        scale = -dotp[k];
+        H[k + i * (m + 1)] = dotp[k];
+        cblas_zaxpy(lenX, &scale, &v[k * lenX], 1, &w[0], 1);
+      }
+
+      dotp[0] = std::transform_reduce(w.begin(), w.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
+      Comm[Levels].level_sum(&dotp[0], 1);
+      H[(i + 1) + i * (m + 1)] = dotp[0];
+
+      scale = 1. / dotp[0];
+      cblas_zaxpy(lenX, &scale, &w[0], 1, &v[(i + 1) * lenX], 1);
+    }
+
+    std::fill(s.begin(), s.end(), std::complex<double>(0., 0.));
+    s[0] = beta;
+
+    long long rank = 0;
+    LAPACKE_zgelsy(LAPACK_COL_MAJOR, m + 1, m, 1, &H[0], m + 1, &s[0], m + 1, &jpvt[0], std::numeric_limits<double>::epsilon(), &rank);
+    cblas_zgemv(CblasColMajor, CblasNoTrans, lenX, m, &one, &v[0], lenX, &s[0], 1, &one, X, 1);
+
+    std::copy(X, &X[lenX], w.begin());
+    std::copy(B, &B[lenX], r.begin());
+    this->operator()(1, &w[0]);
+    cblas_zaxpy(lenX, &minus_one, &w[0], 1, &r[0], 1);
+    M.solve(1, &r[0]);
+    dotp[0] = std::transform_reduce(r.begin(), r.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
+    Comm[Levels].level_sum(&dotp[0], 1);
+
+    beta = std::sqrt(dotp[0].real());
+    resid = beta / normb;
+    if (resid < tol)
+      return std::make_pair(resid, j);
+  }
+
+  return std::make_pair(resid, max_iter);
 }

@@ -41,10 +41,10 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
   
-  //Laplace3D eval(1);
+  Laplace3D eval(1.e-2);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
-  Helmholtz3D eval(1.e-1, 1.);
+  //Helmholtz3D eval(1.e-1, 1.e-2);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody * nrhs);
@@ -129,14 +129,24 @@ int main(int argc, char* argv[]) {
 
   Preconditioner M;
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
-  mv.solveGMRES(epi, M, &X1[0], &X2[0], 20, 100);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  double gmres_time = MPI_Wtime(), gmres_comm_time;
+  std::pair<double, long long> gmres_ret = mv.solveGMRES(epi, M, &X1[0], &X2[0], 120, 100);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  gmres_time = MPI_Wtime() - gmres_time;
+  gmres_comm_time = timer.first;
+  timer.first = 0;
 
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "H-Matrix: " << h_construct_time << std::endl;
-    std::cout << "H^2-Matrix: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
-    std::cout << "Matvec: " << matvec_time << ", " << matvec_comm_time << std::endl;
-    std::cout << "Dense Matvec: " << refmatvec_time << std::endl;
+    std::cout << "H-Matrix Time: " << h_construct_time << std::endl;
+    std::cout << "H^2-Matrix Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
+    std::cout << "Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
+    std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
+    std::cout << "GMRES Residual: " << gmres_ret.first << ", Iters: " << gmres_ret.second << std::endl;
+    std::cout << "GMRES Time: " << gmres_time << ", " << gmres_comm_time << std::endl;
   }
 
   for (MPI_Comm& c : mpi_comms)
