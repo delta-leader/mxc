@@ -350,20 +350,23 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
   std::vector<long long> jpvt(m);
   const std::complex<double> one(1., 0.);
   const std::complex<double> minus_one(-1., 0.);
+  const std::complex<double> zero(0., 0.);
+  const double machine_epsilon = std::numeric_limits<double>::epsilon();
 
   auto conj_self_mul = [](const std::complex<double>& a) { return std::conj(a) * a; };
   auto conj_mul = [](const std::complex<double>& a, const std::complex<double>& b) { return std::conj(a) * b; };
+  auto plus = std::plus<std::complex<double>>();
 
   std::copy(B, &B[lenX], w.begin());
   M.solve(1, &w[0]);
-  dotp[0] = std::transform_reduce(w.begin(), w.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
+  dotp[0] = std::transform_reduce(w.begin(), w.end(), zero, plus, conj_self_mul);
 
   std::copy(X, &X[lenX], w.begin());
   std::copy(B, &B[lenX], r.begin());
   this->operator()(1, &w[0]);
   cblas_zaxpy(lenX, &minus_one, &w[0], 1, &r[0], 1);
   M.solve(1, &r[0]);
-  dotp[1] = std::transform_reduce(r.begin(), r.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
+  dotp[1] = std::transform_reduce(r.begin(), r.end(), zero, plus, conj_self_mul);
 
   Comm[Levels].level_sum(&dotp[0], 2);
   double normb = std::sqrt(dotp[0].real());
@@ -377,8 +380,8 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
     return std::make_pair(resid, 0);
 
   for (long long j = 1; j <= max_iter; j++) {
-    std::fill(v.begin(), v.end(), std::complex<double>(0., 0.));
-    std::fill(H.begin(), H.end(), std::complex<double>(0., 0.));
+    std::fill(v.begin(), v.end(), zero);
+    std::fill(H.begin(), H.end(), zero);
 
     std::complex<double> scale(1. / beta, 0.);
     cblas_zaxpy(lenX, &scale, &r[0], 1, &v[0], 1);
@@ -389,7 +392,7 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
       M.solve(1, &w[0]);
 
       for (long long k = 0; k <= i; k++)
-        dotp[k] = std::transform_reduce(&v[k * lenX], &v[(k + 1) * lenX], &w[0], std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_mul);
+        dotp[k] = std::transform_reduce(&v[k * lenX], &v[(k + 1) * lenX], &w[0], zero, plus, conj_mul);
       Comm[Levels].level_sum(&dotp[0], i + 1);
 
       for (long long k = 0; k <= i; k++) {
@@ -398,20 +401,20 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
         cblas_zaxpy(lenX, &scale, &v[k * lenX], 1, &w[0], 1);
       }
 
-      dotp[0] = std::transform_reduce(w.begin(), w.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
+      dotp[0] = std::transform_reduce(w.begin(), w.end(), zero, plus, conj_self_mul);
       Comm[Levels].level_sum(&dotp[0], 1);
 
       double normw = std::sqrt(dotp[0].real());
-      H[(i + 1) + i * (m + 1)] = normw;
-      scale = 1. / normw;
+      H[(i + 1) + i * (m + 1)] = std::complex<double>(normw, 0.);
+      scale = std::complex<double>(1. / normw, 0.);
       cblas_zaxpy(lenX, &scale, &w[0], 1, &v[(i + 1) * lenX], 1);
     }
 
-    std::fill(s.begin(), s.end(), std::complex<double>(0., 0.));
+    std::fill(s.begin(), s.end(), zero);
     s[0] = beta;
 
     long long rank = 0;
-    LAPACKE_zgelsy(LAPACK_COL_MAJOR, m + 1, m, 1, &H[0], m + 1, &s[0], m + 1, &jpvt[0], std::numeric_limits<double>::epsilon(), &rank);
+    LAPACKE_zgelsy(LAPACK_COL_MAJOR, m + 1, m, 1, &H[0], m + 1, &s[0], m + 1, &jpvt[0], machine_epsilon, &rank);
     cblas_zgemv(CblasColMajor, CblasNoTrans, lenX, m, &one, &v[0], lenX, &s[0], 1, &one, X, 1);
 
     std::copy(X, &X[lenX], w.begin());
@@ -419,7 +422,7 @@ std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner
     this->operator()(1, &w[0]);
     cblas_zaxpy(lenX, &minus_one, &w[0], 1, &r[0], 1);
     M.solve(1, &r[0]);
-    dotp[0] = std::transform_reduce(r.begin(), r.end(), std::complex<double>(0., 0.), std::plus<std::complex<double>>(), conj_self_mul);
+    dotp[0] = std::transform_reduce(r.begin(), r.end(), zero, plus, conj_self_mul);
     Comm[Levels].level_sum(&dotp[0], 1);
 
     beta = std::sqrt(dotp[0].real());
