@@ -28,7 +28,6 @@ int main(int argc, char* argv[]) {
   long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 256;
   double epi = argc > 4 ? std::atof(argv[4]) : 1e-10;
   long long rank = argc > 5 ? std::atoll(argv[5]) : 100;
-  long long nrhs = argc > 6 ? std::atoll(argv[6]) : 2;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   long long levels = (long long)std::log2((double)Nbody / leaf_size);
@@ -47,7 +46,7 @@ int main(int argc, char* argv[]) {
   Helmholtz3D eval(1.e-1, 1.e-1);
   
   std::vector<double> body(Nbody * 3);
-  std::vector<std::complex<double>> Xbody(Nbody * nrhs);
+  std::vector<std::complex<double>> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
 
   std::vector<CellComm> cell_comm(levels + 1);
@@ -103,16 +102,15 @@ int main(int argc, char* argv[]) {
   long long gbegin = cell_comm[levels].oGlobal();
   long long body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
   long long lenX = body_local[1] - body_local[0];
-  std::vector<std::complex<double>> X1(lenX * nrhs, std::complex<double>(0., 0.));
-  std::vector<std::complex<double>> X2(lenX * nrhs, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
   MatVec mv(&basis[0], &cell[0], &cell_comm[0], levels);
-  for (long long i = 0; i < nrhs; i++)
-    std::copy(&Xbody[i * Nbody] + body_local[0], &Xbody[i * Nbody] + body_local[1], &X1[i * lenX]);
+  std::copy(&Xbody[0] + body_local[0], &Xbody[0] + body_local[1], &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  mv(nrhs, &X1[0]);
+  mv(&X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -122,10 +120,10 @@ int main(int argc, char* argv[]) {
   double cerr = 0.;
   double refmatvec_time = MPI_Wtime();
 
-  mat_vec_reference(eval, lenX, Nbody, nrhs, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
+  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
 
-  solveRelErr(&cerr, &X1[0], &X2[0], lenX * nrhs);
+  solveRelErr(&cerr, &X1[0], &X2[0], lenX);
 
   Preconditioner M;
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));

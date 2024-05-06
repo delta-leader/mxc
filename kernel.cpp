@@ -24,7 +24,7 @@ void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const doub
 }
 
 long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], std::complex<double> U[]) {
-  std::vector<std::complex<double>> V(K * N), L(K * K, std::complex<double>(0., 0.)), Wnrm(K), Vnrm(K);
+  std::vector<std::complex<double>> V(K * N), L(K * K, std::complex<double>(0., 0.)), Unrm(K), Vnrm(K);
   std::vector<std::complex<double>> Acol(M), Arow(N);
   std::vector<double> Rcol(M), Rrow(N);
   std::vector<long long> jpiv(K);
@@ -73,9 +73,9 @@ long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long 
     ipiv[iters] = y;
     jpiv[iters] = x;
 
-    cblas_zgemv(CblasColMajor, CblasTrans, M, iters, &one, &U[0], M, &Acol[0], 1, &zero, &Wnrm[0], 1);
-    cblas_zgemv(CblasColMajor, CblasTrans, N, iters, &one, &V[0], N, &Arow[0], 1, &zero, &Vnrm[0], 1);
-    std::complex<double> Z_k = std::transform_reduce(&Wnrm[0], &Wnrm[iters], &Vnrm[0], std::complex<double>(0., 0.), 
+    cblas_zgemv(CblasColMajor, CblasConjTrans, M, iters, &one, &U[0], M, &Acol[0], 1, &zero, &Unrm[0], 1);
+    cblas_zgemv(CblasColMajor, CblasConjTrans, N, iters, &one, &V[0], N, &Arow[0], 1, &zero, &Vnrm[0], 1);
+    std::complex<double> Z_k = std::transform_reduce(&Unrm[0], &Unrm[iters], &Vnrm[0], std::complex<double>(0., 0.), 
       std::plus<std::complex<double>>(), std::multiplies<std::complex<double>>());
     nrm_k = cblas_dznrm2(M, &Acol[0], 1) * cblas_dznrm2(N, &Arow[0], 1);
     nrm_z = std::sqrt(nrm_z * nrm_z + 2 * std::abs(Z_k) + nrm_k * nrm_k);
@@ -91,7 +91,7 @@ long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long 
 }
 
 
-void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, long long nrhs, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]) {
+void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]) {
   constexpr long long size = 256;
   std::vector<std::complex<double>> A(size * size);
   std::complex<double> one(1., 0.);
@@ -103,7 +103,7 @@ void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, lon
       const double* bj = &jbodies[j * 3];
       long long n = std::min(N - j, size);
       gen_matrix(eval, m, n, bi, bj, &A[0]);
-      cblas_zgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, nrhs, n, &one, &A[0], m, &X[j], N, &one, &B[i], M);
+      cblas_zgemv(CblasColMajor, CblasNoTrans, m, n, &one, &A[0], m, &X[j], 1, &one, &B[i], 1);
     }
   }
 }

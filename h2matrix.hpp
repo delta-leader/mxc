@@ -54,7 +54,7 @@ public:
 class Preconditioner {
 public:
   Preconditioner() {};
-  virtual void solve(long long, std::complex<double>[]) const {};
+  virtual void solve(std::complex<double>[]) const {};
 };
 
 class MatVec {
@@ -63,6 +63,9 @@ private:
   std::vector<std::vector<long long>> upperIndex;
   std::vector<std::vector<long long>> upperOffsets;
 
+  std::vector<std::vector<std::complex<double>>> rhsX;
+  std::vector<std::vector<std::complex<double>>> rhsY;
+
   const H2Matrix* Basis;
   const CellComm* Comm;
   long long Levels;
@@ -70,6 +73,6 @@ private:
 public:
   MatVec(const H2Matrix basis[], const Cell cells[], const CellComm comm[], long long levels);
 
-  void operator() (long long nrhs, std::complex<double> X[]) const;
-  std::pair<double, long long> solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long restarts, long long max_iter) const;
+  void operator() (std::complex<double> X[]);
+  std::pair<double, long long> solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long restarts, long long max_iter);
 };
