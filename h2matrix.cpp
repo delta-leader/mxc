@@ -335,43 +335,44 @@ void smoother_gmres(long long N, long long iters, double beta, std::complex<doub
   std::vector<std::complex<double>> H(iters * ld, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> v(N * ld, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> s(ld, std::complex<double>(0., 0.));
-  std::vector<std::complex<double>> w(N, std::complex<double>(0., 0.));
 
-  std::vector<std::complex<double>> dotp(ld, std::complex<double>(0., 0.));
   std::vector<long long> jpvt(iters, 0);
   std::complex<double> scale(1. / beta, 0.);
   cblas_zaxpy(N, &scale, R, 1, &v[0], 1);
-  s[0] = beta;
   
   for (long long i = 0; i < iters; i++) {
-    std::copy(&v[i * N], &v[(i + 1) * N], w.begin());
-    A(&w[0]);
-    M.solve(&w[0]);
+    std::complex<double>* w = &v[(i + 1) * N];
+    std::copy(&v[i * N], w, w);
+    A(w);
+    M.solve(w);
 
     for (long long k = 0; k <= i; k++)
-      cblas_zdotc_sub(N, &v[k * N], 1, &w[0], 1, &dotp[k]);
-    comm.level_sum(&dotp[0], i + 1);
+      cblas_zdotc_sub(N, &v[k * N], 1, w, 1, &s[k]);
+    comm.level_sum(&s[0], i + 1);
 
     for (long long k = 0; k <= i; k++) {
-      scale = -dotp[k];
-      H[k + i * ld] = dotp[k];
-      cblas_zaxpy(N, &scale, &v[k * N], 1, &w[0], 1);
+      scale = -s[k];
+      H[k + i * ld] = s[k];
+      cblas_zaxpy(N, &scale, &v[k * N], 1, w, 1);
     }
 
-    cblas_zdotc_sub(N, &w[0], 1, &w[0], 1, &dotp[0]);
-    comm.level_sum(&dotp[0], 1);
+    cblas_zdotc_sub(N, w, 1, w, 1, &s[0]);
+    comm.level_sum(&s[0], 1);
 
-    double normw = std::sqrt(dotp[0].real());
+    double normw = std::sqrt(s[0].real());
     H[(i + 1) + i * ld] = std::complex<double>(normw, 0.);
     scale = std::complex<double>(1. / normw, 0.);
-    cblas_zaxpy(N, &scale, &w[0], 1, &v[(i + 1) * N], 1);
+    cblas_zscal(N, &scale, w, 1);
   }
 
   long long rank = 0;
   const double machine_epsilon = std::numeric_limits<double>::epsilon();
-  const std::complex<double> one(1., 0.);
+  std::fill(s.begin() + 1, s.end(), std::complex<double>(0., 0.));
+  s[0] = beta;
+  scale = std::complex<double>(1., 0.);
+
   LAPACKE_zgelsy(LAPACK_COL_MAJOR, ld, iters, 1, &H[0], ld, &s[0], ld, &jpvt[0], machine_epsilon, &rank);
-  cblas_zgemv(CblasColMajor, CblasNoTrans, N, iters, &one, &v[0], N, &s[0], 1, &one, X, 1);
+  cblas_zgemv(CblasColMajor, CblasNoTrans, N, iters, &scale, &v[0], N, &s[0], 1, &scale, X, 1);
 }
 
 std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) {
