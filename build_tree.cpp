@@ -46,10 +46,8 @@ void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long l
     long long loc = i_begin + (i_end - i_begin) / 2;
     c0.Body[0] = i_begin;
     c0.Body[1] = loc;
-    c0.Parent = i;
     c1.Body[0] = loc;
     c1.Body[1] = i_end;
-    c1.Parent = i;
 
     get_bounds(&bodies[i_begin * 3], loc - i_begin, c0.R.data(), c0.C.data());
     get_bounds(&bodies[loc * 3], i_end - loc, c1.R.data(), c1.C.data());

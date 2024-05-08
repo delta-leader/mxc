@@ -82,30 +82,27 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   return rank;
 }
 
-H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const H2Matrix& prev_basis, const CellComm& prev_comm) {
+H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const H2Matrix& lowerA, const CellComm& lowerComm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long ybegin = comm.oGlobal();
 
   long long ychild = cells[ybegin].Child[0];
-  long long localChildIndex = prev_comm.iLocal(ychild);
+  long long localChildIndex = lowerComm.iLocal(ychild);
   std::vector<long long> localChildOffsets(nodes + 1);
   localChildOffsets[0] = 0;
   std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return c.Child[1] - ychild; });
 
   std::vector<long long> localChildLrDims(localChildOffsets.back());
-  std::copy(&prev_basis.DimsLr[localChildIndex], &prev_basis.DimsLr[localChildIndex + localChildLrDims.size()], localChildLrDims.begin());
+  std::copy(&lowerA.DimsLr[localChildIndex], &lowerA.DimsLr[localChildIndex + localChildLrDims.size()], localChildLrDims.begin());
 
   Dims = std::vector<long long>(xlen, 0);
   DimsLr = std::vector<long long>(xlen, 0);
-  ParentSequenceNum = std::vector<long long>(xlen);
   elementsOnRow = std::vector<long long>(xlen);
   S = std::vector<const double*>(xlen);
   Q = std::vector<const std::complex<double>*>(xlen);
 
-  std::transform(&cells[ybegin], &cells[ybegin + nodes], &ParentSequenceNum[ibegin], 
-    [&](const Cell& c) { return 0 <= c.Parent ? std::distance(&cells[cells[c.Parent].Child[0]], &c) : 0; });
   if (localChildOffsets.back() == 0)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
   else
@@ -114,7 +111,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
 
   const std::vector<long long> ones(xlen, 1);
   comm.neighbor_bcast(Dims.data(), ones.data());
-  comm.neighbor_bcast(ParentSequenceNum.data(), ones.data());
 
   std::vector<long long> Qoffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), elementsOnRow.begin(), [](const long long d) { return d * d; });
@@ -139,9 +135,9 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     if (cend <= childi)
       std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske_i);
     for (long long j = childi; j < cend; j++) {
-      long long offset = prev_basis.copyOffset(j);
-      long long len = prev_basis.DimsLr[j];
-      std::copy(prev_basis.S[j], prev_basis.S[j] + (len * 3), &ske_i[offset * 3]);
+      long long offset = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[j]);
+      long long len = lowerA.DimsLr[j];
+      std::copy(lowerA.S[j], lowerA.S[j] + (len * 3), &ske_i[offset * 3]);
     }
   }
   comm.neighbor_bcast(Sdata.data(), Ssizes.data());
@@ -209,10 +205,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
       long long M = DimsLr[i + ibegin], N = DimsLr[j];
       gen_matrix(eval, M, N, S[i + ibegin], S[j], &Cdata[Coffsets[ij]]);
     }
-}
-
-long long H2Matrix::copyOffset(long long i) const {
-  return std::reduce(&DimsLr[std::max((long long)0, i - ParentSequenceNum[i])], &DimsLr[i], (long long)0);
 }
 
 H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const CellComm comm[], long long levels) :
@@ -304,16 +296,18 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[], long long levels) const
     }
   }
 
-  for (long long y = 0; y < llen; y++)
-    for (long long yx = A[levels].ARows[y]; yx < A[levels].ARows[y + 1]; yx++) {
-      long long x = A[levels].ACols[yx];
-      long long M = A[levels].Dims[lbegin + y];
-      long long N = A[levels].Dims[x];
+  for (long long y = 0; y < llen; y++) {
+    long long M = A[levels].Dims[lbegin + y];
+    if (0 < M)
+      for (long long yx = A[levels].ARows[y]; yx < A[levels].ARows[y + 1]; yx++) {
+        long long x = A[levels].ACols[yx];
+        long long N = A[levels].Dims[x];
 
-      std::complex<double>* Yptr = rhsY[levels].data() + offsets[levels][lbegin + y];
-      const std::complex<double>* Xptr = rhsX[levels].data() + offsets[levels][x];
-      cblas_zgemv(CblasColMajor, CblasNoTrans, M, N, &one, A[levels].A[yx], M, Xptr, 1, &one, Yptr, 1);
-    }
+        std::complex<double>* Yptr = rhsY[levels].data() + offsets[levels][lbegin + y];
+        const std::complex<double>* Xptr = rhsX[levels].data() + offsets[levels][x];
+        cblas_zgemv(CblasColMajor, CblasNoTrans, M, N, &one, A[levels].A[yx], M, Xptr, 1, &one, Yptr, 1);
+      }
+  }
   
   std::copy(rhsY[levels].data() + offsets[levels][lbegin], rhsY[levels].data() + offsets[levels][lbegin + llen], X);
 }

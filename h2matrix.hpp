@@ -30,7 +30,6 @@ private:
 
   std::vector<double> Sdata;
   std::vector<const double*> S;
-  std::vector<long long> ParentSequenceNum;
   std::vector<long long> elementsOnRow;
 
 public:
@@ -47,8 +46,7 @@ public:
   std::vector<const std::complex<double>*> A;
   
   H2Matrix() {}
-  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const H2Matrix& prev_basis, const CellComm& prev_comm);
-  long long copyOffset(long long i) const;
+  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const H2Matrix& lowerA, const CellComm& lowerComm);
 };
 
 class H2MatrixSolver {

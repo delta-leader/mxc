@@ -6,13 +6,12 @@
 
 class Cell {
 public:
-  long long Parent;
   std::array<long long, 2> Child;
   std::array<long long, 2> Body;
   std::array<double, 3> R;
   std::array<double, 3> C;
 
-  Cell() : Parent(-1), Child(std::array<long long, 2>{ -1, -1 }), Body(std::array<long long, 2>{ -1, -1 }), R(std::array<double, 3>{ 0., 0., 0. }), C(std::array<double, 3>{ 0., 0., 0. }) {}
+  Cell() : Child(std::array<long long, 2>{ -1, -1 }), Body(std::array<long long, 2>{ -1, -1 }), R(std::array<double, 3>{ 0., 0., 0. }), C(std::array<double, 3>{ 0., 0., 0. }) {}
 };
 
 class CSR {
