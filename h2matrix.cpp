@@ -315,97 +315,89 @@ void MatVec::operator() (std::complex<double> X[]) {
   std::copy(rhsY[Levels].data() + offsets[Levels][lbegin], rhsY[Levels].data() + offsets[Levels][lbegin + llen], X);
 }
 
-std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long m, long long max_iter) {
+double residual(long long N, std::complex<double> R[], const std::complex<double> X[], const std::complex<double> B[], MatVec& A, const Preconditioner& M, const CellComm& comm) {
+  std::fill(R, &R[N], std::complex<double>(0., 0.));
+  const std::complex<double> one(1., 0.), minus_one(-1., 0.);
+
+  cblas_zaxpy(N, &minus_one, X, 1, R, 1);
+  A(R);
+  cblas_zaxpy(N, &one, B, 1, R, 1);
+  M.solve(R); // r = M^(-1) * (b - A * x)
+
+  std::complex<double> beta(0., 0.);
+  cblas_zdotc_sub(N, R, 1, R, 1, &beta);
+  comm.level_sum(&beta, 1);
+  return std::sqrt(beta.real()); // beta = || r ||_2
+}
+
+void smoother_gmres(long long N, long long iters, double beta, std::complex<double> X[], const std::complex<double> R[], MatVec& A, const Preconditioner& M, const CellComm& comm) {
+  long long ld = iters + 1;
+  std::vector<std::complex<double>> H(iters * ld, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> v(N * ld, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> s(ld, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> w(N, std::complex<double>(0., 0.));
+
+  std::vector<std::complex<double>> dotp(ld, std::complex<double>(0., 0.));
+  std::vector<long long> jpvt(iters, 0);
+  std::complex<double> scale(1. / beta, 0.);
+  cblas_zaxpy(N, &scale, R, 1, &v[0], 1);
+  s[0] = beta;
+  
+  for (long long i = 0; i < iters; i++) {
+    std::copy(&v[i * N], &v[(i + 1) * N], w.begin());
+    A(&w[0]);
+    M.solve(&w[0]);
+
+    for (long long k = 0; k <= i; k++)
+      cblas_zdotc_sub(N, &v[k * N], 1, &w[0], 1, &dotp[k]);
+    comm.level_sum(&dotp[0], i + 1);
+
+    for (long long k = 0; k <= i; k++) {
+      scale = -dotp[k];
+      H[k + i * ld] = dotp[k];
+      cblas_zaxpy(N, &scale, &v[k * N], 1, &w[0], 1);
+    }
+
+    cblas_zdotc_sub(N, &w[0], 1, &w[0], 1, &dotp[0]);
+    comm.level_sum(&dotp[0], 1);
+
+    double normw = std::sqrt(dotp[0].real());
+    H[(i + 1) + i * ld] = std::complex<double>(normw, 0.);
+    scale = std::complex<double>(1. / normw, 0.);
+    cblas_zaxpy(N, &scale, &w[0], 1, &v[(i + 1) * N], 1);
+  }
+
+  long long rank = 0;
+  const double machine_epsilon = std::numeric_limits<double>::epsilon();
+  const std::complex<double> one(1., 0.);
+  LAPACKE_zgelsy(LAPACK_COL_MAJOR, ld, iters, 1, &H[0], ld, &s[0], ld, &jpvt[0], machine_epsilon, &rank);
+  cblas_zgemv(CblasColMajor, CblasNoTrans, N, iters, &one, &v[0], N, &s[0], 1, &one, X, 1);
+}
+
+std::pair<double, long long> MatVec::solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) {
   long long lbegin = Comm[Levels].oLocal();
   long long llen = Comm[Levels].lenLocal();
   long long lenX = offsets[Levels][lbegin + llen] - offsets[Levels][lbegin];
 
-  std::vector<std::complex<double>> w(lenX), r(lenX);
-  std::vector<std::complex<double>> s(m + 1);
-  std::vector<std::complex<double>> H(m * (m + 1));
-  std::vector<std::complex<double>> v(lenX * (m + 1));
-
-  std::vector<std::complex<double>> dotp(m + 1);
-  std::vector<long long> jpvt(m);
-  const std::complex<double> one(1., 0.);
-  const std::complex<double> minus_one(-1., 0.);
-  const std::complex<double> zero(0., 0.);
-  const double machine_epsilon = std::numeric_limits<double>::epsilon();
-
-  std::copy(B, &B[lenX], w.begin());
-  M.solve(&w[0]);
-  cblas_zdotc_sub(lenX, &w[0], 1, &w[0], 1, &dotp[0]);
-
-  std::copy(X, &X[lenX], w.begin());
-  std::copy(B, &B[lenX], r.begin());
-  this->operator()(&w[0]);
-  cblas_zaxpy(lenX, &minus_one, &w[0], 1, &r[0], 1);
+  std::vector<std::complex<double>> r(B, &B[lenX]);
+  std::complex<double> dotp(0., 0.);
   M.solve(&r[0]);
-  cblas_zdotc_sub(lenX, &r[0], 1, &r[0], 1, &dotp[1]);
-
-  Comm[Levels].level_sum(&dotp[0], 2);
-  double normb = std::sqrt(dotp[0].real());
-  double beta = std::sqrt(dotp[1].real());
-  
+  cblas_zdotc_sub(lenX, &r[0], 1, &r[0], 1, &dotp);
+  Comm[Levels].level_sum(&dotp, 1);
+  double normb = std::sqrt(dotp.real());
   if (normb == 0.)
     normb = 1.;
-  
-  double resid = beta / normb;
-  if (resid <= tol)
-    return std::make_pair(resid, 0);
 
-  for (long long j = 1; j <= max_iter; j++) {
-    std::fill(v.begin(), v.end(), zero);
-    std::fill(H.begin(), H.end(), zero);
-
-    std::complex<double> scale(1. / beta, 0.);
-    cblas_zaxpy(lenX, &scale, &r[0], 1, &v[0], 1);
-    
-    for (long long i = 0; i < m; i++) {
-      std::copy(&v[i * lenX], &v[(i + 1) * lenX], w.begin());
-      this->operator()(&w[0]);
-      M.solve(&w[0]);
-
-      for (long long k = 0; k <= i; k++)
-        cblas_zdotc_sub(lenX, &v[k * lenX], 1, &w[0], 1, &dotp[k]);
-      Comm[Levels].level_sum(&dotp[0], i + 1);
-
-      for (long long k = 0; k <= i; k++) {
-        scale = -dotp[k];
-        H[k + i * (m + 1)] = dotp[k];
-        cblas_zaxpy(lenX, &scale, &v[k * lenX], 1, &w[0], 1);
-      }
-
-      cblas_zdotc_sub(lenX, &w[0], 1, &w[0], 1, &dotp[0]);
-      Comm[Levels].level_sum(&dotp[0], 1);
-
-      double normw = std::sqrt(dotp[0].real());
-      H[(i + 1) + i * (m + 1)] = std::complex<double>(normw, 0.);
-      scale = std::complex<double>(1. / normw, 0.);
-      cblas_zaxpy(lenX, &scale, &w[0], 1, &v[(i + 1) * lenX], 1);
-    }
-
-    std::fill(s.begin(), s.end(), zero);
-    std::fill(jpvt.begin(), jpvt.end(), 0);
-    s[0] = beta;
-
-    long long rank = 0;
-    LAPACKE_zgelsy(LAPACK_COL_MAJOR, m + 1, m, 1, &H[0], m + 1, &s[0], m + 1, &jpvt[0], machine_epsilon, &rank);
-    cblas_zgemv(CblasColMajor, CblasNoTrans, lenX, m, &one, &v[0], lenX, &s[0], 1, &one, X, 1);
-
-    std::copy(X, &X[lenX], w.begin());
-    std::copy(B, &B[lenX], r.begin());
-    this->operator()(&w[0]);
-    cblas_zaxpy(lenX, &minus_one, &w[0], 1, &r[0], 1);
-    M.solve(&r[0]);
-    cblas_zdotc_sub(lenX, &r[0], 1, &r[0], 1, &dotp[0]);
-    Comm[Levels].level_sum(&dotp[0], 1);
-
-    beta = std::sqrt(dotp[0].real());
-    resid = beta / normb;
+  for (long long i = 0; i < outer_iters; i++) {
+    double beta = residual(lenX, &r[0], X, B, *this, M, Comm[Levels]);
+    double resid = beta / normb;
     if (resid < tol)
-      return std::make_pair(resid, j);
+      return std::make_pair(resid, i);
+
+    smoother_gmres(lenX, inner_iters, beta, X, &r[0], *this, M, Comm[Levels]);
   }
 
-  return std::make_pair(resid, max_iter);
+  double beta = residual(lenX, &r[0], X, B, *this, M, Comm[Levels]);
+  double resid = beta / normb;
+  return std::make_pair(resid, outer_iters);
 }
