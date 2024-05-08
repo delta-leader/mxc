@@ -51,28 +51,20 @@ public:
   long long copyOffset(long long i) const;
 };
 
-class Preconditioner {
-public:
-  Preconditioner() {};
-  virtual void solve(std::complex<double>[]) const {};
-};
-
-class MatVec {
+class H2MatrixSolver {
 private:
+  long long Levels;
   std::vector<std::vector<long long>> offsets;
   std::vector<std::vector<long long>> upperIndex;
   std::vector<std::vector<long long>> upperOffsets;
 
-  std::vector<std::vector<std::complex<double>>> rhsX;
-  std::vector<std::vector<std::complex<double>>> rhsY;
-
-  const H2Matrix* Basis;
+  const H2Matrix* A;
   const CellComm* Comm;
-  long long Levels;
 
 public:
-  MatVec(const H2Matrix basis[], const Cell cells[], const CellComm comm[], long long levels);
+  H2MatrixSolver(const H2Matrix A[], const Cell cells[], const CellComm comm[], long long levels);
 
-  void operator() (std::complex<double> X[]);
-  std::pair<double, long long> solveGMRES(double tol, const Preconditioner& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
+  void matVecMul(std::complex<double> X[], long long levels = 0) const;
+  virtual void solvePrecondition(std::complex<double> X[], long long levels = 0) const;
+  std::pair<double, long long> solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters, long long levels = 0) const;
 };

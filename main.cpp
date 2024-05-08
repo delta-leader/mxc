@@ -49,8 +49,8 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
 
-  std::vector<CellComm> cell_comm(levels + 1);
-  std::vector<H2Matrix> basis(levels + 1);
+  std::vector<CellComm> communicator(levels + 1);
+  std::vector<H2Matrix> A(levels + 1);
 
   //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
   uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
@@ -75,42 +75,42 @@ int main(int argc, char* argv[]) {
   std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
   
   for (long long i = 0; i <= levels; i++) {
-    cell_comm[i] = CellComm(&cell[0], &mapping[0], cellNear, cellFar, mpi_comms, world);
-    cell_comm[i].timer = &timer;
+    communicator[i] = CellComm(&cell[0], &mapping[0], cellNear, cellFar, mpi_comms, world);
+    communicator[i].timer = &timer;
   }
 
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   double h_construct_time = MPI_Wtime();
 
   for (long long l = 1; l <= levels; l++)
-    wsa[l] = WellSeparatedApproximation(eval, epi, rank, cell_comm[l].oGlobal(), cell_comm[l].lenLocal(), &cell[0], cellFar, &body[0], wsa[l - 1]);
+    wsa[l] = WellSeparatedApproximation(eval, epi, rank, communicator[l].oGlobal(), communicator[l].lenLocal(), &cell[0], cellFar, &body[0], wsa[l - 1]);
   
   h_construct_time = MPI_Wtime() - h_construct_time;
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
 
-  basis[levels] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[levels], cell_comm[levels], basis[levels], cell_comm[levels]);
+  A[levels] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[levels], communicator[levels], A[levels], communicator[levels]);
   for (long long l = levels - 1; l >= 0; l--)
-    basis[l] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[l], cell_comm[l], basis[l + 1], cell_comm[l + 1]);
+    A[l] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[l], communicator[l], A[l + 1], communicator[l + 1]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = timer.first;
   timer.first = 0;
 
-  long long llen = cell_comm[levels].lenLocal();
-  long long gbegin = cell_comm[levels].oGlobal();
+  long long llen = communicator[levels].lenLocal();
+  long long gbegin = communicator[levels].oGlobal();
   long long body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
   long long lenX = body_local[1] - body_local[0];
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
-  MatVec mv(&basis[0], &cell[0], &cell_comm[0], levels);
+  H2MatrixSolver solver(&A[0], &cell[0], &communicator[0], levels);
   std::copy(&Xbody[0] + body_local[0], &Xbody[0] + body_local[1], &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  mv(&X1[0]);
+  solver.matVecMul(&X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -125,12 +125,11 @@ int main(int argc, char* argv[]) {
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX);
 
-  Preconditioner M;
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  std::pair<double, long long> gmres_ret = mv.solveGMRES(epi, M, &X1[0], &X2[0], 50, 20);
+  std::pair<double, long long> gmres_ret = solver.solveGMRES(epi, &X1[0], &X2[0], 50, 20);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
