@@ -27,9 +27,11 @@ private:
   std::vector<std::complex<double>> Qdata;
   std::vector<std::complex<double>> Cdata;
   std::vector<std::complex<double>> Adata;
-
+  std::vector<std::complex<double>> Rdata;
   std::vector<double> Sdata;
-  std::vector<const double*> S;
+
+  std::vector<std::complex<double>*> R;
+  std::vector<double*> S;
   std::vector<long long> elementsOnRow;
 
 public:
@@ -64,5 +66,5 @@ public:
 
   void matVecMul(std::complex<double> X[], long long levels = 0) const;
   virtual void solvePrecondition(std::complex<double> X[], long long levels = 0) const;
-  std::pair<double, long long> solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters, long long levels = 0) const;
+  std::pair<double, long long> solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const;
 };

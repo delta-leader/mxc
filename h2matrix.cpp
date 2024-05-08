@@ -44,7 +44,7 @@ const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].data() : nullptr;
 }
 
-long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> A[]) {
+long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> A[], std::complex<double> C[]) {
   long long K = std::min(M, N), rank = 0;
   std::complex<double> one(1., 0.), zero(0., 0.);
   std::vector<std::complex<double>> B(M * N), TAU(M);
@@ -67,18 +67,26 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   if (0 < rank && rank < M) {
     cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, &B[0], N, &B[rank * N], N);
     LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', rank, rank, zero, one, &B[0], N);
-    MKL_Zomatcopy('C', 'T', rank, M, one, &B[0], N, A, M);
+    MKL_Zomatcopy('C', 'T', rank, M, one, &B[0], N, C, M);
 
     for (long long i = 0; i < M; i++) {
       long long piv = std::distance(&jpiv[0], std::find(&jpiv[i], &jpiv[M], i + 1));
       jpiv[piv] = jpiv[i];
       jpiv[i] = piv + 1;
     }
-    LAPACKE_zlaswp(LAPACK_COL_MAJOR, rank, A, M, 1, M, &jpiv[0], 1);
+    LAPACKE_zlaswp(LAPACK_COL_MAJOR, rank, C, M, 1, M, &jpiv[0], 1);
     LAPACKE_dlaswp(LAPACK_ROW_MAJOR, 3, Xbodies, 3, 1, M, &jpiv[0], -1);
+
+    cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, rank, &one, A, M, C, M);
+    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, rank, C, M, &TAU[0]);
+    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'L', M, rank, C, M, A, M);
+    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, rank, rank, A, M, &TAU[0]);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', rank - 1, rank - 1, zero, zero, &C[1], M);
   }
-  else
+  else {
     LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', M, M, zero, one, A, M);
+    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', M, M, zero, one, C, M);
+  }
   return rank;
 }
 
@@ -100,8 +108,9 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   Dims = std::vector<long long>(xlen, 0);
   DimsLr = std::vector<long long>(xlen, 0);
   elementsOnRow = std::vector<long long>(xlen);
-  S = std::vector<const double*>(xlen);
   Q = std::vector<const std::complex<double>*>(xlen);
+  R = std::vector<std::complex<double>*>(xlen);
+  S = std::vector<double*>(xlen);
 
   if (localChildOffsets.back() == 0)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -117,7 +126,9 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   std::inclusive_scan(elementsOnRow.begin(), elementsOnRow.end(), Qoffsets.begin() + 1);
   Qoffsets[0] = 0;
   Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
+  Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
   std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const long long d) { return &Qdata[d]; });
+  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const long long d) { return &Rdata[d]; });
 
   std::vector<long long> Ssizes(xlen), Soffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), Ssizes.begin(), [](const long long d) { return 3 * d; });
@@ -126,21 +137,28 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   Sdata = std::vector<double>(Soffsets[xlen], 0.);
   std::transform(Soffsets.begin(), Soffsets.begin() + xlen, S.begin(), [&](const long long d) { return &Sdata[d]; });
 
+  const std::complex<double> one(1., 0.);
   for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
     long long ci = i + ybegin;
     long long childi = localChildIndex + localChildOffsets[i];
     long long cend = localChildIndex + localChildOffsets[i + 1];
-    double* ske_i = &Sdata[Soffsets[i + ibegin]];
+    std::complex<double>* matQ = &Qdata[Qoffsets[i + ibegin]];
 
-    if (cend <= childi)
-      std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], ske_i);
+    if (cend <= childi) {
+      std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
+      for (long long j = 0; j < M; j++)
+        matQ[j * (M + 1)] = one;
+    }
     for (long long j = childi; j < cend; j++) {
       long long offset = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[j]);
       long long len = lowerA.DimsLr[j];
-      std::copy(lowerA.S[j], lowerA.S[j] + (len * 3), &ske_i[offset * 3]);
+      std::copy(lowerA.S[j], lowerA.S[j] + (len * 3), &(S[i + ibegin])[offset * 3]);
+      MKL_Zomatcopy('C', 'N', len, len, one, lowerA.R[j], lowerA.Dims[j], &matQ[offset * (M + 1)], M);
     }
   }
   comm.neighbor_bcast(Sdata.data(), Ssizes.data());
+  comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
 
   ARows = std::vector<long long>(&Near.RowIndex[ybegin], &Near.RowIndex[ybegin + nodes + 1]);
   ACols = std::vector<long long>(&Near.ColIndex[ARows[0]], &Near.ColIndex[ARows[nodes]]);
@@ -162,25 +180,26 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   for (long long i = 0; i < nodes; i++)
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
       long long j = ACols[ij];
-      long long M = Dims[i + ibegin];
-      long long N = Dims[j];
-      gen_matrix(eval, M, N, S[i + ibegin], S[j], &Adata[Aoffsets[ij]]);
+      long long M = Dims[i + ibegin], N = Dims[j];
+      if (0 < M && 0 < N) {
+        std::complex<double>* Aij =  &Adata[Aoffsets[ij]];
+        gen_matrix(eval, M, N, S[i + ibegin], S[j], Aij);
+        cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, Q[i + ibegin], M, Aij, M);
+        cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, Q[j], N, Aij, M);
+      }
     }
 
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    std::complex<double>* matrix = &Qdata[Qoffsets[i + ibegin]];
-    double* ske_i = &Sdata[Soffsets[i + ibegin]];
-
     long long fsize = wsa.fbodies_size_at_i(i);
     const double* fbodies = wsa.fbodies_at_i(i);
-    long long rank = compute_basis(eval, epi, M, fsize, ske_i, fbodies, matrix);
+    long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, &Qdata[Qoffsets[i + ibegin]], R[i + ibegin]);
     DimsLr[i + ibegin] = rank;
   }
 
   comm.neighbor_bcast(DimsLr.data(), ones.data());
   comm.neighbor_bcast(Sdata.data(), Ssizes.data());
   comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
+  comm.neighbor_bcast(Rdata.data(), elementsOnRow.data());
 
   CRows = std::vector<long long>(&Far.RowIndex[ybegin], &Far.RowIndex[ybegin + nodes + 1]);
   CCols = std::vector<long long>(&Far.ColIndex[CRows[0]], &Far.ColIndex[CRows[nodes]]);
@@ -203,7 +222,12 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
       long long j = CCols[ij];
       long long M = DimsLr[i + ibegin], N = DimsLr[j];
-      gen_matrix(eval, M, N, S[i + ibegin], S[j], &Cdata[Coffsets[ij]]);
+      if (0 < M && 0 < N) {
+        std::complex<double>* Cij = &Cdata[Coffsets[ij]];
+        gen_matrix(eval, M, N, S[i + ibegin], S[j], Cij);
+        cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, R[i + ibegin], Dims[i + ibegin], Cij, M);
+        cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, R[j], Dims[j], Cij, M);
+      }
     }
 }
 
@@ -248,50 +272,48 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[], long long levels) const
   }
   std::copy(X, &X[lenX], rhsX[levels].data() + offsets[levels][lbegin]);
 
-  for (long long i = levels; i >= 0; i--) {
-    long long ibegin = Comm[i].oLocal();
-    long long iboxes = Comm[i].lenLocal();
-    long long xlen = Comm[i].lenNeighbors();
-    Comm[i].level_merge(rhsX[i].data(), offsets[i][xlen]);
+  for (long long l = levels; l >= 0; l--) {
+    long long ibegin = Comm[l].oLocal();
+    long long iboxes = Comm[l].lenLocal();
+    long long xlen = Comm[l].lenNeighbors();
+    Comm[l].level_merge(rhsX[l].data(), offsets[l][xlen]);
+    Comm[l].neighbor_bcast(rhsX[l].data(), A[l].Dims.data());
 
-    if (0 < i)
+    if (0 < l)
       for (long long y = 0; y < iboxes; y++) {
-        long long M = A[i].Dims[y + ibegin];
-        long long N = A[i].DimsLr[y + ibegin];
-        long long U = upperIndex[i][y + ibegin];
+        long long M = A[l].Dims[y + ibegin];
+        long long N = A[l].DimsLr[y + ibegin];
+        long long U = upperIndex[l][y + ibegin];
 
-        const std::complex<double>* Xptr = rhsX[i].data() + offsets[i][ibegin + y];
-        std::complex<double>* XOptr = rhsX[i - 1].data() + offsets[i - 1][U] + upperOffsets[i][ibegin + y];
+        const std::complex<double>* Xptr = rhsX[l].data() + offsets[l][ibegin + y];
+        std::complex<double>* XOptr = rhsX[l - 1].data() + offsets[l - 1][U] + upperOffsets[l][ibegin + y];
         if (0 < N)
-          cblas_zgemv(CblasColMajor, CblasTrans, M, N, &one, A[i].Q[y + ibegin], M, Xptr, 1, &zero, XOptr, 1);
+          cblas_zgemv(CblasColMajor, CblasTrans, M, N, &one, A[l].Q[y + ibegin], M, Xptr, 1, &zero, XOptr, 1);
       }
   }
 
-  for (long long i = levels; i >= 0; i--)
-    Comm[i].neighbor_bcast(rhsX[i].data(), A[i].Dims.data());
-
-  for (long long i = 1; i <= levels; i++) {
-    long long ibegin = Comm[i].oLocal();
-    long long iboxes = Comm[i].lenLocal();
+  for (long long l = 1; l <= levels; l++) {
+    long long ibegin = Comm[l].oLocal();
+    long long iboxes = Comm[l].lenLocal();
 
     for (long long y = 0; y < iboxes; y++) {
-      long long M = A[i].Dims[y + ibegin];
-      long long K = A[i].DimsLr[y + ibegin];
-      long long UY = upperIndex[i][y + ibegin];
+      long long M = A[l].Dims[y + ibegin];
+      long long K = A[l].DimsLr[y + ibegin];
+      long long UY = upperIndex[l][y + ibegin];
 
       if (0 < K) {
-        std::complex<double>* Yptr = rhsY[i].data() + offsets[i][ibegin + y];
-        std::complex<double>* YOptr = rhsY[i - 1].data() + offsets[i - 1][UY] + upperOffsets[i][ibegin + y];
+        std::complex<double>* Yptr = rhsY[l].data() + offsets[l][ibegin + y];
+        std::complex<double>* YOptr = rhsY[l - 1].data() + offsets[l - 1][UY] + upperOffsets[l][ibegin + y];
 
-        for (long long yx = A[i].CRows[y]; yx < A[i].CRows[y + 1]; yx++) {
-          long long x = A[i].CCols[yx];
-          long long N = A[i].DimsLr[x];
-          long long UX = upperIndex[i][x];
+        for (long long yx = A[l].CRows[y]; yx < A[l].CRows[y + 1]; yx++) {
+          long long x = A[l].CCols[yx];
+          long long N = A[l].DimsLr[x];
+          long long UX = upperIndex[l][x];
 
-          const std::complex<double>* XOptr = rhsX[i - 1].data() + offsets[i - 1][UX] + upperOffsets[i][x];
-          cblas_zgemv(CblasColMajor, CblasNoTrans, K, N, &one, A[i].C[yx], K, XOptr, 1, &one, YOptr, 1);
+          const std::complex<double>* XOptr = rhsX[l - 1].data() + offsets[l - 1][UX] + upperOffsets[l][x];
+          cblas_zgemv(CblasColMajor, CblasNoTrans, K, N, &one, A[l].C[yx], K, XOptr, 1, &one, YOptr, 1);
         }
-        cblas_zgemv(CblasColMajor, CblasNoTrans, M, K, &one, A[i].Q[y + ibegin], M, YOptr, 1, &zero, Yptr, 1);
+        cblas_zgemv(CblasColMajor, CblasNoTrans, M, K, &one, A[l].Q[y + ibegin], M, YOptr, 1, &zero, Yptr, 1);
       }
     }
   }
@@ -376,31 +398,73 @@ void smoother_gmres(long long N, long long iters, double beta, std::complex<doub
   cblas_zgemv(CblasColMajor, CblasNoTrans, N, iters, &scale, &v[0], N, &s[0], 1, &scale, X, 1);
 }
 
-std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters, long long levels) const {
-  levels = 0 < levels ? std::min(levels, Levels) : Levels;
-  long long lbegin = Comm[levels].oLocal();
-  long long llen = Comm[levels].lenLocal();
-  long long lenX = offsets[levels][lbegin + llen] - offsets[levels][lbegin];
+std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const {
+  long long lbegin = Comm[Levels].oLocal();
+  long long llen = Comm[Levels].lenLocal();
+  long long lenX = offsets[Levels][lbegin + llen] - offsets[Levels][lbegin];
 
   std::vector<std::complex<double>> r(B, &B[lenX]);
   std::complex<double> dotp(0., 0.);
-  solvePrecondition(&r[0]);
+  solvePrecondition(&r[0], Levels);
   cblas_zdotc_sub(lenX, &r[0], 1, &r[0], 1, &dotp);
-  Comm[levels].level_sum(&dotp, 1);
+  Comm[Levels].level_sum(&dotp, 1);
   double normb = std::sqrt(dotp.real());
   if (normb == 0.)
     normb = 1.;
 
   for (long long i = 0; i < outer_iters; i++) {
-    double beta = residual(lenX, &r[0], X, B, levels, *this, Comm[levels]);
+    double beta = residual(lenX, &r[0], X, B, Levels, *this, Comm[Levels]);
     double resid = beta / normb;
     if (resid < tol)
       return std::make_pair(resid, i);
 
-    smoother_gmres(lenX, inner_iters, beta, X, &r[0], levels, *this, Comm[levels]);
+    smoother_gmres(lenX, inner_iters, beta, X, &r[0], Levels, *this, Comm[Levels]);
   }
 
-  double beta = residual(lenX, &r[0], X, B, levels, *this, Comm[levels]);
+  double beta = residual(lenX, &r[0], X, B, Levels, *this, Comm[Levels]);
   double resid = beta / normb;
   return std::make_pair(resid, outer_iters);
 }
+
+/*double H2MatrixSolver::Vcycle(std::complex<double> X[], const std::complex<double> B[], long long gmres_iters) const {
+  long long lbegin = Comm[Levels].oLocal();
+  long long llen = Comm[Levels].lenLocal();
+  long long lenX = offsets[Levels][lbegin + llen] - offsets[Levels][lbegin];
+
+  std::vector<std::vector<std::complex<double>>> rhsX(Levels + 1);
+  std::vector<std::vector<std::complex<double>>> rhsR(Levels + 1);
+  const std::complex<double> one(1., 0.), zero(0., 0.);
+
+  for (long long l = Levels; l >= 0; l--) {
+    long long xlen = Comm[l].lenNeighbors();
+    rhsX[l] = std::vector<std::complex<double>>(offsets[l][xlen], zero);
+    rhsR[l] = std::vector<std::complex<double>>(offsets[l][xlen], zero);
+  }
+  std::copy(X, &X[lenX], rhsX[levels].data() + offsets[levels][lbegin]);
+
+  for (long long l = levels; l >= 0; l--) {
+    long long ibegin = Comm[l].oLocal();
+    long long iboxes = Comm[l].lenLocal();
+    long long xlen = Comm[l].lenNeighbors();
+    long long dlen = offsets[l][ibegin + iboxes] - offsets[l][ibegin];
+    Comm[l].level_merge(rhsX[l].data(), offsets[l][xlen]);
+    Comm[l].neighbor_bcast(rhsX[l].data(), A[l].Dims.data());
+
+    std::complex<double>* XOptr
+    double beta = residual(dlen, &r[0], X, B, l, *this, Comm[l]);
+    smoother_gmres(dlen, inner_iters, beta, X, &r[0], l, *this, Comm[l]);
+
+    if (0 < l)
+      for (long long y = 0; y < iboxes; y++) {
+        long long M = A[l].Dims[y + ibegin];
+        long long N = A[l].DimsLr[y + ibegin];
+        long long U = upperIndex[l][y + ibegin];
+
+        const std::complex<double>* Xptr = rhsX[l].data() + offsets[l][ibegin + y];
+        std::complex<double>* XOptr = rhsX[l - 1].data() + offsets[l - 1][U] + upperOffsets[l][ibegin + y];
+        if (0 < N)
+          cblas_zgemv(CblasColMajor, CblasTrans, M, N, &one, A[l].Q[y + ibegin], M, Xptr, 1, &zero, XOptr, 1);
+      }
+  }
+}
+*/
