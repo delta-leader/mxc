@@ -47,7 +47,7 @@ void getNextLevelMapping(std::pair<long long, long long> Mapping[], const Cell c
   std::copy(MappingNext.begin(), MappingNext.end(), Mapping);
 }
 
-CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[], const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) {
+CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[], const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) : timer(nullptr) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
@@ -100,7 +100,7 @@ CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[]
 long long CellComm::iLocal(long long iglobal) const {
   std::vector<std::pair<long long, long long>>::const_iterator iter = std::find_if(Boxes.begin(), Boxes.end(), 
     [=](std::pair<long long, long long> i) { return i.first <= iglobal && iglobal < i.first + i.second; });
-  return (0 <= iglobal && iter != Boxes.end()) ? (iglobal - (*iter).first + std::accumulate(Boxes.begin(), iter, 0, 
+  return (0 <= iglobal && iter != Boxes.end()) ? (iglobal - (*iter).first + std::accumulate(Boxes.begin(), iter, 0ll, 
     [](const long long& init, std::pair<long long, long long> i) { return init + i.second; })) : -1;
 }
 
@@ -114,7 +114,7 @@ long long CellComm::iGlobal(long long ilocal) const {
 }
 
 long long CellComm::oLocal() const {
-  return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.begin() + Proc, 0,
+  return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.begin() + Proc, 0ll,
     [](const long long& init, const std::pair<long long, long long>& p) { return init + p.second; }) : -1;
 }
 
@@ -127,7 +127,7 @@ long long CellComm::lenLocal() const {
 }
 
 long long CellComm::lenNeighbors() const {
-  return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.end(), 0,
+  return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.end(), 0ll,
     [](const long long& init, const std::pair<long long, long long>& p) { return init + p.second; }) : 0; 
 }
 

@@ -146,6 +146,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
 
   std::vector<long long> Asizes(ARows[nodes]), Aoffsets(ARows[nodes] + 1);
+  std::vector<long long> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
@@ -209,7 +210,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     comm.neighbor_bcast(Rdata.data(), elementsOnRow.data());
   }
 
-  std::vector<long long> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
     std::transform(CCols.begin() + CRows[i], CCols.begin() + CRows[i + 1], Csizes.begin() + CRows[i],
       [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
@@ -255,7 +255,7 @@ H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const Cel
 
         if (child >= 0 && clen > 0) {
           std::fill(upperIndex[l + 1].begin() + child, upperIndex[l + 1].begin() + child + clen, i);
-          std::exclusive_scan(A[l + 1].DimsLr.begin() + child, A[l + 1].DimsLr.begin() + child + clen, upperOffsets[l + 1].begin() + child, 0);
+          std::exclusive_scan(A[l + 1].DimsLr.begin() + child, A[l + 1].DimsLr.begin() + child + clen, upperOffsets[l + 1].begin() + child, 0ll);
         }
       }
   }
