@@ -70,7 +70,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
     MKL_Zomatcopy('C', 'T', rank, M, one, &B[0], N, C, M);
 
     for (long long i = 0; i < M; i++) {
-      long long piv = std::distance(&jpiv[0], std::find(&jpiv[i], &jpiv[M], i + 1));
+      long long piv = std::distance(jpiv.begin(), std::find(jpiv.begin() + i, jpiv.end(), i + 1));
       jpiv[piv] = jpiv[i];
       jpiv[i] = piv + 1;
     }
@@ -102,21 +102,20 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   localChildOffsets[0] = 0;
   std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return c.Child[1] - ychild; });
 
-  std::vector<long long> localChildLrDims(localChildOffsets.back());
-  std::copy(&lowerA.DimsLr[localChildIndex], &lowerA.DimsLr[localChildIndex + localChildLrDims.size()], localChildLrDims.begin());
-
   Dims = std::vector<long long>(xlen, 0);
   DimsLr = std::vector<long long>(xlen, 0);
-  elementsOnRow = std::vector<long long>(xlen);
-  Q = std::vector<const std::complex<double>*>(xlen);
-  R = std::vector<std::complex<double>*>(xlen);
-  S = std::vector<double*>(xlen);
+  elementsOnRow = std::vector<long long>(xlen, 0);
+  Q = std::vector<const std::complex<double>*>(xlen, nullptr);
+  R = std::vector<std::complex<double>*>(xlen, nullptr);
+  S = std::vector<double*>(xlen, nullptr);
 
   if (localChildOffsets.back() == 0)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
-  else
-    std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin], 
-      [&](long long start, long long end) { return std::reduce(&localChildLrDims[start], &localChildLrDims[end]); });
+  else {
+    std::vector<long long>::const_iterator iter = lowerA.DimsLr.begin() + localChildIndex;
+    std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
+      [&](long long start, long long end) { return std::reduce(iter + start, iter + end); });
+  }
 
   const std::vector<long long> ones(xlen, 1);
   comm.neighbor_bcast(Dims.data(), ones.data());
@@ -127,108 +126,115 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   Qoffsets[0] = 0;
   Qdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
   Rdata = std::vector<std::complex<double>>(Qoffsets[xlen], std::complex<double>(0., 0.));
-  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const long long d) { return &Qdata[d]; });
-  std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const long long d) { return &Rdata[d]; });
 
   std::vector<long long> Ssizes(xlen), Soffsets(xlen + 1);
   std::transform(Dims.begin(), Dims.end(), Ssizes.begin(), [](const long long d) { return 3 * d; });
   std::inclusive_scan(Ssizes.begin(), Ssizes.end(), Soffsets.begin() + 1);
   Soffsets[0] = 0;
   Sdata = std::vector<double>(Soffsets[xlen], 0.);
-  std::transform(Soffsets.begin(), Soffsets.begin() + xlen, S.begin(), [&](const long long d) { return &Sdata[d]; });
 
-  const std::complex<double> one(1., 0.);
-  for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long ci = i + ybegin;
-    long long childi = localChildIndex + localChildOffsets[i];
-    long long cend = localChildIndex + localChildOffsets[i + 1];
-    std::complex<double>* matQ = &Qdata[Qoffsets[i + ibegin]];
-
-    if (cend <= childi) {
-      std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
-      for (long long j = 0; j < M; j++)
-        matQ[j * (M + 1)] = one;
-    }
-    for (long long j = childi; j < cend; j++) {
-      long long offset = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[j]);
-      long long len = lowerA.DimsLr[j];
-      std::copy(lowerA.S[j], lowerA.S[j] + (len * 3), &(S[i + ibegin])[offset * 3]);
-      MKL_Zomatcopy('C', 'N', len, len, one, lowerA.R[j], lowerA.Dims[j], &matQ[offset * (M + 1)], M);
-    }
-  }
-  comm.neighbor_bcast(Sdata.data(), Ssizes.data());
-  comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
-
-  ARows = std::vector<long long>(&Near.RowIndex[ybegin], &Near.RowIndex[ybegin + nodes + 1]);
-  ACols = std::vector<long long>(&Near.ColIndex[ARows[0]], &Near.ColIndex[ARows[nodes]]);
+  ARows = std::vector<long long>(Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
+  ACols = std::vector<long long>(Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
   long long offset = ARows[0];
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
 
+  CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
+  CCols = std::vector<long long>(Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
+  offset = CRows[0];
+  std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
+  std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
+
   std::vector<long long> Asizes(ARows[nodes]), Aoffsets(ARows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
-    std::transform(&ACols[ARows[i]], &ACols[ARows[i + 1]], &Asizes[ARows[i]], 
+    std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   std::inclusive_scan(Asizes.begin(), Asizes.end(), Aoffsets.begin() + 1);
   Aoffsets[0] = 0;
 
   A = std::vector<const std::complex<double>*>(ARows[nodes]);
   Adata = std::vector<std::complex<double>>(Aoffsets.back());
-  std::transform(Aoffsets.begin(), Aoffsets.begin() + ARows[nodes], A.begin(), [&](const long long d) { return &Adata[d]; });
 
-  for (long long i = 0; i < nodes; i++)
-    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-      long long j = ACols[ij];
-      long long M = Dims[i + ibegin], N = Dims[j];
-      if (0 < M && 0 < N) {
-        std::complex<double>* Aij =  &Adata[Aoffsets[ij]];
-        gen_matrix(eval, M, N, S[i + ibegin], S[j], Aij);
-        cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, Q[i + ibegin], M, Aij, M);
-        cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, Q[j], N, Aij, M);
+  if (elementsOnRow.back()) {
+    std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const long long d) { return &Qdata[d]; });
+    std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const long long d) { return &Rdata[d]; });
+    std::transform(Soffsets.begin(), Soffsets.begin() + xlen, S.begin(), [&](const long long d) { return &Sdata[d]; });
+    std::transform(Aoffsets.begin(), Aoffsets.begin() + ARows[nodes], A.begin(), [&](const long long d) { return &Adata[d]; });
+
+    const std::complex<double> one(1., 0.);
+    for (long long i = 0; i < nodes; i++) {
+      long long M = Dims[i + ibegin];
+      long long ci = i + ybegin;
+      long long childi = localChildIndex + localChildOffsets[i];
+      long long cend = localChildIndex + localChildOffsets[i + 1];
+      std::complex<double>* matQ = &Qdata[Qoffsets[i + ibegin]];
+
+      if (cend <= childi) {
+        std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
+        for (long long j = 0; j < M; j++)
+          matQ[j * (M + 1)] = one;
+      }
+      for (long long j = childi; j < cend; j++) {
+        long long offset = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[j]);
+        long long len = lowerA.DimsLr[j];
+        std::copy(lowerA.S[j], lowerA.S[j] + (len * 3), &(S[i + ibegin])[offset * 3]);
+        MKL_Zomatcopy('C', 'N', len, len, one, lowerA.R[j], lowerA.Dims[j], &matQ[offset * (M + 1)], M);
       }
     }
+    comm.neighbor_bcast(Sdata.data(), Ssizes.data());
+    comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
 
-  for (long long i = 0; i < nodes; i++) {
-    long long fsize = wsa.fbodies_size_at_i(i);
-    const double* fbodies = wsa.fbodies_at_i(i);
-    long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, &Qdata[Qoffsets[i + ibegin]], R[i + ibegin]);
-    DimsLr[i + ibegin] = rank;
+    for (long long i = 0; i < nodes; i++)
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        long long M = Dims[i + ibegin], N = Dims[j];
+        if (0 < M && 0 < N) {
+          std::complex<double>* Aij = &Adata[Aoffsets[ij]];
+          gen_matrix(eval, M, N, S[i + ibegin], S[j], Aij);
+          cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, Q[i + ibegin], M, Aij, M);
+          cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, Q[j], N, Aij, M);
+        }
+      }
+
+    for (long long i = 0; i < nodes; i++) {
+      long long fsize = wsa.fbodies_size_at_i(i);
+      const double* fbodies = wsa.fbodies_at_i(i);
+      long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, &Qdata[Qoffsets[i + ibegin]], R[i + ibegin]);
+      DimsLr[i + ibegin] = rank;
+    }
+
+    comm.neighbor_bcast(DimsLr.data(), ones.data());
+    comm.neighbor_bcast(Sdata.data(), Ssizes.data());
+    comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
+    comm.neighbor_bcast(Rdata.data(), elementsOnRow.data());
   }
-
-  comm.neighbor_bcast(DimsLr.data(), ones.data());
-  comm.neighbor_bcast(Sdata.data(), Ssizes.data());
-  comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
-  comm.neighbor_bcast(Rdata.data(), elementsOnRow.data());
-
-  CRows = std::vector<long long>(&Far.RowIndex[ybegin], &Far.RowIndex[ybegin + nodes + 1]);
-  CCols = std::vector<long long>(&Far.ColIndex[CRows[0]], &Far.ColIndex[CRows[nodes]]);
-  offset = CRows[0];
-  std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
-  std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
 
   std::vector<long long> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
-    std::transform(&CCols[CRows[i]], &CCols[CRows[i + 1]], &Csizes[CRows[i]], 
+    std::transform(CCols.begin() + CRows[i], CCols.begin() + CRows[i + 1], Csizes.begin() + CRows[i],
       [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
   std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
   Coffsets[0] = 0;
 
   C = std::vector<const std::complex<double>*>(CRows[nodes]);
   Cdata = std::vector<std::complex<double>>(Coffsets.back());
-  std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const long long d) { return &Cdata[d]; });
 
-  for (long long i = 0; i < nodes; i++)
-    for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
-      long long j = CCols[ij];
-      long long M = DimsLr[i + ibegin], N = DimsLr[j];
-      if (0 < M && 0 < N) {
-        std::complex<double>* Cij = &Cdata[Coffsets[ij]];
-        gen_matrix(eval, M, N, S[i + ibegin], S[j], Cij);
-        cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, R[i + ibegin], Dims[i + ibegin], Cij, M);
-        cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, R[j], Dims[j], Cij, M);
+  if (Coffsets.back()) {
+    std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const long long d) { return &Cdata[d]; });
+
+    const std::complex<double> one(1., 0.);
+    for (long long i = 0; i < nodes; i++)
+      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+        long long j = CCols[ij];
+        long long M = DimsLr[i + ibegin], N = DimsLr[j];
+        if (0 < M && 0 < N) {
+          std::complex<double>* Cij = &Cdata[Coffsets[ij]];
+          gen_matrix(eval, M, N, S[i + ibegin], S[j], Cij);
+          cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, R[i + ibegin], Dims[i + ibegin], Cij, M);
+          cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, R[j], Dims[j], Cij, M);
+        }
       }
-    }
+  }
 }
 
 H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const CellComm comm[], long long levels) :
@@ -248,8 +254,8 @@ H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const Cel
         long long clen = cells[ci].Child[1] - cells[ci].Child[0];
 
         if (child >= 0 && clen > 0) {
-          std::fill(&upperIndex[l + 1][child], &upperIndex[l + 1][child + clen], i);
-          std::exclusive_scan(&A[l + 1].DimsLr[child], &A[l + 1].DimsLr[child + clen], &upperOffsets[l + 1][child], 0);
+          std::fill(upperIndex[l + 1].begin() + child, upperIndex[l + 1].begin() + child + clen, i);
+          std::exclusive_scan(A[l + 1].DimsLr.begin() + child, A[l + 1].DimsLr.begin() + child + clen, upperOffsets[l + 1].begin() + child, 0);
         }
       }
   }

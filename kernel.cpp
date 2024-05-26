@@ -82,7 +82,7 @@ long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long 
     iters++;
 
     std::transform(Arow.begin(), Arow.end(), Rrow.begin(), [](std::complex<double> c) { return std::abs(c); });
-    std::for_each(&jpiv[0], &jpiv[iters], [&](long long piv) { Rrow[piv] = 0.; });
+    std::for_each(jpiv.begin(), jpiv.begin() + iters, [&](long long piv) { Rrow[piv] = 0.; });
     x = std::distance(Rrow.begin(), std::max_element(Rrow.begin(), Rrow.end()));
   }
 

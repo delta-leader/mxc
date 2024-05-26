@@ -28,7 +28,7 @@ void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long l
   long long nleaf = (long long)1 << levels;
   for (long long i = 0; i < nleaf - 1; i++) {
     Cell& ci = cells[i];
-    long long sdim = std::distance(&ci.R[0], std::max_element(&ci.R[0], &ci.R[3]));
+    long long sdim = std::distance(ci.R.begin(), std::max_element(ci.R.begin(), ci.R.end()));
     long long i_begin = ci.Body[0];
     long long i_end = ci.Body[1];
 
@@ -55,9 +55,9 @@ void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long l
 }
 
 void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const Cell ci[], long long i, const Cell cj[], long long j, double theta) {
-  double dC = std::transform_reduce(&ci[i].C[0], &ci[i].C[3], &cj[j].C[0], (double)0., std::plus<double>(), [](double x, double y) { return (x - y) * (x - y); });
-  double dR1 = std::transform_reduce(&ci[i].R[0], &ci[i].R[3], &ci[i].R[0], (double)0., std::plus<double>(), std::multiplies<double>());
-  double dR2 = std::transform_reduce(&cj[j].R[0], &cj[j].R[3], &cj[j].R[0], (double)0., std::plus<double>(), std::multiplies<double>());
+  double dC = std::transform_reduce(ci[i].C.begin(), ci[i].C.end(), cj[j].C.begin(), (double)0., std::plus<double>(), [](double x, double y) { return (x - y) * (x - y); });
+  double dR1 = std::transform_reduce(ci[i].R.begin(), ci[i].R.end(), ci[i].R.begin(), (double)0., std::plus<double>(), std::multiplies<double>());
+  double dR2 = std::transform_reduce(cj[j].R.begin(), cj[j].R.end(), cj[j].R.begin(), (double)0., std::plus<double>(), std::multiplies<double>());
 
   bool admis = dC > (theta * (dR1 + dR2));
   bool write_far = NoF == 'F' || NoF == 'f';

@@ -129,8 +129,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  //std::pair<double, long long> gmres_ret = solver.solveGMRES(epi, &X1[0], &X2[0], 50, 20);
-  std::pair<double, long long> gmres_ret = solver.VcycleMG(epi, &X1[0], &X2[0], 50, 20);
+  std::pair<double, long long> gmres_ret = solver.solveGMRES(epi, &X1[0], &X2[0], 50, 20);
+  //std::pair<double, long long> gmres_ret = solver.VcycleMG(epi, &X1[0], &X2[0], 50, 20);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
