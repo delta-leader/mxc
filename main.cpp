@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
-  Helmholtz3D eval(1.e-1, 1.e-1);
+  Helmholtz3D eval(1., 1.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody);
@@ -129,8 +129,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  std::pair<double, long long> gmres_ret = solver.solveGMRES(epi, &X1[0], &X2[0], 50, 20);
-  //std::pair<double, long long> gmres_ret = solver.VcycleMG(epi, &X1[0], &X2[0], 50, 20);
+  //std::pair<double, long long> gmres_ret = solver.solveGMRES(epi, &X1[0], &X2[0], 50, 40);
+  std::pair<double, long long> gmres_ret = solver.VcycleMG(epi, &X1[0], &X2[0], 50, 20);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;

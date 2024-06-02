@@ -69,6 +69,8 @@
         "variant": "cpp",
         "ranges": "cpp",
         "__nullptr": "cpp",
-        "codecvt": "cpp"
+        "codecvt": "cpp",
+        "__split_buffer": "cpp",
+        "queue": "cpp"
     }
 }

@@ -156,7 +156,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   A = std::vector<const std::complex<double>*>(ARows[nodes]);
   Adata = std::vector<std::complex<double>>(Aoffsets.back());
 
-  if (elementsOnRow.back()) {
+  if (Qoffsets.back()) {
     std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, Q.begin(), [&](const long long d) { return &Qdata[d]; });
     std::transform(Qoffsets.begin(), Qoffsets.begin() + xlen, R.begin(), [&](const long long d) { return &Rdata[d]; });
     std::transform(Soffsets.begin(), Soffsets.begin() + xlen, S.begin(), [&](const long long d) { return &Sdata[d]; });
@@ -262,7 +262,7 @@ H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const Cel
 }
 
 void H2MatrixSolver::matVecMul(std::complex<double> X[], long long levels) const {
-  levels = 0 < levels ? std::min(levels, Levels) : Levels;
+  levels = 0 <= levels ? std::min(levels, Levels) : Levels;
   long long lbegin = Comm[levels].oLocal();
   long long llen = Comm[levels].lenLocal();
   long long lenX = offsets[levels][lbegin + llen] - offsets[levels][lbegin];
@@ -395,16 +395,15 @@ void smoother_gmres(long long N, long long iters, double beta, std::complex<doub
     cblas_zscal(N, &scale, w, 1);
   }
 
-  if (0 < N) {
-    long long rank = 0;
-    const double machine_epsilon = std::numeric_limits<double>::epsilon();
-    std::fill(s.begin() + 1, s.end(), std::complex<double>(0., 0.));
-    s[0] = beta;
-    scale = std::complex<double>(1., 0.);
+  long long rank = 0;
+  const double machine_epsilon = std::numeric_limits<double>::epsilon();
+  std::fill(s.begin() + 1, s.end(), std::complex<double>(0., 0.));
+  s[0] = beta;
+  scale = std::complex<double>(1., 0.);
 
-    LAPACKE_zgelsy(LAPACK_COL_MAJOR, ld, iters, 1, &H[0], ld, &s[0], ld, &jpvt[0], machine_epsilon, &rank);
+  LAPACKE_zgelsy(LAPACK_COL_MAJOR, ld, iters, 1, &H[0], ld, &s[0], ld, &jpvt[0], machine_epsilon, &rank);
+  if (0 < N)
     cblas_zgemv(CblasColMajor, CblasNoTrans, N, iters, &scale, &v[0], N, &s[0], 1, &scale, X, 1);
-  }
 }
 
 std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const {
@@ -483,9 +482,9 @@ std::pair<double, long long> H2MatrixSolver::VcycleMG(double tol, std::complex<d
       Comm[l].neighbor_bcast(rhsB[l].data(), A[l].Dims.data());
 
       std::complex<double>* Rptr = R[l].data() + offsets[l][ibegin];
-      std::complex<double>* Xptr = rhsX[l].data() + offsets[l][ibegin];
       std::complex<double>* Bptr = rhsB[l].data() + offsets[l][ibegin];
-
+      std::complex<double>* Xptr = rhsX[l].data() + offsets[l][ibegin];
+      
       double beta = residual(dlen, Rptr, Xptr, Bptr, l, *this, Comm[l]);
       smoother_gmres(dlen, inner_iters, beta, Xptr, Rptr, l, *this, Comm[l]);
       residual(dlen, Rptr, Xptr, Bptr, l, *this, Comm[l]);
