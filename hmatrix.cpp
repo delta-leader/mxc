@@ -73,13 +73,13 @@ long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, l
   return iters;
 }
 
-HMatrix::HMatrix(const MatrixAccessor& eval, double epi, long long rank, const Cell cells[], const CSR& Far, const double bodies[], const CellComm comm[], long long levels) {
-  long long vlen = std::transform_reduce(comm, &comm[levels + 1], 0ll, std::plus<long long>(), [&](const CellComm& c) { 
-    long long lbegin = c.oGlobal(), lend = lbegin + c.lenLocal();
-    return Far.RowIndex[lend] - Far.RowIndex[lbegin];});
+HMatrix::HMatrix(const MatrixAccessor& eval, double epi, long long rank, const Cell cells[], const CSR& Far, const double bodies[], const CellComm comm[], long long levels) : offsets(levels + 1) {
+  std::transform_exclusive_scan(comm, &comm[levels + 1], offsets.begin(), 0ll, std::plus<long long>(), [&](const CellComm& c) {
+    long long lbegin = c.oGlobal(), lend = lbegin + c.lenLocal(); return Far.RowIndex[lend] - Far.RowIndex[lbegin]; });
 
   long long ybegin = comm[levels].oGlobal(), yend = ybegin + comm[levels].lenLocal();
   long long pbegin = cells[ybegin].Body[0], pend = cells[yend - 1].Body[1];
+  long long vlen = Far.RowIndex[yend] - Far.RowIndex[ybegin] + offsets.back();
     
   U = std::vector<std::vector<std::complex<double>>>(vlen);
   Vh = std::vector<std::vector<std::complex<double>>>(vlen);
@@ -89,7 +89,6 @@ HMatrix::HMatrix(const MatrixAccessor& eval, double epi, long long rank, const C
   Y = std::vector<long long>(vlen);
   X = std::vector<long long>(vlen);
 
-  long long vloc = 0;
   for (long long l = 0; l <= levels; l++) {
     long long lbegin = comm[l].oGlobal();
     long long lend = lbegin + comm[l].lenLocal();
@@ -101,7 +100,7 @@ HMatrix::HMatrix(const MatrixAccessor& eval, double epi, long long rank, const C
         long long px = cells[x].Body[0], n = cells[x].Body[1] - px;
 
         long long k = std::min(rank, std::min(m, n));
-        long long i = vloc + yx - Far.RowIndex[lbegin];
+        long long i = offsets[l] + yx - Far.RowIndex[lbegin];
         U[i] = std::vector<std::complex<double>>(m * k);
         Vh[i] = std::vector<std::complex<double>>(n * k);
         K[i] = 0 < k ? adaptive_cross_approximation(epi, eval, m, n, k, &bodies[3 * py], &bodies[3 * px], U[i].data(), Vh[i].data()) : 0;
@@ -111,6 +110,5 @@ HMatrix::HMatrix(const MatrixAccessor& eval, double epi, long long rank, const C
         X[i] = px;
       }
     }
-    vloc += Far.RowIndex[lend] - Far.RowIndex[lbegin];
   }
 }

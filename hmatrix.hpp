@@ -9,6 +9,7 @@ class CSR;
 class CellComm;
 
 class HMatrix {
+  std::vector<long long> offsets;
 public:
   std::vector<std::vector<std::complex<double>>> U;
   std::vector<std::vector<std::complex<double>>> Vh;
