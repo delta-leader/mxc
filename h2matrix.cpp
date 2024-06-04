@@ -238,7 +238,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
 }
 
 H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const CellComm comm[], long long levels) :
-  Levels(levels), offsets(levels + 1), upperIndex(levels + 1), upperOffsets(levels + 1), A(A), Comm(comm) {
+  levels(levels), offsets(levels + 1), upperIndex(levels + 1), upperOffsets(levels + 1), A(A), Comm(comm) {
   
   for (long long l = levels; l >= 0; l--) {
     long long xlen = comm[l].lenNeighbors();
@@ -261,8 +261,7 @@ H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const Cel
   }
 }
 
-void H2MatrixSolver::matVecMul(std::complex<double> X[], long long levels) const {
-  levels = 0 <= levels ? std::min(levels, Levels) : Levels;
+void H2MatrixSolver::matVecMul(std::complex<double> X[]) const {
   long long lbegin = Comm[levels].oLocal();
   long long llen = Comm[levels].lenLocal();
   long long lenX = offsets[levels][lbegin + llen] - offsets[levels][lbegin];
@@ -341,18 +340,18 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[], long long levels) const
     std::copy(rhsY[levels].data() + offsets[levels][lbegin], rhsY[levels].data() + offsets[levels][lbegin + llen], X);
 }
 
-void H2MatrixSolver::solvePrecondition(std::complex<double>[], long long) const {
+void H2MatrixSolver::solvePrecondition(std::complex<double>[]) const {
   // Default preconditioner = I
 }
 
-double residual(long long N, std::complex<double> R[], const std::complex<double> X[], const std::complex<double> B[], long long levels, const H2MatrixSolver& A, const CellComm& comm) {
+double residual(long long N, std::complex<double> R[], const std::complex<double> X[], const std::complex<double> B[], const H2MatrixSolver& A, const CellComm& comm) {
   std::fill(R, &R[N], std::complex<double>(0., 0.));
   const std::complex<double> one(1., 0.), minus_one(-1., 0.);
 
   cblas_zaxpy(N, &minus_one, X, 1, R, 1);
-  A.matVecMul(R, levels);
+  A.matVecMul(R);
   cblas_zaxpy(N, &one, B, 1, R, 1);
-  A.solvePrecondition(R, levels); // r = M^(-1) * (b - A * x)
+  A.solvePrecondition(R); // r = M^(-1) * (b - A * x)
 
   std::complex<double> beta(0., 0.);
   cblas_zdotc_sub(N, R, 1, R, 1, &beta);
@@ -360,7 +359,7 @@ double residual(long long N, std::complex<double> R[], const std::complex<double
   return std::sqrt(beta.real()); // beta = || r ||_2
 }
 
-void smoother_gmres(long long N, long long iters, double beta, std::complex<double> X[], const std::complex<double> R[], long long levels, const H2MatrixSolver& A, const CellComm& comm) {
+void smoother_gmres(long long N, long long iters, double beta, std::complex<double> X[], const std::complex<double> R[], const H2MatrixSolver& A, const CellComm& comm) {
   long long ld = iters + 1;
   std::vector<std::complex<double>> H(iters * ld, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> v(N * ld, std::complex<double>(0., 0.));
@@ -373,8 +372,8 @@ void smoother_gmres(long long N, long long iters, double beta, std::complex<doub
   for (long long i = 0; i < iters; i++) {
     std::complex<double>* w = &v[(i + 1) * N];
     std::copy(&v[i * N], w, w);
-    A.matVecMul(w, levels);
-    A.solvePrecondition(w, levels);
+    A.matVecMul(w);
+    A.solvePrecondition(w);
 
     for (long long k = 0; k <= i; k++)
       cblas_zdotc_sub(N, &v[k * N], 1, w, 1, &s[k]);
@@ -407,128 +406,30 @@ void smoother_gmres(long long N, long long iters, double beta, std::complex<doub
 }
 
 std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const {
-  long long lbegin = Comm[Levels].oLocal();
-  long long llen = Comm[Levels].lenLocal();
-  long long lenX = offsets[Levels][lbegin + llen] - offsets[Levels][lbegin];
+  long long lbegin = Comm[levels].oLocal();
+  long long llen = Comm[levels].lenLocal();
+  long long lenX = offsets[levels][lbegin + llen] - offsets[levels][lbegin];
 
   std::vector<std::complex<double>> r(B, &B[lenX]);
   std::complex<double> dotp(0., 0.);
-  solvePrecondition(&r[0], Levels);
+  solvePrecondition(&r[0]);
   cblas_zdotc_sub(lenX, &r[0], 1, &r[0], 1, &dotp);
-  Comm[Levels].level_sum(&dotp, 1);
+  Comm[levels].level_sum(&dotp, 1);
   double normb = std::sqrt(dotp.real());
   if (normb == 0.)
     normb = 1.;
 
   for (long long i = 0; i < outer_iters; i++) {
-    double beta = residual(lenX, &r[0], X, B, Levels, *this, Comm[Levels]);
+    double beta = residual(lenX, &r[0], X, B, *this, Comm[levels]);
     double resid = beta / normb;
     if (resid < tol)
       return std::make_pair(resid, i);
 
-    smoother_gmres(lenX, inner_iters, beta, X, &r[0], Levels, *this, Comm[Levels]);
+    smoother_gmres(lenX, inner_iters, beta, X, &r[0], *this, Comm[levels]);
   }
 
-  double beta = residual(lenX, &r[0], X, B, Levels, *this, Comm[Levels]);
+  double beta = residual(lenX, &r[0], X, B, *this, Comm[levels]);
   double resid = beta / normb;
   return std::make_pair(resid, outer_iters);
 }
 
-std::pair<double, long long> H2MatrixSolver::VcycleMG(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const {
-  long long lbegin = Comm[Levels].oLocal();
-  long long llen = Comm[Levels].lenLocal();
-  long long lenX = offsets[Levels][lbegin + llen] - offsets[Levels][lbegin];
-
-  std::vector<std::vector<std::complex<double>>> rhsX(Levels + 1);
-  std::vector<std::vector<std::complex<double>>> rhsB(Levels + 1);
-  std::vector<std::vector<std::complex<double>>> R(Levels + 1);
-  const std::complex<double> one(1., 0.), zero(0., 0.);
-
-  for (long long l = Levels; l >= 0; l--) {
-    long long xlen = Comm[l].lenNeighbors();
-    rhsX[l] = std::vector<std::complex<double>>(offsets[l][xlen], zero);
-    rhsB[l] = std::vector<std::complex<double>>(offsets[l][xlen], zero);
-    R[l] = std::vector<std::complex<double>>(offsets[l][xlen], zero);
-  }
-
-  std::complex<double>* leafX = rhsX[Levels].data() + offsets[Levels][lbegin];
-  std::complex<double>* leafB = rhsB[Levels].data() + offsets[Levels][lbegin];
-  std::complex<double>* leafR = R[Levels].data() + offsets[Levels][lbegin];
-  std::copy(B, &B[lenX], leafB);
-  std::copy(X, &X[lenX], leafX);
-
-  std::complex<double> dotp(0., 0.);
-  solvePrecondition(leafB, Levels);
-  cblas_zdotc_sub(lenX, leafB, 1, leafB, 1, &dotp);
-  Comm[Levels].level_sum(&dotp, 1);
-  double normb = std::sqrt(dotp.real());
-  if (normb == 0.)
-    normb = 1.;
-
-  for (long long i = 0; i < outer_iters; i++) {
-    double beta = residual(lenX, leafR, leafX, B, Levels, *this, Comm[Levels]);
-    double resid = beta / normb;
-    if (resid < tol) {
-      std::copy(leafX, &leafX[lenX], X);
-      return std::make_pair(resid, i);
-    }
-
-    for (long long l = Levels; l >= 0; l--) {
-      long long ibegin = Comm[l].oLocal();
-      long long iboxes = Comm[l].lenLocal();
-      long long xlen = Comm[l].lenNeighbors();
-      long long dlen = offsets[l][ibegin + iboxes] - offsets[l][ibegin];
-      Comm[l].level_merge(rhsB[l].data(), offsets[l][xlen]);
-      Comm[l].neighbor_bcast(rhsB[l].data(), A[l].Dims.data());
-
-      std::complex<double>* Rptr = R[l].data() + offsets[l][ibegin];
-      std::complex<double>* Bptr = rhsB[l].data() + offsets[l][ibegin];
-      std::complex<double>* Xptr = rhsX[l].data() + offsets[l][ibegin];
-      
-      double beta = residual(dlen, Rptr, Xptr, Bptr, l, *this, Comm[l]);
-      smoother_gmres(dlen, inner_iters, beta, Xptr, Rptr, l, *this, Comm[l]);
-      residual(dlen, Rptr, Xptr, Bptr, l, *this, Comm[l]);
-
-      if (0 < l)
-        for (long long y = 0; y < iboxes; y++) {
-          long long M = A[l].Dims[y + ibegin];
-          long long N = A[l].DimsLr[y + ibegin];
-          long long U = upperIndex[l][y + ibegin];
-
-          Rptr = R[l].data() + offsets[l][ibegin + y];
-          Bptr = rhsB[l - 1].data() + offsets[l - 1][U] + upperOffsets[l][ibegin + y];
-          if (0 < N)
-            cblas_zgemv(CblasColMajor, CblasConjTrans, M, N, &one, A[l].Q[y + ibegin], M, Rptr, 1, &zero, Bptr, 1);
-        }
-    }
-
-    for (long long l = 1; l <= Levels; l++) {
-      long long ibegin = Comm[l].oLocal();
-      long long iboxes = Comm[l].lenLocal();
-      long long dlen = offsets[l][ibegin + iboxes] - offsets[l][ibegin];
-
-      for (long long y = 0; y < iboxes; y++) {
-        long long M = A[l].Dims[y + ibegin];
-        long long N = A[l].DimsLr[y + ibegin];
-        long long U = upperIndex[l][y + ibegin];
-
-        std::complex<double>* Xptr = rhsX[l].data() + offsets[l][ibegin + y];
-        const std::complex<double>* XOptr = rhsX[l - 1].data() + offsets[l - 1][U] + upperOffsets[l][ibegin + y];
-        if (0 < N)
-          cblas_zgemm(CblasColMajor, CblasNoTrans, CblasConjTrans, 1, M, N, &one, XOptr, 1, A[l].Q[y + ibegin], M, &one, Xptr, 1);
-      }
-
-      std::complex<double>* Rptr = R[l].data() + offsets[l][ibegin];
-      std::complex<double>* Bptr = rhsB[l].data() + offsets[l][ibegin];
-      std::complex<double>* Xptr = rhsX[l].data() + offsets[l][ibegin];
-
-      double beta = residual(dlen, Rptr, Xptr, Bptr, l, *this, Comm[l]);
-      smoother_gmres(dlen, inner_iters, beta, Xptr, Rptr, l, *this, Comm[l]);
-    }
-  }
-
-  std::copy(leafX, &leafX[lenX], X);
-  double beta = residual(lenX, leafR, leafX, B, Levels, *this, Comm[Levels]);
-  double resid = beta / normb;
-  return std::make_pair(resid, outer_iters);
-}

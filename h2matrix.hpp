@@ -53,7 +53,7 @@ public:
 
 class H2MatrixSolver {
 private:
-  long long Levels;
+  long long levels;
   std::vector<std::vector<long long>> offsets;
   std::vector<std::vector<long long>> upperIndex;
   std::vector<std::vector<long long>> upperOffsets;
@@ -64,8 +64,8 @@ private:
 public:
   H2MatrixSolver(const H2Matrix A[], const Cell cells[], const CellComm comm[], long long levels);
 
-  void matVecMul(std::complex<double> X[], long long levels = -1) const;
-  virtual void solvePrecondition(std::complex<double> X[], long long levels = -1) const;
+  void matVecMul(std::complex<double> X[]) const;
+  virtual void solvePrecondition(std::complex<double> X[]) const;
   std::pair<double, long long> solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const;
   std::pair<double, long long> VcycleMG(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const;
 };
