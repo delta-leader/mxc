@@ -1,6 +1,7 @@
 
 #include <kernel.hpp>
 #include <build_tree.hpp>
+#include <hmatrix.hpp>
 #include <h2matrix.hpp>
 #include <comm.hpp>
 
@@ -78,6 +79,8 @@ int main(int argc, char* argv[]) {
     communicator[i] = CellComm(&cell[0], &mapping[0], cellNear, cellFar, mpi_comms, world);
     communicator[i].timer = &timer;
   }
+
+  HMatrix hmatrix(eval, epi, rank, &cell[0], cellFar, &body[0], &communicator[0], levels);
 
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   double h_construct_time = MPI_Wtime();

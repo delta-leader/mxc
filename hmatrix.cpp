@@ -2,6 +2,7 @@
 #include <hmatrix.hpp>
 #include <build_tree.hpp>
 #include <kernel.hpp>
+#include <comm.hpp>
 
 #include <mkl.h>
 #include <algorithm>
@@ -72,28 +73,44 @@ long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, l
   return iters;
 }
 
-HMatrix::HMatrix(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long lend, const Cell cells[], const CSR& Far, const double bodies[]) {
-  long long vlen = Far.RowIndex[lend] - Far.RowIndex[lbegin];
+HMatrix::HMatrix(const MatrixAccessor& eval, double epi, long long rank, const Cell cells[], const CSR& Far, const double bodies[], const CellComm comm[], long long levels) {
+  long long vlen = std::transform_reduce(comm, &comm[levels + 1], 0ll, std::plus<long long>(), [&](const CellComm& c) { 
+    long long lbegin = c.oGlobal(), lend = lbegin + c.lenLocal();
+    return Far.RowIndex[lend] - Far.RowIndex[lbegin];});
+
+  long long ybegin = comm[levels].oGlobal(), yend = ybegin + comm[levels].lenLocal();
+  long long pbegin = cells[ybegin].Body[0], pend = cells[yend - 1].Body[1];
+    
   U = std::vector<std::vector<std::complex<double>>>(vlen);
   Vh = std::vector<std::vector<std::complex<double>>>(vlen);
   M = std::vector<long long>(vlen);
   N = std::vector<long long>(vlen);
   K = std::vector<long long>(vlen);
+  Y = std::vector<long long>(vlen);
+  X = std::vector<long long>(vlen);
 
-  for (long long y = lbegin; y < lend; y++) {
-    for (long long yx = Far.RowIndex[y]; yx < Far.RowIndex[y + 1]; yx++) {
-      long long x = Far.ColIndex[yx];
-      long long m = cells[y].Body[1] - cells[y].Body[0];
-      long long n = cells[x].Body[1] - cells[x].Body[0];
-      const double* Xbodies = &bodies[3 * cells[x].Body[0]];
-      const double* Ybodies = &bodies[3 * cells[y].Body[0]];
+  long long vloc = 0;
+  for (long long l = 0; l <= levels; l++) {
+    long long lbegin = comm[l].oGlobal();
+    long long lend = lbegin + comm[l].lenLocal();
 
-      long long k = std::min(rank, std::min(m, n));
-      U[yx] = std::vector<std::complex<double>>(m * k);
-      Vh[yx] = std::vector<std::complex<double>>(n * k);
-      K[yx] = 0 < k ? adaptive_cross_approximation(epi, eval, m, n, k, Ybodies, Xbodies, U[yx].data(), Vh[yx].data()) : 0;
-      M[yx] = m;
-      N[yx] = n;
+    for (long long y = lbegin; y < lend; y++) {
+      for (long long yx = Far.RowIndex[y]; yx < Far.RowIndex[y + 1]; yx++) {
+        long long x = Far.ColIndex[yx];
+        long long py = std::max(pbegin, cells[y].Body[0]), m = std::min(pend, cells[y].Body[1]) - py;
+        long long px = cells[x].Body[0], n = cells[x].Body[1] - px;
+
+        long long k = std::min(rank, std::min(m, n));
+        long long i = vloc + yx - Far.RowIndex[lbegin];
+        U[i] = std::vector<std::complex<double>>(m * k);
+        Vh[i] = std::vector<std::complex<double>>(n * k);
+        K[i] = 0 < k ? adaptive_cross_approximation(epi, eval, m, n, k, &bodies[3 * py], &bodies[3 * px], U[i].data(), Vh[i].data()) : 0;
+        M[i] = m;
+        N[i] = n;
+        Y[i] = py;
+        X[i] = px;
+      }
     }
+    vloc += Far.RowIndex[lend] - Far.RowIndex[lbegin];
   }
 }
