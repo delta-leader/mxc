@@ -23,7 +23,7 @@ void read_sorted_bodies(long long* nbodies, long long lbuckets, double* bodies, 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
-  long long Nbody = argc > 1 ? std::atoll(argv[1]) : 8192;
+  long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
   long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 256;
   double epi = argc > 4 ? std::atof(argv[4]) : 1e-10;
@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
-  Helmholtz3D eval(1., 1.);
+  Helmholtz3D eval(1.e-1, 1.e-1);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody);
