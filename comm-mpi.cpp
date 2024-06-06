@@ -229,7 +229,7 @@ void ColCommMPI::record_mpi() const {
   if (timer && timer->second == 0.)
     timer->second = MPI_Wtime();
   else if (timer) {
-    timer->first = MPI_Wtime() - timer->second;
+    timer->first = timer->first + (MPI_Wtime() - timer->second);
     timer->second = 0.;
   }
 }
