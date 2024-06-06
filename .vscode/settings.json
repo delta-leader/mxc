@@ -71,6 +71,14 @@
         "__nullptr": "cpp",
         "codecvt": "cpp",
         "__split_buffer": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "__bit_reference": "cpp",
+        "__hash_table": "cpp",
+        "__tree": "cpp",
+        "filesystem": "cpp",
+        "__string": "cpp",
+        "stack": "cpp",
+        "__locale": "cpp",
+        "locale": "cpp"
     }
 }

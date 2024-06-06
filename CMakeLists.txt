@@ -20,5 +20,5 @@ file(GLOB headers "*.hpp")
 
 add_executable(main.app ${sources} ${headers})
 target_include_directories(main.app PRIVATE ./)
-target_compile_definitions(main.app PRIVATE MKL_ILP64 MKL_Complex16=std::complex<double>)
-target_link_libraries(main.app MKL::MKL MPI::MPI_CXX OpenMP::OpenMP_CXX)
+target_compile_definitions(main.app PRIVATE MKL_ILP64 MKL_Complex16=std::complex<double> USE_NCCL)
+target_link_libraries(main.app MKL::MKL MPI::MPI_CXX OpenMP::OpenMP_CXX "nccl")

@@ -20,6 +20,7 @@ public:
   std::vector<long long> ColIndex;
 
   CSR(char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, double theta);
+  CSR(const CSR& A, const CSR& B);
 };
 
 void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long levels);

@@ -1,6 +1,5 @@
 
 #include <comm.hpp>
-#include <build_tree.hpp>
 
 #include <algorithm>
 #include <set>
@@ -23,7 +22,7 @@ MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& unique_comms, int color, i
   return comm;
 }
 
-void getNextLevelMapping(std::pair<long long, long long> Mapping[], const Cell cells[], long long mpi_size) {
+void getNextLevelMapping(std::pair<long long, long long> Mapping[], const std::pair<long long, long long> Tree[], long long mpi_size) {
   long long p = 0;
   std::vector<std::pair<long long, long long>> MappingNext(mpi_size, std::make_pair(-1, -1));
 
@@ -32,8 +31,8 @@ void getNextLevelMapping(std::pair<long long, long long> Mapping[], const Cell c
       [&](std::pair<long long, long long> a) { return a == Mapping[p]; }));
     long long pbegin = Mapping[p].first;
     long long pend = Mapping[p].second;
-    long long child = cells[pbegin].Child[0];
-    long long lenC = cells[pend - 1].Child[1] - child;
+    long long child = Tree[pbegin].first;
+    long long lenC = Tree[pend - 1].second - child;
 
     if (child >= 0 && lenC > 0)
       for (long long j = 0; j < lenP; j++) {
@@ -47,7 +46,7 @@ void getNextLevelMapping(std::pair<long long, long long> Mapping[], const Cell c
   std::copy(MappingNext.begin(), MappingNext.end(), Mapping);
 }
 
-CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[], const CSR& Near, const CSR& Far, std::vector<MPI_Comm>& unique_comms, MPI_Comm world) : timer(nullptr) {
+CellComm::CellComm(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& unique_comms, MPI_Comm world) : timer(nullptr) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
@@ -61,8 +60,7 @@ CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[]
   auto col_to_mpi_rank = [&](long long col) { return std::distance(&Mapping[0], std::find_if(&Mapping[0], &Mapping[mpi_size], 
     [=](std::pair<long long, long long> i) { return i.first <= col && col < i.second; })); };
   std::set<long long> cols;
-  std::for_each(Near.ColIndex.begin() + Near.RowIndex[pbegin], Near.ColIndex.begin() + Near.RowIndex[pend], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
-  std::for_each(Far.ColIndex.begin() + Far.RowIndex[pbegin], Far.ColIndex.begin() + Far.RowIndex[pend], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
+  std::for_each(&Cols[Rows[pbegin]], &Cols[Rows[pend]], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
 
   std::vector<long long> NeighborRanks(cols.begin(), cols.end());
   Proc = std::distance(NeighborRanks.begin(), std::find(NeighborRanks.begin(), NeighborRanks.end(), p));
@@ -73,8 +71,7 @@ CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[]
     long long ibegin = Mapping[NeighborRanks[i]].first;
     long long iend = Mapping[NeighborRanks[i]].second;
     std::set<long long> icols;
-    std::for_each(Near.ColIndex.begin() + Near.RowIndex[ibegin], Near.ColIndex.begin() + Near.RowIndex[iend], [&](long long col) { icols.insert(col_to_mpi_rank(col)); });
-    std::for_each(Far.ColIndex.begin() + Far.RowIndex[ibegin], Far.ColIndex.begin() + Far.RowIndex[iend], [&](long long col) { icols.insert(col_to_mpi_rank(col)); });
+    std::for_each(&Cols[Rows[ibegin]], &Cols[Rows[iend]], [&](long long col) { icols.insert(col_to_mpi_rank(col)); });
 
     Boxes[i] = std::make_pair(ibegin, iend - ibegin);
     if (p == mpi_rank)
@@ -89,7 +86,7 @@ CellComm::CellComm(const Cell cells[], std::pair<long long, long long> Mapping[]
       NeighborComm[k].second = comm;
   }
 
-  getNextLevelMapping(&Mapping[0], cells, mpi_size);
+  getNextLevelMapping(&Mapping[0], Tree, mpi_size);
   long long p_next = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_rank], Mapping[mpi_rank]));
   MergeComm.first = (int)(mpi_rank == p && p_next == p);
   MergeComm.second = MPI_Comm_split_unique(unique_comms, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
@@ -236,3 +233,52 @@ void CellComm::record_mpi() const {
     timer->second = 0.;
   }
 }
+
+void CellComm::free_mpi_comms(std::vector<MPI_Comm>& unique_comms) {
+  for (MPI_Comm& c : unique_comms)
+    MPI_Comm_free(&c);
+  unique_comms.clear();
+}
+
+#ifdef USE_NCCL
+void CellComm::set_nccl_communicators(const std::map<MPI_Comm, ncclComm_t>& unique_comms) {
+  NeighborNCCL = std::vector<ncclComm_t>(NeighborComm.size());
+  if (MergeComm.second != MPI_COMM_NULL)
+    MergeNCCL = unique_comms.find(MergeComm.second)->second;
+  for (long long i = 0; i < (long long)NeighborComm.size(); i++)
+    if (NeighborComm[i].second != MPI_COMM_NULL)
+      NeighborNCCL[i] = unique_comms.find(NeighborComm[i].second)->second;
+  if (AllReduceComm != MPI_COMM_NULL)
+    AllReduceNCCL = unique_comms.find(AllReduceComm)->second;
+  if (DupComm != MPI_COMM_NULL)
+    DupNCCL = unique_comms.find(DupComm)->second;
+}
+
+std::map<MPI_Comm, ncclComm_t> CellComm::create_nccl_communicators(const std::vector<MPI_Comm>& unique_comms) {
+  std::vector<ncclUniqueId> nccl_ids(unique_comms.size());
+  std::vector<ncclComm_t> nccl_comms(unique_comms.size());
+  ncclGroupStart();
+  for (long long i = 0; i < (long long)unique_comms.size(); i++) {
+    int rank, size;
+    MPI_Comm_rank(unique_comms[i], &rank);
+    MPI_Comm_size(unique_comms[i], &size);
+    if (rank == 0)
+      ncclGetUniqueId(&nccl_ids[i]);
+    MPI_Bcast((void*)&nccl_ids[i], sizeof(ncclUniqueId), MPI_BYTE, 0, unique_comms[i]);
+    ncclCommInitRank(&nccl_comms[i], size, nccl_ids[i], rank);
+  }
+  ncclGroupEnd();
+
+  std::map<MPI_Comm, ncclComm_t> map;
+  for (long long i = 0; i < (long long)unique_comms.size(); i++)
+    map.insert(std::make_pair(unique_comms[i], nccl_comms[i]));
+  return map;
+}
+
+void CellComm::free_nccl_comms(std::map<MPI_Comm, ncclComm_t>& unique_comms) {
+  for (std::map<MPI_Comm, ncclComm_t>::iterator iter = unique_comms.begin(); iter != unique_comms.end(); iter = std::next(iter))
+    ncclCommDestroy(iter->second);
+  unique_comms.clear();
+}
+
+#endif

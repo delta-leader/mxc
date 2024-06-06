@@ -3,6 +3,7 @@
 #include <cmath>
 #include <numeric>
 #include <algorithm>
+#include <set>
 
 void get_bounds(const double* bodies, long long nbodies, double R[], double C[]) {
   const std::array<double, 3>* bodies3 = reinterpret_cast<const std::array<double, 3>*>(&bodies[0]);
@@ -88,4 +89,21 @@ CSR::CSR(char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, dou
     RowIndex[n] = std::distance(LIL.begin(), 
       std::find_if(LIL.begin() + RowIndex[n - 1], LIL.end(), 
         [=](const std::pair<long long, long long>& i) { return n <= i.first; }));
+}
+
+CSR::CSR(const CSR& A, const CSR& B) {
+  long long M = A.RowIndex.size() - 1;
+  RowIndex.resize(M + 1);
+  ColIndex.clear();
+  RowIndex[0] = 0;
+
+  for (long long y = 0; y < M; y++) {
+    std::set<long long> cols;
+    cols.insert(A.ColIndex.begin() + A.RowIndex[y], A.ColIndex.begin() + A.RowIndex[y + 1]);
+    cols.insert(B.ColIndex.begin() + B.RowIndex[y], B.ColIndex.begin() + B.RowIndex[y + 1]);
+
+    for (std::set<long long>::iterator i = cols.begin(); i != cols.end(); i = std::next(i))
+      ColIndex.push_back(*i);
+    RowIndex[y + 1] = (long long)ColIndex.size();
+  }
 }
