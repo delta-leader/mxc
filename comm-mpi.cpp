@@ -1,19 +1,19 @@
 
-#include <comm.hpp>
+#include <comm-mpi.hpp>
 
 #include <algorithm>
 #include <set>
 #include <numeric>
 
-MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& unique_comms, int color, int mpi_rank, MPI_Comm world) {
+MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
   MPI_Comm_split(world, color, mpi_rank, &comm);
 
   if (comm != MPI_COMM_NULL) {
-    auto iter = std::find_if(unique_comms.begin(), unique_comms.end(), [comm](MPI_Comm c) -> bool { 
+    auto iter = std::find_if(allocedComm.begin(), allocedComm.end(), [comm](MPI_Comm c) -> bool { 
       int result; MPI_Comm_compare(comm, c, &result); return result == MPI_IDENT || result == MPI_CONGRUENT; });
-    if (iter == unique_comms.end())
-      unique_comms.emplace_back(comm);
+    if (iter == allocedComm.end())
+      allocedComm.emplace_back(comm);
     else {
       MPI_Comm_free(&comm);
       comm = *iter;
@@ -46,7 +46,7 @@ void getNextLevelMapping(std::pair<long long, long long> Mapping[], const std::p
   std::copy(MappingNext.begin(), MappingNext.end(), Mapping);
 }
 
-CellComm::CellComm(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& unique_comms, MPI_Comm world) : timer(nullptr) {
+ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], MPI_Comm world) : timer(nullptr) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
@@ -81,7 +81,7 @@ CellComm::CellComm(const std::pair<long long, long long> Tree[], std::pair<long 
   long long k = 0;
   for (int i = 0; i < mpi_size; i++) {
     k = std::distance(NeighborRanks.begin(), std::find_if(NeighborRanks.begin() + k, NeighborRanks.end(), [=](long long a) { return (long long)i <= a; }));
-    MPI_Comm comm = MPI_Comm_split_unique(unique_comms, (p == mpi_rank && k != (long long)NeighborRanks.size() && NeighborRanks[k] == i) ? 1 : MPI_UNDEFINED, mpi_rank, world);
+    MPI_Comm comm = MPI_Comm_split_unique(allocedComm, (p == mpi_rank && k != (long long)NeighborRanks.size() && NeighborRanks[k] == i) ? 1 : MPI_UNDEFINED, mpi_rank, world);
     if (comm != MPI_COMM_NULL)
       NeighborComm[k].second = comm;
   }
@@ -89,19 +89,19 @@ CellComm::CellComm(const std::pair<long long, long long> Tree[], std::pair<long 
   getNextLevelMapping(&Mapping[0], Tree, mpi_size);
   long long p_next = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_rank], Mapping[mpi_rank]));
   MergeComm.first = (int)(mpi_rank == p && p_next == p);
-  MergeComm.second = MPI_Comm_split_unique(unique_comms, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
-  AllReduceComm = MPI_Comm_split_unique(unique_comms, mpi_rank == p ? 1 : MPI_UNDEFINED, mpi_rank, world);
-  DupComm = MPI_Comm_split_unique(unique_comms, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
+  MergeComm.second = MPI_Comm_split_unique(allocedComm, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
+  AllReduceComm = MPI_Comm_split_unique(allocedComm, mpi_rank == p ? 1 : MPI_UNDEFINED, mpi_rank, world);
+  DupComm = MPI_Comm_split_unique(allocedComm, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 }
 
-long long CellComm::iLocal(long long iglobal) const {
+long long ColCommMPI::iLocal(long long iglobal) const {
   std::vector<std::pair<long long, long long>>::const_iterator iter = std::find_if(Boxes.begin(), Boxes.end(), 
     [=](std::pair<long long, long long> i) { return i.first <= iglobal && iglobal < i.first + i.second; });
   return (0 <= iglobal && iter != Boxes.end()) ? (iglobal - (*iter).first + std::accumulate(Boxes.begin(), iter, 0ll, 
     [](const long long& init, std::pair<long long, long long> i) { return init + i.second; })) : -1;
 }
 
-long long CellComm::iGlobal(long long ilocal) const {
+long long ColCommMPI::iGlobal(long long ilocal) const {
   long long iter = 0;
   while (iter < (long long)Boxes.size() && Boxes[iter].second <= ilocal) {
     ilocal = ilocal - Boxes[iter].second;
@@ -110,20 +110,20 @@ long long CellComm::iGlobal(long long ilocal) const {
   return (0 <= ilocal && iter <= (long long)Boxes.size()) ? (Boxes[iter].first + ilocal) : -1;
 }
 
-long long CellComm::oLocal() const {
+long long ColCommMPI::oLocal() const {
   return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.begin() + Proc, 0ll,
     [](const long long& init, const std::pair<long long, long long>& p) { return init + p.second; }) : -1;
 }
 
-long long CellComm::oGlobal() const {
+long long ColCommMPI::oGlobal() const {
   return 0 <= Proc ? Boxes[Proc].first : -1;
 }
 
-long long CellComm::lenLocal() const {
+long long ColCommMPI::lenLocal() const {
   return 0 <= Proc ? Boxes[Proc].second : 0;
 }
 
-long long CellComm::lenNeighbors() const {
+long long ColCommMPI::lenNeighbors() const {
   return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.end(), 0ll,
     [](const long long& init, const std::pair<long long, long long>& p) { return init + p.second; }) : 0; 
 }
@@ -138,7 +138,7 @@ template<typename T> inline MPI_Datatype get_mpi_datatype() {
   return MPI_DATATYPE_NULL;
 }
 
-template<typename T> inline void CellComm::level_merge(T* data, long long len) const {
+template<typename T> inline void ColCommMPI::level_merge(T* data, long long len) const {
   if (MergeComm.second != MPI_COMM_NULL) {
     record_mpi();
     if (MergeComm.first)
@@ -149,7 +149,7 @@ template<typename T> inline void CellComm::level_merge(T* data, long long len) c
   }
 }
 
-template<typename T> inline void CellComm::level_sum(T* data, long long len) const {
+template<typename T> inline void ColCommMPI::level_sum(T* data, long long len) const {
   record_mpi();
   if (AllReduceComm != MPI_COMM_NULL)
     MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, AllReduceComm);
@@ -158,7 +158,7 @@ template<typename T> inline void CellComm::level_sum(T* data, long long len) con
   record_mpi();
 }
 
-template<typename T> inline void CellComm::neighbor_bcast(T* data, const long long box_dims[]) const {
+template<typename T> inline void ColCommMPI::neighbor_bcast(T* data, const long long box_dims[]) const {
   std::vector<long long> offsets(Boxes.size() + 1, 0);
   for (long long p = 0; p < (long long)Boxes.size(); p++) {
     long long end = Boxes[p].second;
@@ -176,7 +176,7 @@ template<typename T> inline void CellComm::neighbor_bcast(T* data, const long lo
   record_mpi();
 }
 
-template<typename T> inline void CellComm::neighbor_reduce(T* data, const long long box_dims[]) const {
+template<typename T> inline void ColCommMPI::neighbor_reduce(T* data, const long long box_dims[]) const {
   std::vector<long long> offsets(Boxes.size() + 1, 0);
   for (long long p = 0; p < (long long)Boxes.size(); p++) {
     long long end = Boxes[p].second;
@@ -197,35 +197,35 @@ template<typename T> inline void CellComm::neighbor_reduce(T* data, const long l
   record_mpi();
 }
 
-void CellComm::level_merge(std::complex<double>* data, long long len) const {
+void ColCommMPI::level_merge(std::complex<double>* data, long long len) const {
   level_merge<std::complex<double>>(data, len);
 }
 
-void CellComm::level_sum(std::complex<double>* data, long long len) const {
+void ColCommMPI::level_sum(std::complex<double>* data, long long len) const {
   level_sum<std::complex<double>>(data, len);
 }
 
-void CellComm::neighbor_bcast(long long* data, const long long box_dims[]) const {
+void ColCommMPI::neighbor_bcast(long long* data, const long long box_dims[]) const {
   neighbor_bcast<long long>(data, box_dims);
 }
 
-void CellComm::neighbor_bcast(double* data, const long long box_dims[]) const {
+void ColCommMPI::neighbor_bcast(double* data, const long long box_dims[]) const {
   neighbor_bcast<double>(data, box_dims);
 }
 
-void CellComm::neighbor_bcast(std::complex<double>* data, const long long box_dims[]) const {
+void ColCommMPI::neighbor_bcast(std::complex<double>* data, const long long box_dims[]) const {
   neighbor_bcast<std::complex<double>>(data, box_dims);
 }
 
-void CellComm::neighbor_reduce(long long* data, const long long box_dims[]) const {
+void ColCommMPI::neighbor_reduce(long long* data, const long long box_dims[]) const {
   neighbor_reduce<long long>(data, box_dims);
 }
 
-void CellComm::neighbor_reduce(std::complex<double>* data, const long long box_dims[]) const {
+void ColCommMPI::neighbor_reduce(std::complex<double>* data, const long long box_dims[]) const {
   neighbor_reduce<std::complex<double>>(data, box_dims);
 }
 
-void CellComm::record_mpi() const {
+void ColCommMPI::record_mpi() const {
   if (timer && timer->second == 0.)
     timer->second = MPI_Wtime();
   else if (timer) {
@@ -234,51 +234,13 @@ void CellComm::record_mpi() const {
   }
 }
 
-void CellComm::free_mpi_comms(std::vector<MPI_Comm>& unique_comms) {
-  for (MPI_Comm& c : unique_comms)
+void ColCommMPI::free_all_comms() {
+  MergeComm = std::make_pair(0, MPI_COMM_NULL);
+  NeighborComm.clear();
+  AllReduceComm = MPI_COMM_NULL;
+  DupComm = MPI_COMM_NULL;
+
+  for (MPI_Comm& c : allocedComm)
     MPI_Comm_free(&c);
-  unique_comms.clear();
+  allocedComm.clear();
 }
-
-#ifdef USE_NCCL
-void CellComm::set_nccl_communicators(const std::map<MPI_Comm, ncclComm_t>& unique_comms) {
-  NeighborNCCL = std::vector<ncclComm_t>(NeighborComm.size());
-  if (MergeComm.second != MPI_COMM_NULL)
-    MergeNCCL = unique_comms.find(MergeComm.second)->second;
-  for (long long i = 0; i < (long long)NeighborComm.size(); i++)
-    if (NeighborComm[i].second != MPI_COMM_NULL)
-      NeighborNCCL[i] = unique_comms.find(NeighborComm[i].second)->second;
-  if (AllReduceComm != MPI_COMM_NULL)
-    AllReduceNCCL = unique_comms.find(AllReduceComm)->second;
-  if (DupComm != MPI_COMM_NULL)
-    DupNCCL = unique_comms.find(DupComm)->second;
-}
-
-std::map<MPI_Comm, ncclComm_t> CellComm::create_nccl_communicators(const std::vector<MPI_Comm>& unique_comms) {
-  std::vector<ncclUniqueId> nccl_ids(unique_comms.size());
-  std::vector<ncclComm_t> nccl_comms(unique_comms.size());
-  ncclGroupStart();
-  for (long long i = 0; i < (long long)unique_comms.size(); i++) {
-    int rank, size;
-    MPI_Comm_rank(unique_comms[i], &rank);
-    MPI_Comm_size(unique_comms[i], &size);
-    if (rank == 0)
-      ncclGetUniqueId(&nccl_ids[i]);
-    MPI_Bcast((void*)&nccl_ids[i], sizeof(ncclUniqueId), MPI_BYTE, 0, unique_comms[i]);
-    ncclCommInitRank(&nccl_comms[i], size, nccl_ids[i], rank);
-  }
-  ncclGroupEnd();
-
-  std::map<MPI_Comm, ncclComm_t> map;
-  for (long long i = 0; i < (long long)unique_comms.size(); i++)
-    map.insert(std::make_pair(unique_comms[i], nccl_comms[i]));
-  return map;
-}
-
-void CellComm::free_nccl_comms(std::map<MPI_Comm, ncclComm_t>& unique_comms) {
-  for (std::map<MPI_Comm, ncclComm_t>::iterator iter = unique_comms.begin(); iter != unique_comms.end(); iter = std::next(iter))
-    ncclCommDestroy(iter->second);
-  unique_comms.clear();
-}
-
-#endif

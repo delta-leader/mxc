@@ -4,7 +4,7 @@ set(CMAKE_CXX_COMPILER "g++")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "-O3 -m64 -Wall -Wextra")
 
-project ("shimo" LANGUAGES CXX)
+project ("shimo" LANGUAGES CXX CUDA)
 
 set(MKL_ARCH intel64)
 set(MKL_LINK dynamic)
@@ -15,10 +15,10 @@ find_package(MKL REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(MPI REQUIRED)
 
-file(GLOB sources "*.cpp")
+file(GLOB sources "*.cpp" "*.cu")
 file(GLOB headers "*.hpp")
 
 add_executable(main.app ${sources} ${headers})
 target_include_directories(main.app PRIVATE ./)
-target_compile_definitions(main.app PRIVATE MKL_ILP64 MKL_Complex16=std::complex<double> USE_NCCL)
+target_compile_definitions(main.app PRIVATE MKL_ILP64 MKL_Complex16=std::complex<double>)
 target_link_libraries(main.app MKL::MKL MPI::MPI_CXX OpenMP::OpenMP_CXX "nccl")

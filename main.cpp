@@ -2,7 +2,7 @@
 #include <kernel.hpp>
 #include <build_tree.hpp>
 #include <h2matrix.hpp>
-#include <comm.hpp>
+#include <comm-nccl.hpp>
 
 #include <random>
 #include <algorithm>
@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
 
-  std::vector<CellComm> communicator(levels + 1);
+  std::vector<ColCommMPI> communicator(levels + 1);
   std::vector<H2Matrix> A(levels + 1);
 
   //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
@@ -72,20 +72,14 @@ int main(int argc, char* argv[]) {
   CSR cellNeighbor(cellNear, cellFar);
 
   std::pair<double, double> timer(0, 0);
-  std::vector<MPI_Comm> mpi_comms;
   std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
   std::vector<std::pair<long long, long long>> tree(ncells);
   std::transform(cell.begin(), cell.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
   for (long long i = 0; i <= levels; i++) {
-    communicator[i] = CellComm(&tree[0], &mapping[0], cellNeighbor.RowIndex.data(), cellNeighbor.ColIndex.data(), mpi_comms, world);
+    communicator[i] = ColCommNCCL(&tree[0], &mapping[0], cellNeighbor.RowIndex.data(), cellNeighbor.ColIndex.data(), world);
     communicator[i].timer = &timer;
   }
-
-  auto nccl_comms = CellComm::create_nccl_communicators(mpi_comms);
-  for (long long i = 0; i <= levels; i++)
-    communicator[i].set_nccl_communicators(nccl_comms);
-
 
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   double h_construct_time = MPI_Wtime();
@@ -154,8 +148,8 @@ int main(int argc, char* argv[]) {
     std::cout << "GMRES Time: " << gmres_time << ", " << gmres_comm_time << std::endl;
   }
 
-  CellComm::free_mpi_comms(mpi_comms);
-  CellComm::free_nccl_comms(nccl_comms);
+  for (auto& c : communicator)
+    c.free_all_comms();
   MPI_Comm_free(&world);
   MPI_Finalize();
   return 0;

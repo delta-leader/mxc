@@ -6,7 +6,7 @@
 class MatrixAccessor;
 class CSR;
 class Cell;
-class CellComm;
+class ColCommMPI;
 
 class WellSeparatedApproximation {
 private:
@@ -48,7 +48,7 @@ public:
   std::vector<const std::complex<double>*> A;
   
   H2Matrix() {}
-  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const H2Matrix& lowerA, const CellComm& lowerComm);
+  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm);
 };
 
 class H2MatrixSolver {
@@ -59,10 +59,10 @@ private:
   std::vector<std::vector<long long>> upperOffsets;
 
   const H2Matrix* A;
-  const CellComm* Comm;
+  const ColCommMPI* Comm;
 
 public:
-  H2MatrixSolver(const H2Matrix A[], const Cell cells[], const CellComm comm[], long long levels);
+  H2MatrixSolver(const H2Matrix A[], const Cell cells[], const ColCommMPI comm[], long long levels);
 
   void matVecMul(std::complex<double> X[]) const;
   virtual void solvePrecondition(std::complex<double> X[]) const;

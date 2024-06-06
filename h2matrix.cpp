@@ -1,6 +1,6 @@
 #include <h2matrix.hpp>
 #include <build_tree.hpp>
-#include <comm.hpp>
+#include <comm-mpi.hpp>
 #include <kernel.hpp>
 
 #include <mkl.h>
@@ -90,7 +90,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   return rank;
 }
 
-H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const CellComm& comm, const H2Matrix& lowerA, const CellComm& lowerComm) {
+H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -237,7 +237,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   }
 }
 
-H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const CellComm comm[], long long levels) :
+H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const ColCommMPI comm[], long long levels) :
   levels(levels), offsets(levels + 1), upperIndex(levels + 1), upperOffsets(levels + 1), A(A), Comm(comm) {
   
   for (long long l = levels; l >= 0; l--) {
@@ -344,7 +344,7 @@ void H2MatrixSolver::solvePrecondition(std::complex<double>[]) const {
   // Default preconditioner = I
 }
 
-double residual(long long N, std::complex<double> R[], const std::complex<double> X[], const std::complex<double> B[], const H2MatrixSolver& A, const CellComm& comm) {
+double residual(long long N, std::complex<double> R[], const std::complex<double> X[], const std::complex<double> B[], const H2MatrixSolver& A, const ColCommMPI& comm) {
   std::fill(R, &R[N], std::complex<double>(0., 0.));
   const std::complex<double> one(1., 0.), minus_one(-1., 0.);
 
@@ -359,7 +359,7 @@ double residual(long long N, std::complex<double> R[], const std::complex<double
   return std::sqrt(beta.real()); // beta = || r ||_2
 }
 
-void smoother_gmres(long long N, long long iters, double beta, std::complex<double> X[], const std::complex<double> R[], const H2MatrixSolver& A, const CellComm& comm) {
+void smoother_gmres(long long N, long long iters, double beta, std::complex<double> X[], const std::complex<double> R[], const H2MatrixSolver& A, const ColCommMPI& comm) {
   long long ld = iters + 1;
   std::vector<std::complex<double>> H(iters * ld, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> v(N * ld, std::complex<double>(0., 0.));

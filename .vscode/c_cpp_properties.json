@@ -10,7 +10,6 @@
             "defines": [
                 "MKL_ILP64",
                 "MKL_Complex16=std::complex<double>"
-                "USE_NCCL"
             ],
             "compilerPath": "/usr/bin/g++",
             "cStandard": "c17",
