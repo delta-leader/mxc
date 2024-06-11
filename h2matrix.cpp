@@ -58,8 +58,9 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
     }
 
     LAPACKE_zgeqp3(LAPACK_COL_MAJOR, K, M, &B[0], N, &jpiv[0], &TAU[0]);
+    rank = std::min(K, (long long)std::floor(epi));
     double s0 = epi * std::abs(B[0]);
-    if (std::numeric_limits<double>::min() < s0)
+    if (std::numeric_limits<double>::min() < s0 && epi < 1.)
       while (rank < K && s0 <= std::abs(B[rank * (N + 1)]))
         ++rank;
   }
@@ -90,7 +91,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   return rank;
 }
 
-H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm) {
+H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -200,6 +201,29 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     for (long long i = 0; i < nodes; i++) {
       long long fsize = wsa.fbodies_size_at_i(i);
       const double* fbodies = wsa.fbodies_at_i(i);
+      std::vector<double> cbodies;
+
+      if (use_near_bodies) {
+        std::vector<long long>::iterator neighbors = ACols.begin() + ARows[i];
+        std::vector<long long>::iterator neighbors_end = ACols.begin() + ARows[i + 1];
+        long long csize = std::transform_reduce(neighbors, neighbors_end, -Dims[i + ibegin], std::plus<long long>(), [&](long long col) { return Dims[col]; });
+
+        cbodies = std::vector<double>(3 * (fsize + csize));
+        long long loc = 0;
+        for (long long n = 0; n < (ARows[i + 1] - ARows[i]); n++) {
+          long long col = neighbors[n];
+          long long len = 3 * Dims[col];
+          if (col != (i + ibegin)) {
+            std::copy(S[col], S[col] + len, cbodies.begin() + loc);
+            loc += len;
+          }
+        }
+        std::copy(fbodies, &fbodies[3 * fsize], cbodies.begin() + loc);
+
+        fsize += csize;
+        fbodies = cbodies.data();
+      }
+      
       long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, &Qdata[Qoffsets[i + ibegin]], R[i + ibegin]);
       DimsLr[i + ibegin] = rank;
     }

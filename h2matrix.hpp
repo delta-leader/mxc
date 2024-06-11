@@ -48,7 +48,7 @@ public:
   std::vector<const std::complex<double>*> A;
   
   H2Matrix() {}
-  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm);
+  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
 };
 
 class H2MatrixSolver {

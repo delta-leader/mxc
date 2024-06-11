@@ -89,9 +89,9 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
 
-  A[levels] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[levels], communicator[levels], A[levels], communicator[levels]);
+  A[levels] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[levels], communicator[levels], A[levels], communicator[levels], false);
   for (long long l = levels - 1; l >= 0; l--)
-    A[l] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[l], communicator[l], A[l + 1], communicator[l + 1]);
+    A[l] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[l], communicator[l], A[l + 1], communicator[l + 1], false);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
