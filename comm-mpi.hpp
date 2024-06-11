@@ -10,8 +10,8 @@ protected:
   long long Proc;
   std::vector<std::pair<long long, long long>> Boxes;
   
-  std::pair<int, MPI_Comm> MergeComm;
   std::vector<std::pair<int, MPI_Comm>> NeighborComm;
+  MPI_Comm MergeComm;
   MPI_Comm AllReduceComm;
   MPI_Comm DupComm;
   std::vector<MPI_Comm> allocedComm;
@@ -24,7 +24,7 @@ protected:
 public:
   std::pair<double, double>* timer;
 
-  ColCommMPI() : Proc(-1), Boxes(), MergeComm(0, MPI_COMM_NULL), NeighborComm(), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL), allocedComm(), timer(nullptr) {};
+  ColCommMPI() : Proc(-1), Boxes(), NeighborComm(), MergeComm(MPI_COMM_NULL), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL), allocedComm(), timer(nullptr) {};
   ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], MPI_Comm world = MPI_COMM_WORLD);
   
   long long iLocal(long long iglobal) const;

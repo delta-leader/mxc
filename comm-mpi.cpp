@@ -88,8 +88,7 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
 
   getNextLevelMapping(&Mapping[0], Tree, mpi_size);
   long long p_next = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_rank], Mapping[mpi_rank]));
-  MergeComm.first = (int)(mpi_rank == p && p_next == p);
-  MergeComm.second = MPI_Comm_split_unique(allocedComm, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
+  MergeComm = MPI_Comm_split_unique(allocedComm, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
   AllReduceComm = MPI_Comm_split_unique(allocedComm, mpi_rank == p ? 1 : MPI_UNDEFINED, mpi_rank, world);
   DupComm = MPI_Comm_split_unique(allocedComm, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 }
@@ -139,12 +138,9 @@ template<typename T> inline MPI_Datatype get_mpi_datatype() {
 }
 
 template<typename T> inline void ColCommMPI::level_merge(T* data, long long len) const {
-  if (MergeComm.second != MPI_COMM_NULL) {
+  if (MergeComm != MPI_COMM_NULL) {
     record_mpi();
-    if (MergeComm.first)
-      MPI_Reduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, 0, MergeComm.second);
-    else
-      MPI_Reduce(data, data, len, get_mpi_datatype<T>(), MPI_SUM, 0, MergeComm.second);
+    MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, MergeComm);
     record_mpi();
   }
 }
@@ -235,7 +231,7 @@ void ColCommMPI::record_mpi() const {
 }
 
 void ColCommMPI::free_all_comms() {
-  MergeComm = std::make_pair(0, MPI_COMM_NULL);
+  MergeComm = MPI_COMM_NULL;
   NeighborComm.clear();
   AllReduceComm = MPI_COMM_NULL;
   DupComm = MPI_COMM_NULL;

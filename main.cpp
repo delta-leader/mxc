@@ -2,7 +2,7 @@
 #include <kernel.hpp>
 #include <build_tree.hpp>
 #include <h2matrix.hpp>
-#include <comm-nccl.hpp>
+#include <comm-mpi.hpp>
 
 #include <random>
 #include <algorithm>
@@ -37,7 +37,6 @@ int main(int argc, char* argv[]) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-  ColCommNCCL::set_device();
   
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
@@ -76,7 +75,7 @@ int main(int argc, char* argv[]) {
   std::transform(cell.begin(), cell.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
   for (long long i = 0; i <= levels; i++) {
-    communicator[i] = ColCommNCCL(&tree[0], &mapping[0], cellNeighbor.RowIndex.data(), cellNeighbor.ColIndex.data());
+    communicator[i] = ColCommMPI(&tree[0], &mapping[0], cellNeighbor.RowIndex.data(), cellNeighbor.ColIndex.data());
     communicator[i].timer = &timer;
   }
 
