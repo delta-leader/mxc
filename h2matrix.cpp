@@ -4,6 +4,7 @@
 #include <kernel.hpp>
 
 #include <mkl.h>
+#include <eigen3/Eigen/Dense>
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -48,7 +49,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   long long K = std::min(M, N), rank = 0;
   std::complex<double> one(1., 0.), zero(0., 0.);
   std::vector<std::complex<double>> B(M * N), TAU(M);
-  std::vector<long long> jpiv(M, 0);
+  std::vector<int> jpiv(M, 0);
 
   if (0 < K) {
     gen_matrix(eval, N, M, Fbodies, Xbodies, &B[0]);
@@ -92,7 +93,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
 }
 
 long long lookupIJ(const std::vector<long long>& RowIndex, const std::vector<long long>& ColIndex, long long i, long long j) {
-  if (i < 0 || RowIndex.size() <= (i + 1))
+  if (i < 0 || RowIndex.size() <= (1ull + i))
     return -1;
   long long k = std::distance(ColIndex.begin(), std::find(ColIndex.begin() + RowIndex[i], ColIndex.begin() + RowIndex[i + 1], j));
   return (k < RowIndex[i + 1]) ? k : -1;
@@ -300,21 +301,29 @@ H2MatrixSolver::H2MatrixSolver(const H2Matrix A[], const Cell cells[], const Col
 }
 
 void H2MatrixSolver::matVecMul(std::complex<double> X[]) const {
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t;
+
   long long lbegin = Comm[levels].oLocal();
   long long llen = Comm[levels].lenLocal();
   long long lenX = offsets[levels][lbegin + llen] - offsets[levels][lbegin];
 
   std::vector<std::vector<std::complex<double>>> rhsX(levels + 1);
   std::vector<std::vector<std::complex<double>>> rhsY(levels + 1);
-  const std::complex<double> one(1., 0.), zero(0., 0.);
 
   for (long long l = levels; l >= 0; l--) {
     long long xlen = Comm[l].lenNeighbors();
-    rhsX[l] = std::vector<std::complex<double>>(offsets[l][xlen], zero);
-    rhsY[l] = std::vector<std::complex<double>>(offsets[l][xlen], zero);
+    rhsX[l] = std::vector<std::complex<double>>(offsets[l][xlen], std::complex<double>(0., 0.));
+    rhsY[l] = std::vector<std::complex<double>>(offsets[l][xlen], std::complex<double>(0., 0.));
   }
+
+  Vector_t X_in(X, lenX);
+  Vector_t X_leaf(rhsX[levels].data() + offsets[levels][lbegin], lenX);
+  Vector_t Y_leaf(rhsY[levels].data() + offsets[levels][lbegin], lenX);
+
   if (X)
-    std::copy(X, &X[lenX], rhsX[levels].data() + offsets[levels][lbegin]);
+    X_leaf = X_in;
 
   for (long long l = levels; l >= 0; l--) {
     long long ibegin = Comm[l].oLocal();
@@ -329,10 +338,12 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) const {
         long long N = A[l].DimsLr[y + ibegin];
         long long U = upperIndex[l][y + ibegin];
 
-        const std::complex<double>* Xptr = rhsX[l].data() + offsets[l][ibegin + y];
-        std::complex<double>* XOptr = rhsX[l - 1].data() + offsets[l - 1][U] + upperOffsets[l][ibegin + y];
-        if (0 < N)
-          cblas_zgemv(CblasColMajor, CblasTrans, M, N, &one, A[l].Q[y + ibegin], M, Xptr, 1, &zero, XOptr, 1);
+        if (0 < N) {
+          Vector_t X(rhsX[l].data() + offsets[l][ibegin + y], M);
+          Vector_t Xo(rhsX[l - 1].data() + offsets[l - 1][U] + upperOffsets[l][ibegin + y], N);
+          Matrix_t Q(A[l].Q[y + ibegin], M, N, Stride_t(M, 1));
+          Xo = Q.transpose() * X;
+        }
       }
   }
 
@@ -346,127 +357,115 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) const {
       long long UY = upperIndex[l][y + ibegin];
 
       if (0 < K) {
-        std::complex<double>* Yptr = rhsY[l].data() + offsets[l][ibegin + y];
-        std::complex<double>* YOptr = rhsY[l - 1].data() + offsets[l - 1][UY] + upperOffsets[l][ibegin + y];
+        Vector_t Y(rhsY[l].data() + offsets[l][ibegin + y], M);
+        Vector_t Yo(rhsY[l - 1].data() + offsets[l - 1][UY] + upperOffsets[l][ibegin + y], K);
 
         for (long long yx = A[l].CRows[y]; yx < A[l].CRows[y + 1]; yx++) {
           long long x = A[l].CCols[yx];
           long long N = A[l].DimsLr[x];
           long long UX = upperIndex[l][x];
 
-          const std::complex<double>* XOptr = rhsX[l - 1].data() + offsets[l - 1][UX] + upperOffsets[l][x];
-          cblas_zgemv(CblasColMajor, CblasNoTrans, K, N, &one, A[l].C[yx], A[l].Cstride[yx], XOptr, 1, &one, YOptr, 1);
+          Vector_t Xo(rhsX[l - 1].data() + offsets[l - 1][UX] + upperOffsets[l][x], N);
+          Matrix_t C(A[l].C[yx], K, N, Stride_t(A[l].Cstride[yx], 1));
+          Yo += C * Xo;
         }
-        cblas_zgemv(CblasColMajor, CblasNoTrans, M, K, &one, A[l].Q[y + ibegin], M, YOptr, 1, &zero, Yptr, 1);
+        Matrix_t Q(A[l].Q[y + ibegin], M, K, Stride_t(M, 1));
+        Y = Q * Yo;
       }
     }
   }
 
   for (long long y = 0; y < llen; y++) {
     long long M = A[levels].Dims[lbegin + y];
+    Vector_t Y(rhsY[levels].data() + offsets[levels][lbegin + y], M);
+
     if (0 < M)
       for (long long yx = A[levels].ARows[y]; yx < A[levels].ARows[y + 1]; yx++) {
         long long x = A[levels].ACols[yx];
         long long N = A[levels].Dims[x];
 
-        std::complex<double>* Yptr = rhsY[levels].data() + offsets[levels][lbegin + y];
-        const std::complex<double>* Xptr = rhsX[levels].data() + offsets[levels][x];
-        cblas_zgemv(CblasColMajor, CblasNoTrans, M, N, &one, A[levels].A[yx], M, Xptr, 1, &one, Yptr, 1);
+        Vector_t X(rhsX[levels].data() + offsets[levels][x], N);
+        Matrix_t C(A[levels].A[yx], M, N, Stride_t(M, 1));
+        Y += C * X;
       }
   }
   if (X)
-    std::copy(rhsY[levels].data() + offsets[levels][lbegin], rhsY[levels].data() + offsets[levels][lbegin + llen], X);
+    X_in = Y_leaf;
 }
 
 void H2MatrixSolver::solvePrecondition(std::complex<double>[]) const {
   // Default preconditioner = I
 }
 
-double residual(long long N, std::complex<double> R[], const std::complex<double> X[], const std::complex<double> B[], const H2MatrixSolver& A, const ColCommMPI& comm) {
-  std::fill(R, &R[N], std::complex<double>(0., 0.));
-  const std::complex<double> one(1., 0.), minus_one(-1., 0.);
+std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) const {
+  using Eigen::VectorXcd, Eigen::MatrixXcd;
 
-  cblas_zaxpy(N, &minus_one, X, 1, R, 1);
-  A.matVecMul(R);
-  cblas_zaxpy(N, &one, B, 1, R, 1);
-  A.solvePrecondition(R); // r = M^(-1) * (b - A * x)
-
-  std::complex<double> beta(0., 0.);
-  cblas_zdotc_sub(N, R, 1, R, 1, &beta);
-  comm.level_sum(&beta, 1);
-  return std::sqrt(beta.real()); // beta = || r ||_2
-}
-
-void smoother_gmres(long long N, long long iters, double beta, std::complex<double> X[], const std::complex<double> R[], const H2MatrixSolver& A, const ColCommMPI& comm) {
-  long long ld = iters + 1;
-  std::vector<std::complex<double>> H(iters * ld, std::complex<double>(0., 0.));
-  std::vector<std::complex<double>> v(N * ld, std::complex<double>(0., 0.));
-  std::vector<std::complex<double>> s(ld, std::complex<double>(0., 0.));
-
-  std::vector<long long> jpvt(iters, 0);
-  std::complex<double> scale(1. / beta, 0.);
-  cblas_zaxpy(N, &scale, R, 1, &v[0], 1);
-  
-  for (long long i = 0; i < iters; i++) {
-    std::complex<double>* w = &v[(i + 1) * N];
-    std::copy(&v[i * N], w, w);
-    A.matVecMul(w);
-    A.solvePrecondition(w);
-
-    for (long long k = 0; k <= i; k++)
-      cblas_zdotc_sub(N, &v[k * N], 1, w, 1, &s[k]);
-    comm.level_sum(&s[0], i + 1);
-
-    for (long long k = 0; k <= i; k++) {
-      scale = -s[k];
-      H[k + i * ld] = s[k];
-      cblas_zaxpy(N, &scale, &v[k * N], 1, w, 1);
-    }
-
-    cblas_zdotc_sub(N, w, 1, w, 1, &s[0]);
-    comm.level_sum(&s[0], 1);
-
-    double normw = std::sqrt(s[0].real());
-    H[(i + 1) + i * ld] = std::complex<double>(normw, 0.);
-    scale = std::complex<double>(1. / normw, 0.);
-    cblas_zscal(N, &scale, w, 1);
-  }
-
-  long long rank = 0;
-  const double machine_epsilon = std::numeric_limits<double>::epsilon();
-  std::fill(s.begin() + 1, s.end(), std::complex<double>(0., 0.));
-  s[0] = beta;
-  scale = std::complex<double>(1., 0.);
-
-  LAPACKE_zgelsy(LAPACK_COL_MAJOR, ld, iters, 1, &H[0], ld, &s[0], ld, &jpvt[0], machine_epsilon, &rank);
-  if (0 < N)
-    cblas_zgemv(CblasColMajor, CblasNoTrans, N, iters, &scale, &v[0], N, &s[0], 1, &scale, X, 1);
-}
-
-std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const {
   long long lbegin = Comm[levels].oLocal();
   long long llen = Comm[levels].lenLocal();
-  long long lenX = offsets[levels][lbegin + llen] - offsets[levels][lbegin];
+  long long N = offsets[levels][lbegin + llen] - offsets[levels][lbegin];
+  long long ld = inner_iters + 1;
 
-  std::vector<std::complex<double>> r(B, &B[lenX]);
-  std::complex<double> dotp(0., 0.);
-  solvePrecondition(&r[0]);
-  cblas_zdotc_sub(lenX, &r[0], 1, &r[0], 1, &dotp);
-  Comm[levels].level_sum(&dotp, 1);
-  double normb = std::sqrt(dotp.real());
+  Eigen::Map<const Eigen::VectorXcd> B(b, N);
+  Eigen::Map<Eigen::VectorXcd> X(x, N);
+  VectorXcd R = B;
+  solvePrecondition(R.data());
+
+  std::complex<double> normr = R.adjoint() * R;
+  Comm[levels].level_sum(&normr, 1);
+  double normb = std::sqrt(normr.real());
   if (normb == 0.)
     normb = 1.;
 
-  for (long long i = 0; i < outer_iters; i++) {
-    double beta = residual(lenX, &r[0], X, B, *this, Comm[levels]);
+  for (long long j = 0; j < outer_iters; j++) {
+    R = -X;
+    matVecMul(R.data());
+    R += B;
+    solvePrecondition(R.data());
+
+    normr = R.adjoint() * R;
+    Comm[levels].level_sum(&normr, 1);
+    double beta = std::sqrt(normr.real());
     double resid = beta / normb;
     if (resid < tol)
-      return std::make_pair(resid, i);
+      return std::make_pair(resid, j);
 
-    smoother_gmres(lenX, inner_iters, beta, X, &r[0], *this, Comm[levels]);
+    MatrixXcd H = MatrixXcd::Zero(ld, inner_iters);
+    MatrixXcd v = MatrixXcd::Zero(N, ld);
+    v.col(0) = R * (1. / beta);
+    
+    for (long long i = 0; i < inner_iters; i++) {
+      VectorXcd w = v.col(i);
+      matVecMul(w.data());
+      solvePrecondition(w.data());
+
+      for (long long k = 0; k <= i; k++)
+        H(k, i) = v.col(k).adjoint() * w;
+      Comm[levels].level_sum(H.col(i).data(), i + 1);
+
+      for (long long k = 0; k <= i; k++)
+        w -= H(k, i) * v.col(k);
+
+      std::complex<double> normw = w.adjoint() * w;
+      Comm[levels].level_sum(&normw, 1);
+      H(i + 1, i) = std::sqrt(normw.real());
+      v.col(i + 1) = w * (1. / H(i + 1, i));
+    }
+
+    VectorXcd s = VectorXcd::Zero(ld);
+    s(0) = beta;
+
+    VectorXcd y = H.colPivHouseholderQr().solve(s);
+    X += v.leftCols(inner_iters) * y;
   }
 
-  double beta = residual(lenX, &r[0], X, B, *this, Comm[levels]);
+  R = -X;
+  matVecMul(R.data());
+  R += B;
+  solvePrecondition(R.data());
+
+  normr = R.adjoint() * R;
+  Comm[levels].level_sum(&normr, 1);
+  double beta = std::sqrt(normr.real());
   double resid = beta / normb;
   return std::make_pair(resid, outer_iters);
 }

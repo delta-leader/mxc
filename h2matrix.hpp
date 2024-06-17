@@ -67,6 +67,6 @@ public:
   H2MatrixSolver(const H2Matrix A[], const Cell cells[], const ColCommMPI comm[], long long levels);
 
   void matVecMul(std::complex<double> X[]) const;
-  virtual void solvePrecondition(std::complex<double> X[]) const;
+  void solvePrecondition(std::complex<double> X[]) const;
   std::pair<double, long long> solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const;
 };

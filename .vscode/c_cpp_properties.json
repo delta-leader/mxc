@@ -8,7 +8,6 @@
                 "/opt/intel/oneapi/mkl/latest/include"
             ],
             "defines": [
-                "MKL_ILP64",
                 "MKL_Complex16=std::complex<double>"
             ],
             "compilerPath": "/usr/bin/g++",
