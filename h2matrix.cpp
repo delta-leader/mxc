@@ -91,14 +91,23 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   return rank;
 }
 
-H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies) {
+long long lookupIJ(const std::vector<long long>& RowIndex, const std::vector<long long>& ColIndex, long long i, long long j) {
+  if (i < 0 || RowIndex.size() <= (i + 1))
+    return -1;
+  long long k = std::distance(ColIndex.begin(), std::find(ColIndex.begin() + RowIndex[i], ColIndex.begin() + RowIndex[i + 1], j));
+  return (k < RowIndex[i + 1]) ? k : -1;
+}
+
+H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long ybegin = comm.oGlobal();
+  long long pbegin = lowerComm.oLocal();
 
   long long ychild = cells[ybegin].Child[0];
   long long localChildIndex = lowerComm.iLocal(ychild);
+
   std::vector<long long> localChildOffsets(nodes + 1);
   localChildOffsets[0] = 0;
   std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return c.Child[1] - ychild; });
@@ -109,6 +118,23 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   Q = std::vector<const std::complex<double>*>(xlen, nullptr);
   R = std::vector<std::complex<double>*>(xlen, nullptr);
   S = std::vector<double*>(xlen, nullptr);
+
+  ARows = std::vector<long long>(Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
+  ACols = std::vector<long long>(Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
+  long long offset = ARows[0];
+  std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
+  std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
+  A = std::vector<const std::complex<double>*>(ARows[nodes]);
+  NXT = std::vector<const std::complex<double>*>(ARows[nodes], nullptr);
+  Nstride = std::vector<long long>(ARows[nodes], 0);
+
+  CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
+  CCols = std::vector<long long>(Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
+  offset = CRows[0];
+  std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
+  std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
+  C = std::vector<const std::complex<double>*>(CRows[nodes], nullptr);
+  Cstride = std::vector<long long>(CRows[nodes], 0);
 
   if (localChildOffsets.back() == 0)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -134,18 +160,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   Soffsets[0] = 0;
   Sdata = std::vector<double>(Soffsets[xlen], 0.);
 
-  ARows = std::vector<long long>(Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
-  ACols = std::vector<long long>(Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
-  long long offset = ARows[0];
-  std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
-  std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
-
-  CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
-  CCols = std::vector<long long>(Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
-  offset = CRows[0];
-  std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
-  std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
-
   std::vector<long long> Asizes(ARows[nodes]), Aoffsets(ARows[nodes] + 1);
   std::vector<long long> Csizes(CRows[nodes]), Coffsets(CRows[nodes] + 1);
   for (long long i = 0; i < nodes; i++)
@@ -153,8 +167,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   std::inclusive_scan(Asizes.begin(), Asizes.end(), Aoffsets.begin() + 1);
   Aoffsets[0] = 0;
-
-  A = std::vector<const std::complex<double>*>(ARows[nodes]);
   Adata = std::vector<std::complex<double>>(Aoffsets.back());
 
   if (Qoffsets.back()) {
@@ -186,17 +198,45 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     comm.neighbor_bcast(Sdata.data(), Ssizes.data());
     comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
 
-    for (long long i = 0; i < nodes; i++)
+    for (long long i = 0; i < nodes; i++) {
+      long long childi = localChildIndex + localChildOffsets[i];
+      long long cendi = localChildIndex + localChildOffsets[i + 1];
+
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
         long long M = Dims[i + ibegin], N = Dims[j];
+
+        long long j_global = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+        long long childj = lowerComm.iLocal(cells[j_global].Child[0]);
+        long long cendj = (0 <= childj) ? (childj + cells[j_global].Child[1] - cells[j_global].Child[0]) : -1;
+
         if (0 < M && 0 < N) {
           std::complex<double>* Aij = &Adata[Aoffsets[ij]];
           gen_matrix(eval, M, N, S[i + ibegin], S[j], Aij);
           cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, Q[i + ibegin], M, Aij, M);
           cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, Q[j], N, Aij, M);
+          
+          for (long long y = childi; y < cendi; y++) {
+            long long offset_y = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[y]);
+            for (long long x = childj; x < cendj; x++) {
+              long long offset_x = std::reduce(&lowerA.DimsLr[childj], &lowerA.DimsLr[x]);
+              long long lowN = lookupIJ(lowerA.ARows, lowerA.ACols, y - pbegin, x);
+              long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, y - pbegin, x);
+              Aij = &Adata[Aoffsets[ij] + offset_y + offset_x * M];
+
+              if (0 <= lowN) {
+                lowerA.NXT[lowN] = Aij;
+                lowerA.Nstride[lowN] = M;
+              }
+              if (0 <= lowC) {
+                lowerA.C[lowC] = Aij;
+                lowerA.Cstride[lowC] = M;
+              }
+            }
+          }
         }
       }
+    }
 
     for (long long i = 0; i < nodes; i++) {
       long long fsize = wsa.fbodies_size_at_i(i);
@@ -232,32 +272,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     comm.neighbor_bcast(Sdata.data(), Ssizes.data());
     comm.neighbor_bcast(Qdata.data(), elementsOnRow.data());
     comm.neighbor_bcast(Rdata.data(), elementsOnRow.data());
-  }
-
-  for (long long i = 0; i < nodes; i++)
-    std::transform(CCols.begin() + CRows[i], CCols.begin() + CRows[i + 1], Csizes.begin() + CRows[i],
-      [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
-  std::inclusive_scan(Csizes.begin(), Csizes.end(), Coffsets.begin() + 1);
-  Coffsets[0] = 0;
-
-  C = std::vector<const std::complex<double>*>(CRows[nodes]);
-  Cdata = std::vector<std::complex<double>>(Coffsets.back());
-
-  if (Coffsets.back()) {
-    std::transform(Coffsets.begin(), Coffsets.begin() + CRows[nodes], C.begin(), [&](const long long d) { return &Cdata[d]; });
-
-    const std::complex<double> one(1., 0.);
-    for (long long i = 0; i < nodes; i++)
-      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
-        long long j = CCols[ij];
-        long long M = DimsLr[i + ibegin], N = DimsLr[j];
-        if (0 < M && 0 < N) {
-          std::complex<double>* Cij = &Cdata[Coffsets[ij]];
-          gen_matrix(eval, M, N, S[i + ibegin], S[j], Cij);
-          cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, R[i + ibegin], Dims[i + ibegin], Cij, M);
-          cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, R[j], Dims[j], Cij, M);
-        }
-      }
   }
 }
 
@@ -341,7 +355,7 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) const {
           long long UX = upperIndex[l][x];
 
           const std::complex<double>* XOptr = rhsX[l - 1].data() + offsets[l - 1][UX] + upperOffsets[l][x];
-          cblas_zgemv(CblasColMajor, CblasNoTrans, K, N, &one, A[l].C[yx], K, XOptr, 1, &one, YOptr, 1);
+          cblas_zgemv(CblasColMajor, CblasNoTrans, K, N, &one, A[l].C[yx], A[l].Cstride[yx], XOptr, 1, &one, YOptr, 1);
         }
         cblas_zgemv(CblasColMajor, CblasNoTrans, M, K, &one, A[l].Q[y + ibegin], M, YOptr, 1, &zero, Yptr, 1);
       }

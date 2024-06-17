@@ -25,7 +25,6 @@ public:
 class H2Matrix {
 private:
   std::vector<std::complex<double>> Qdata;
-  std::vector<std::complex<double>> Cdata;
   std::vector<std::complex<double>> Adata;
   std::vector<std::complex<double>> Rdata;
   std::vector<double> Sdata;
@@ -42,13 +41,16 @@ public:
   std::vector<long long> CRows;
   std::vector<long long> CCols;
   std::vector<const std::complex<double>*> C;
+  std::vector<long long> Cstride;
 
   std::vector<long long> ARows;
   std::vector<long long> ACols;
   std::vector<const std::complex<double>*> A;
+  std::vector<const std::complex<double>*> NXT;
+  std::vector<long long> Nstride;
   
   H2Matrix() {}
-  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
+  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
 };
 
 class H2MatrixSolver {
@@ -67,5 +69,4 @@ public:
   void matVecMul(std::complex<double> X[]) const;
   virtual void solvePrecondition(std::complex<double> X[]) const;
   std::pair<double, long long> solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const;
-  std::pair<double, long long> VcycleMG(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const;
 };
