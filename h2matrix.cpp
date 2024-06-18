@@ -5,6 +5,7 @@
 
 #include <mkl.h>
 #include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/QR>
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -45,49 +46,45 @@ const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].data() : nullptr;
 }
 
-long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> A[], std::complex<double> C[]) {
+long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> a[], std::complex<double> c[]) {
   long long K = std::min(M, N), rank = 0;
-  std::complex<double> one(1., 0.), zero(0., 0.);
-  std::vector<std::complex<double>> B(M * N), TAU(M);
-  std::vector<int> jpiv(M, 0);
-
   if (0 < K) {
-    gen_matrix(eval, N, M, Fbodies, Xbodies, &B[0]);
+    Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(K, M);
+
     if (K < N) {
-      LAPACKE_zgeqrf(LAPACK_COL_MAJOR, N, M, &B[0], N, &TAU[0]);
-      LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', M - 1, M - 1, zero, zero, &B[1], N);
+      Eigen::MatrixXcd XF(N, M);
+      gen_matrix(eval, N, M, Fbodies, Xbodies, XF.data());
+      Eigen::HouseholderQR<Eigen::MatrixXcd> qr(XF);
+      RX = qr.matrixQR().topRows(K).triangularView<Eigen::Upper>();
+    }
+    else
+      gen_matrix(eval, N, M, Fbodies, Xbodies, RX.data());
+    
+    Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(RX);
+    rank = (long long)std::floor(epi);
+    if (epi < 1.) {
+      rrqr.setThreshold(epi);
+      rank = rrqr.rank();
     }
 
-    LAPACKE_zgeqp3(LAPACK_COL_MAJOR, K, M, &B[0], N, &jpiv[0], &TAU[0]);
-    rank = std::min(K, (long long)std::floor(epi));
-    double s0 = epi * std::abs(B[0]);
-    if (std::numeric_limits<double>::min() < s0 && epi < 1.)
-      while (rank < K && s0 <= std::abs(B[rank * (N + 1)]))
-        ++rank;
-  }
+    Eigen::Map<Eigen::MatrixXcd> A(a, M, M), C(c, M, M);
+    if (0 < rank && rank < M) {
+      C.topRows(rank) = rrqr.matrixR().topRows(rank);
+      C.topLeftCorner(rank, rank).triangularView<Eigen::Upper>().solveInPlace(C.topRightCorner(rank, M - rank));
+      C.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
 
-  if (0 < rank && rank < M) {
-    cblas_ztrsm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, rank, M - rank, &one, &B[0], N, &B[rank * N], N);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', rank, rank, zero, one, &B[0], N);
-    MKL_Zomatcopy('C', 'T', rank, M, one, &B[0], N, C, M);
+      Eigen::Map<Eigen::MatrixXd> body(Xbodies, 3, M);
+      body = body * rrqr.colsPermutation();
 
-    for (long long i = 0; i < M; i++) {
-      long long piv = std::distance(jpiv.begin(), std::find(jpiv.begin() + i, jpiv.end(), i + 1));
-      jpiv[piv] = jpiv[i];
-      jpiv[i] = piv + 1;
+      Eigen::HouseholderQR<Eigen::MatrixXcd> qr = (A.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * C.topRows(rank).transpose())).householderQr();
+      A = qr.householderQ();
+      C = Eigen::MatrixXcd::Zero(M, M);
+      C.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
     }
-    LAPACKE_zlaswp(LAPACK_COL_MAJOR, rank, C, M, 1, M, &jpiv[0], 1);
-    LAPACKE_dlaswp(LAPACK_ROW_MAJOR, 3, Xbodies, 3, 1, M, &jpiv[0], -1);
-
-    cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, rank, &one, A, M, C, M);
-    LAPACKE_zgeqrf(LAPACK_COL_MAJOR, M, rank, C, M, &TAU[0]);
-    LAPACKE_zlacpy(LAPACK_COL_MAJOR, 'L', M, rank, C, M, A, M);
-    LAPACKE_zungqr(LAPACK_COL_MAJOR, M, rank, rank, A, M, &TAU[0]);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'L', rank - 1, rank - 1, zero, zero, &C[1], M);
-  }
-  else {
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', M, M, zero, one, A, M);
-    LAPACKE_zlaset(LAPACK_COL_MAJOR, 'F', M, M, zero, one, C, M);
+    else {
+      A = Eigen::MatrixXcd::Identity(M, M);
+      C = Eigen::MatrixXcd::Identity(M, M);
+    }
   }
   return rank;
 }
@@ -182,18 +179,19 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
       long long ci = i + ybegin;
       long long childi = localChildIndex + localChildOffsets[i];
       long long cend = localChildIndex + localChildOffsets[i + 1];
-      std::complex<double>* matQ = &Qdata[Qoffsets[i + ibegin]];
+      Eigen::Map<Eigen::MatrixXcd> Q(&Qdata[Qoffsets[i + ibegin]], M, M);
 
       if (cend <= childi) {
         std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
-        for (long long j = 0; j < M; j++)
-          matQ[j * (M + 1)] = one;
+        Q = Eigen::MatrixXcd::Identity(M, M);
       }
       for (long long j = childi; j < cend; j++) {
         long long offset = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[j]);
         long long len = lowerA.DimsLr[j];
         std::copy(lowerA.S[j], lowerA.S[j] + (len * 3), &(S[i + ibegin])[offset * 3]);
-        MKL_Zomatcopy('C', 'N', len, len, one, lowerA.R[j], lowerA.Dims[j], &matQ[offset * (M + 1)], M);
+
+        Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> Rj(lowerA.R[j], len, len, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.Dims[j], 1));
+        Q.block(offset, offset, len, len) = Rj;
       }
     }
     comm.neighbor_bcast(Sdata.data(), Ssizes.data());
@@ -212,10 +210,10 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
         long long cendj = (0 <= childj) ? (childj + cells[j_global].Child[1] - cells[j_global].Child[0]) : -1;
 
         if (0 < M && 0 < N) {
-          std::complex<double>* Aij = &Adata[Aoffsets[ij]];
-          gen_matrix(eval, M, N, S[i + ibegin], S[j], Aij);
-          cblas_ztrmm(CblasColMajor, CblasLeft, CblasUpper, CblasNoTrans, CblasNonUnit, M, N, &one, Q[i + ibegin], M, Aij, M);
-          cblas_ztrmm(CblasColMajor, CblasRight, CblasUpper, CblasTrans, CblasNonUnit, M, N, &one, Q[j], N, Aij, M);
+          Eigen::Map<Eigen::MatrixXcd> Aij(&Adata[Aoffsets[ij]], M, N);
+          Eigen::Map<const Eigen::MatrixXcd> Qi(Q[i + ibegin], M, M), Qj(Q[j], N, N);
+          gen_matrix(eval, M, N, S[i + ibegin], S[j], Aij.data());
+          Aij = Qi.triangularView<Eigen::Upper>() * Aij * Qj.transpose().triangularView<Eigen::Lower>();
           
           for (long long y = childi; y < cendi; y++) {
             long long offset_y = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[y]);
@@ -223,14 +221,14 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
               long long offset_x = std::reduce(&lowerA.DimsLr[childj], &lowerA.DimsLr[x]);
               long long lowN = lookupIJ(lowerA.ARows, lowerA.ACols, y - pbegin, x);
               long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, y - pbegin, x);
-              Aij = &Adata[Aoffsets[ij] + offset_y + offset_x * M];
+              std::complex<double>* data = &Adata[Aoffsets[ij] + offset_y + offset_x * M];
 
               if (0 <= lowN) {
-                lowerA.NXT[lowN] = Aij;
+                lowerA.NXT[lowN] = data;
                 lowerA.Nstride[lowN] = M;
               }
               if (0 <= lowC) {
-                lowerA.C[lowC] = Aij;
+                lowerA.C[lowC] = data;
                 lowerA.Cstride[lowC] = M;
               }
             }
