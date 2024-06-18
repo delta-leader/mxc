@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vector>
+#include <data_container.hpp>
 #include <complex>
 
 class MatrixAccessor;
@@ -24,19 +24,13 @@ public:
 
 class H2Matrix {
 private:
-  std::vector<std::complex<double>> Qdata;
-  std::vector<std::complex<double>> Adata;
-  std::vector<std::complex<double>> Rdata;
-  std::vector<double> Sdata;
-
-  std::vector<std::complex<double>*> R;
-  std::vector<double*> S;
-  std::vector<long long> elementsOnRow;
 
 public:
   std::vector<long long> Dims;
   std::vector<long long> DimsLr;
-  std::vector<const std::complex<double>*> Q;
+  MatrixDataContainer<std::complex<double>> Q;
+  MatrixDataContainer<std::complex<double>> R;
+  MatrixDataContainer<double> S;
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
@@ -45,28 +39,13 @@ public:
 
   std::vector<long long> ARows;
   std::vector<long long> ACols;
-  std::vector<const std::complex<double>*> A;
-  std::vector<const std::complex<double>*> NXT;
+  MatrixDataContainer<std::complex<double>> A;
+  std::vector<const std::complex<double>*> NA;
   std::vector<long long> Nstride;
   
   H2Matrix() {}
   H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
+
+  //void factorize(const ColCommMPI& comm);
 };
 
-class H2MatrixSolver {
-private:
-  long long levels;
-  std::vector<std::vector<long long>> offsets;
-  std::vector<std::vector<long long>> upperIndex;
-  std::vector<std::vector<long long>> upperOffsets;
-
-  const H2Matrix* A;
-  const ColCommMPI* Comm;
-
-public:
-  H2MatrixSolver(const H2Matrix A[], const Cell cells[], const ColCommMPI comm[], long long levels);
-
-  void matVecMul(std::complex<double> X[]) const;
-  void solvePrecondition(std::complex<double> X[]) const;
-  std::pair<double, long long> solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters) const;
-};

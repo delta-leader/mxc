@@ -3,6 +3,7 @@
 #include <build_tree.hpp>
 #include <h2matrix.hpp>
 #include <comm-mpi.hpp>
+#include <solver.hpp>
 
 #include <random>
 #include <algorithm>
@@ -125,6 +126,14 @@ int main(int argc, char* argv[]) {
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX);
 
+  if (mpi_rank == 0) {
+    std::cout << "Construct Err: " << cerr << std::endl;
+    std::cout << "H-Matrix Time: " << h_construct_time << std::endl;
+    std::cout << "H^2-Matrix Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
+    std::cout << "Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
+    std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
+  }
+
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -137,11 +146,6 @@ int main(int argc, char* argv[]) {
   timer.first = 0;
 
   if (mpi_rank == 0) {
-    std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "H-Matrix Time: " << h_construct_time << std::endl;
-    std::cout << "H^2-Matrix Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
-    std::cout << "Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
-    std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
     std::cout << "GMRES Residual: " << gmres_ret.first << ", Iters: " << gmres_ret.second << std::endl;
     std::cout << "GMRES Time: " << gmres_time << ", " << gmres_comm_time << std::endl;
   }
