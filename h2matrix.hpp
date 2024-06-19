@@ -28,6 +28,8 @@ private:
 public:
   std::vector<long long> Dims;
   std::vector<long long> DimsLr;
+  std::vector<long long> UpperStride;
+
   MatrixDataContainer<std::complex<double>> Q;
   MatrixDataContainer<std::complex<double>> R;
   MatrixDataContainer<double> S;
@@ -35,13 +37,11 @@ public:
   std::vector<long long> CRows;
   std::vector<long long> CCols;
   std::vector<const std::complex<double>*> C;
-  std::vector<long long> Cstride;
 
   std::vector<long long> ARows;
   std::vector<long long> ACols;
   MatrixDataContainer<std::complex<double>> A;
   std::vector<const std::complex<double>*> NA;
-  std::vector<long long> Nstride;
   
   H2Matrix() {}
   H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);

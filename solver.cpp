@@ -101,7 +101,7 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) const {
           long long UX = upperIndex[l][x];
 
           Vector_t Xo(rhsX[l - 1].data() + offsets[l - 1][UX] + upperOffsets[l][x], N);
-          Matrix_t C(A[l].C[yx], K, N, Stride_t(A[l].Cstride[yx], 1));
+          Matrix_t C(A[l].C[yx], K, N, Stride_t(A[l].UpperStride[y], 1));
           Yo += C * Xo;
         }
         Matrix_t Q(A[l].Q[y + ibegin], M, K, Stride_t(M, 1));

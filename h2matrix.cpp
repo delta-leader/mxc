@@ -102,7 +102,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long ybegin = comm.oGlobal();
-  long long pbegin = lowerComm.oLocal();
 
   long long ychild = cells[ybegin].Child[0];
   long long localChildIndex = lowerComm.iLocal(ychild);
@@ -112,6 +111,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return c.Child[1] - ychild; });
   Dims = std::vector<long long>(xlen, 0);
   DimsLr = std::vector<long long>(xlen, 0);
+  UpperStride = std::vector<long long>(nodes, 0);
 
   ARows = std::vector<long long>(Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
   ACols = std::vector<long long>(Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
@@ -119,7 +119,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
   NA = std::vector<const std::complex<double>*>(ARows[nodes], nullptr);
-  Nstride = std::vector<long long>(ARows[nodes], 0);
 
   CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
   CCols = std::vector<long long>(Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
@@ -127,7 +126,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
   C = std::vector<const std::complex<double>*>(CRows[nodes], nullptr);
-  Cstride = std::vector<long long>(CRows[nodes], 0);
 
   if (localChildOffsets.back() == 0)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -177,13 +175,21 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     comm.neighbor_bcast(S);
     comm.neighbor_bcast(Q);
 
+    long long pbegin = lowerComm.oLocal();
+    long long pend = pbegin + lowerComm.lenLocal();
+
     for (long long i = 0; i < nodes; i++) {
       long long childi = localChildIndex + localChildOffsets[i];
       long long cendi = localChildIndex + localChildOffsets[i + 1];
+      long long M = Dims[i + ibegin];
+
+      for (long long y = childi; y < cendi; y++)
+        if (pbegin <= y && y < pend)
+          lowerA.UpperStride[y - pbegin] = M;
 
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
-        long long M = Dims[i + ibegin], N = Dims[j];
+        long long N = Dims[j];
 
         long long j_global = Near.ColIndex[ij + Near.RowIndex[ybegin]];
         long long childj = lowerComm.iLocal(cells[j_global].Child[0]);
@@ -202,15 +208,10 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
               long long lowN = lookupIJ(lowerA.ARows, lowerA.ACols, y - pbegin, x);
               long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, y - pbegin, x);
               std::complex<double>* data = A[ij] + offset_y + offset_x * M;
-
-              if (0 <= lowN) {
+              if (0 <= lowN)
                 lowerA.NA[lowN] = data;
-                lowerA.Nstride[lowN] = M;
-              }
-              if (0 <= lowC) {
+              if (0 <= lowC)
                 lowerA.C[lowC] = data;
-                lowerA.Cstride[lowC] = M;
-              }
             }
           }
         }
