@@ -36,15 +36,25 @@ public:
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
-  std::vector<const std::complex<double>*> C;
+  std::vector<std::complex<double>*> C;
 
   std::vector<long long> ARows;
   std::vector<long long> ACols;
   MatrixDataContainer<std::complex<double>> A;
-  std::vector<const std::complex<double>*> NA;
+  std::vector<std::complex<double>*> NA;
+
+  MatrixDataContainer<std::complex<double>> X;
+  MatrixDataContainer<std::complex<double>> Y;
+  std::vector<std::complex<double>*> NX;
+  std::vector<std::complex<double>*> NY;
   
   H2Matrix() {}
   H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
+
+  void matVecUpwardPass(const ColCommMPI& comm);
+  void matVecHorizontalandDownwardPass(const ColCommMPI& comm);
+  void matVecLeafHorizontalPass(const ColCommMPI& comm);
+  void resetX();
 
   //void factorize(const ColCommMPI& comm);
 };

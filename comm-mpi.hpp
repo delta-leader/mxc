@@ -20,7 +20,7 @@ protected:
 
   template<class T> inline void level_merge(T* data, long long len) const;
   template<class T> inline void level_sum(T* data, long long len) const;
-  template<class T> inline void neighbor_bcast(T* data, const long long box_dims[]) const;
+  template<class T> inline void neighbor_bcast(T* data) const;
   template<class T> inline void neighbor_bcast(MatrixDataContainer<T>& dc) const;
 
 public:
@@ -40,8 +40,6 @@ public:
   void level_sum(std::complex<double>* data, long long len) const;
 
   void neighbor_bcast(long long* data) const;
-  void neighbor_bcast(double* data, const long long box_dims[]) const;
-  void neighbor_bcast(std::complex<double>* data, const long long box_dims[]) const;
   void neighbor_bcast(MatrixDataContainer<double>& dc) const;
   void neighbor_bcast(MatrixDataContainer<std::complex<double>>& dc) const;
 

@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
-  H2MatrixSolver solver(&A[0], &cell[0], &communicator[0], levels);
+  H2MatrixSolver solver(&A[0], &communicator[0], levels);
   std::copy(&Xbody[0] + body_local[0], &Xbody[0] + body_local[1], &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);

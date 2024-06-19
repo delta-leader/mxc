@@ -8,7 +8,6 @@
 #include <eigen3/Eigen/QR>
 #include <eigen3/Eigen/LU>
 #include <algorithm>
-#include <numeric>
 #include <cmath>
 
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
@@ -118,14 +117,14 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   long long offset = ARows[0];
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  NA = std::vector<const std::complex<double>*>(ARows[nodes], nullptr);
+  NA = std::vector<std::complex<double>*>(ARows[nodes], nullptr);
 
   CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
   CCols = std::vector<long long>(Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
   offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  C = std::vector<const std::complex<double>*>(CRows[nodes], nullptr);
+  C = std::vector<std::complex<double>*>(CRows[nodes], nullptr);
 
   if (localChildOffsets.back() == 0)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -134,7 +133,23 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
       [&](long long start, long long end) { return std::reduce(iter + start, iter + end); });
   }
+
   comm.neighbor_bcast(Dims.data());
+  X = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
+  Y = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
+  NX = std::vector<std::complex<double>*>(xlen, nullptr);
+  NY = std::vector<std::complex<double>*>(xlen, nullptr);
+
+  for (long long i = 0; i < xlen; i++) {
+    long long ci = comm.iGlobal(i);
+    long long child = lowerComm.iLocal(cells[ci].Child[0]);
+    long long cend = 0 <= child ? (child + cells[ci].Child[1] - cells[ci].Child[0]) : -1;
+    for (long long y = child; y < cend; y++) {
+      long long offset_y = std::reduce(&lowerA.DimsLr[child], &lowerA.DimsLr[y]);
+      lowerA.NX[y] = X[i] + offset_y;
+      lowerA.NY[y] = Y[i] + offset_y;
+    }
+  }
 
   std::vector<long long> Qsizes(xlen, 0);
   std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
@@ -172,7 +187,8 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
         Qi.block(offset_y, offset_y, ny, ny) = Ry;
 
         if (pbegin <= y && y < pend && 0 < M) {
-          lowerA.UpperStride[y - pbegin] = M;
+          long long py = y - pbegin;
+          lowerA.UpperStride[py] = M;
 
           for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
             long long j_global = Near.ColIndex[ij + Near.RowIndex[ybegin]];
@@ -182,8 +198,8 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
             for (long long x = childj; x < cendj; x++) {
               long long offset_x = std::reduce(&lowerA.DimsLr[childj], &lowerA.DimsLr[x]);
               long long nx = lowerA.DimsLr[x];
-              long long lowN = lookupIJ(lowerA.ARows, lowerA.ACols, y - pbegin, x);
-              long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, y - pbegin, x);
+              long long lowN = lookupIJ(lowerA.ARows, lowerA.ACols, py, x);
+              long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, py, x);
               std::complex<double>* dp = A[ij] + offset_y + offset_x * M;
               if (0 <= lowN)
                 lowerA.NA[lowN] = dp;
@@ -249,6 +265,85 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     comm.neighbor_bcast(Q);
     comm.neighbor_bcast(R);
   }
+}
+
+void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t;
+
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
+  comm.level_merge(X[0], X.size());
+  comm.neighbor_bcast(X);
+
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    long long N = DimsLr[i + ibegin];
+    if (0 < N) {
+      Vector_t x(X[i + ibegin], M);
+      Vector_t xo(NX[i + ibegin], N);
+      Matrix_t q(Q[i + ibegin], M, N, Stride_t(M, 1));
+      xo = q.transpose() * x;
+    }
+  }
+}
+
+void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t;
+
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
+
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    long long K = DimsLr[i + ibegin];
+    if (0 < K) {
+      Vector_t y(Y[i + ibegin], M);
+      Vector_t yo(NY[i + ibegin], K);
+
+      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+        long long j = CCols[ij];
+        long long N = DimsLr[j];
+
+        Vector_t xo(NX[j], N);
+        Matrix_t c(C[ij], K, N, Stride_t(UpperStride[i], 1));
+        yo += c * xo;
+      }
+      Matrix_t q(Q[i + ibegin], M, K, Stride_t(M, 1));
+      y = q * yo;
+    }
+  }
+}
+
+void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
+
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
+
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    Vector_t y(Y[i + ibegin], M);
+
+    if (0 < M)
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+
+        Vector_t x(X[j], N);
+        Matrix_t c(A[ij], M, N);
+        y += c * x;
+      }
+  }
+}
+
+void H2Matrix::resetX() {
+  std::fill(X[0], X[0] + X.size(), std::complex<double>(0., 0.));
+  std::fill(Y[0], Y[0] + Y.size(), std::complex<double>(0., 0.));
 }
 
 /*void H2Matrix::factorize(const ColCommMPI& comm) {

@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <set>
-#include <numeric>
 
 MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
@@ -155,13 +154,10 @@ template<class T> inline void ColCommMPI::level_sum(T* data, long long len) cons
   record_mpi();
 }
 
-template<typename T> inline void ColCommMPI::neighbor_bcast(T* data, const long long box_dims[]) const {
+template<typename T> inline void ColCommMPI::neighbor_bcast(T* data) const {
   std::vector<long long> offsets(Boxes.size() + 1, 0);
-  for (long long p = 0; p < (long long)Boxes.size(); p++) {
-    long long end = Boxes[p].second;
-    offsets[p + 1] = std::reduce(box_dims, &box_dims[end], offsets[p]);
-    box_dims = &box_dims[end];
-  }
+  std::transform_inclusive_scan(Boxes.begin(), Boxes.end(), offsets.begin() + 1, std::plus<long long>(), 
+    [](const std::pair<long long, long long>& p) { return p.second; });
 
   record_mpi();
   for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
@@ -197,16 +193,7 @@ void ColCommMPI::level_sum(std::complex<double>* data, long long len) const {
 }
 
 void ColCommMPI::neighbor_bcast(long long* data) const {
-  std::vector<long long> ones(lenNeighbors(), 1);
-  neighbor_bcast<long long>(data, ones.data());
-}
-
-void ColCommMPI::neighbor_bcast(double* data, const long long box_dims[]) const {
-  neighbor_bcast<double>(data, box_dims);
-}
-
-void ColCommMPI::neighbor_bcast(std::complex<double>* data, const long long box_dims[]) const {
-  neighbor_bcast<std::complex<double>>(data, box_dims);
+  neighbor_bcast<long long>(data);
 }
 
 void ColCommMPI::neighbor_bcast(MatrixDataContainer<double>& dc) const {
