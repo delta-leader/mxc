@@ -152,71 +152,67 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   A = MatrixDataContainer<std::complex<double>>(ARows[nodes], Asizes.data());
 
   if (std::reduce(Dims.begin(), Dims.end())) {
-    for (long long i = 0; i < nodes; i++) {
-      long long M = Dims[i + ibegin];
-      long long ci = i + ybegin;
-      long long childi = localChildIndex + localChildOffsets[i];
-      long long cend = localChildIndex + localChildOffsets[i + 1];
-      Eigen::Map<Eigen::MatrixXcd> Qi(Q[i + ibegin], M, M);
-
-      if (cend <= childi) {
-        std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
-        Qi = Eigen::MatrixXcd::Identity(M, M);
-      }
-      for (long long j = childi; j < cend; j++) {
-        long long offset = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[j]);
-        long long len = lowerA.DimsLr[j];
-        std::copy(lowerA.S[j], lowerA.S[j] + (len * 3), &(S[i + ibegin])[offset * 3]);
-
-        Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> Rj(lowerA.R[j], len, len, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.Dims[j], 1));
-        Qi.block(offset, offset, len, len) = Rj;
-      }
-    }
-    comm.neighbor_bcast(S);
-    comm.neighbor_bcast(Q);
-
+    typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
+    typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
     long long pbegin = lowerComm.oLocal();
     long long pend = pbegin + lowerComm.lenLocal();
 
     for (long long i = 0; i < nodes; i++) {
+      long long M = Dims[i + ibegin];
       long long childi = localChildIndex + localChildOffsets[i];
       long long cendi = localChildIndex + localChildOffsets[i + 1];
-      long long M = Dims[i + ibegin];
+      Eigen::Map<Eigen::MatrixXcd> Qi(Q[i + ibegin], M, M);
 
-      for (long long y = childi; y < cendi; y++)
-        if (pbegin <= y && y < pend)
+      for (long long y = childi; y < cendi; y++) { // Intermediate levels
+        long long offset_y = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[y]);
+        long long ny = lowerA.DimsLr[y];
+        std::copy(lowerA.S[y], lowerA.S[y] + (ny * 3), &(S[i + ibegin])[offset_y * 3]);
+
+        Matrix_t Ry(lowerA.R[y], ny, ny, Stride_t(lowerA.Dims[y], 1));
+        Qi.block(offset_y, offset_y, ny, ny) = Ry;
+
+        if (pbegin <= y && y < pend && 0 < M) {
           lowerA.UpperStride[y - pbegin] = M;
 
-      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        long long j = ACols[ij];
-        long long N = Dims[j];
+          for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+            long long j_global = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+            long long childj = lowerComm.iLocal(cells[j_global].Child[0]);
+            long long cendj = (0 <= childj) ? (childj + cells[j_global].Child[1] - cells[j_global].Child[0]) : -1;
 
-        long long j_global = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-        long long childj = lowerComm.iLocal(cells[j_global].Child[0]);
-        long long cendj = (0 <= childj) ? (childj + cells[j_global].Child[1] - cells[j_global].Child[0]) : -1;
-
-        if (0 < M && 0 < N) {
-          Eigen::Map<Eigen::MatrixXcd> Aij(A[ij], M, N);
-          Eigen::Map<const Eigen::MatrixXcd> Qi(Q[i + ibegin], M, M), Qj(Q[j], N, N);
-          gen_matrix(eval, M, N, S[i + ibegin], S[j], Aij.data());
-          Aij = Qi.triangularView<Eigen::Upper>() * Aij * Qj.transpose().triangularView<Eigen::Lower>();
-          
-          for (long long y = childi; y < cendi; y++) {
-            long long offset_y = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[y]);
             for (long long x = childj; x < cendj; x++) {
               long long offset_x = std::reduce(&lowerA.DimsLr[childj], &lowerA.DimsLr[x]);
+              long long nx = lowerA.DimsLr[x];
               long long lowN = lookupIJ(lowerA.ARows, lowerA.ACols, y - pbegin, x);
               long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, y - pbegin, x);
-              std::complex<double>* data = A[ij] + offset_y + offset_x * M;
+              std::complex<double>* dp = A[ij] + offset_y + offset_x * M;
               if (0 <= lowN)
-                lowerA.NA[lowN] = data;
-              if (0 <= lowC)
-                lowerA.C[lowC] = data;
+                lowerA.NA[lowN] = dp;
+              if (0 <= lowC) {
+                lowerA.C[lowC] = dp;
+                Matrix_t Rx(lowerA.R[x], nx, nx, Stride_t(lowerA.Dims[x], 1));
+                Matrix_t Cyx(dp, ny, nx, Stride_t(M, 1));
+                Eigen::MatrixXcd Ayx(ny, nx);
+                gen_matrix(eval, ny, nx, lowerA.S[y], lowerA.S[x], Ayx.data());
+                Cyx = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
+              }
             }
           }
         }
       }
+
+      if (cendi <= childi) { // Leaf level
+        long long ci = i + ybegin;
+        std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
+        Qi = Eigen::MatrixXcd::Identity(M, M);
+
+        for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+          long long N = Dims[ACols[ij]];
+          long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+          gen_matrix(eval, M, N, &bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[cj].Body[0]], A[ij]);
+        }
+      }
     }
+    comm.neighbor_bcast(S);
 
     for (long long i = 0; i < nodes; i++) {
       long long fsize = wsa.fbodies_size_at_i(i);
