@@ -42,6 +42,7 @@ public:
   std::vector<long long> ACols;
   MatrixDataContainer<std::complex<double>> A;
   std::vector<std::complex<double>*> NA;
+  std::vector<int> Ipivots;
 
   MatrixDataContainer<std::complex<double>> X;
   MatrixDataContainer<std::complex<double>> Y;

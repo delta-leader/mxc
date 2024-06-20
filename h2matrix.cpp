@@ -165,6 +165,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   A = MatrixDataContainer<std::complex<double>>(ARows[nodes], Asizes.data());
+  Ipivots = std::vector<int>(std::reduce(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes)));
 
   if (std::reduce(Dims.begin(), Dims.end())) {
     typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
@@ -349,6 +350,8 @@ void H2Matrix::resetX() {
 void H2Matrix::factorize(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
+  std::vector<long long> ipiv_offsets(nodes);
+  std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
 
   comm.level_merge(A[0], A.size());
   for (long long i = 0; i < nodes; i++) {
@@ -363,18 +366,22 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     V.noalias() = Ui.adjoint() * Aii.transpose();
     Aii.noalias() = Ui.adjoint() * V.transpose();
 
-    Eigen::PartialPivLU<Eigen::MatrixXcd> plu(Aii.topLeftCorner(Mr, Mr));
-    Eigen::PermutationMatrix p = plu.permutationP();
-
-    /*Aii.topRightCorner(Mr, Ms).applyOnTheLeft(p);
-    Aii.topLeftCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(Aii.topRightCorner(Mr, Ms));
-    Aii.topLeftCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(Aii.topRightCorner(Mr, Ms));*/
+    Eigen::PartialPivLU<Eigen::MatrixXcd> plu = Aii.topLeftCorner(Mr, Mr).lu();
+    Eigen::Map<Eigen::VectorXi> ipiv(Ipivots.data() + ipiv_offsets[i], Mr);
 
     Aii.topRightCorner(Mr, Ms) = plu.solve(Aii.topRightCorner(Mr, Ms));
+    Aii.topLeftCorner(Mr, Mr) = plu.matrixLU();
+    ipiv = plu.permutationP().indices();
 
-    Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> Ass(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
-    Ass.noalias() = Aii.bottomRightCorner(Ms, Ms) - Aii.bottomLeftCorner(Ms, Mr) * Aii.topRightCorner(Mr, Ms);
+    Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
+    An.noalias() = Aii.bottomRightCorner(Ms, Ms) - Aii.bottomLeftCorner(Ms, Mr) * Aii.topRightCorner(Mr, Ms);
 
   }
 }
+
+
+
+    /*Aii.topRightCorner(Mr, Ms) = plu.permutationP() * Aii.topRightCorner(Mr, Ms);
+    plu.matrixLU().triangularView<Eigen::UnitLower>().solveInPlace(Aii.topRightCorner(Mr, Ms));
+    plu.matrixLU().triangularView<Eigen::Upper>().solveInPlace(Aii.topRightCorner(Mr, Ms));*/
 
