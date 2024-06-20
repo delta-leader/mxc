@@ -2,7 +2,7 @@
 #include <solver.hpp>
 
 #include <mkl.h>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
 

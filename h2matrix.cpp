@@ -4,9 +4,9 @@
 #include <kernel.hpp>
 
 #include <mkl.h>
-#include <eigen3/Eigen/Dense>
-#include <eigen3/Eigen/QR>
-#include <eigen3/Eigen/LU>
+#include <Eigen/Dense>
+#include <Eigen/QR>
+#include <Eigen/LU>
 #include <algorithm>
 #include <cmath>
 
