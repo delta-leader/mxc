@@ -3,7 +3,7 @@
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project ("shimo" LANGUAGES CXX CUDA)
+project ("shimo" LANGUAGES CXX)
 
 set(MKL_ARCH intel64)
 set(MKL_LINK dynamic)

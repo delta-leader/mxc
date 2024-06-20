@@ -1,8 +1,4 @@
 
-#include <kernel.hpp>
-#include <build_tree.hpp>
-#include <h2matrix.hpp>
-#include <comm-mpi.hpp>
 #include <solver.hpp>
 
 #include <random>
@@ -34,10 +30,6 @@ int main(int argc, char* argv[]) {
   long long levels = (long long)std::log2((double)Nbody / leaf_size);
   long long Nleaf = (long long)1 << levels;
   long long ncells = Nleaf + Nleaf - 1;
-
-  int mpi_rank = 0, mpi_size = 1;
-  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
   
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
@@ -75,12 +67,11 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = solver.timer.first;
   solver.timer.first = 0;
 
-  long long body_local[2] = { solver.local_bodies.first, solver.local_bodies.second };
-  long long lenX = body_local[1] - body_local[0];
+  long long lenX = solver.local_bodies.second - solver.local_bodies.first;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
-  std::copy(&Xbody[0] + body_local[0], &Xbody[0] + body_local[1], &X1[0]);
+  std::copy(&Xbody[0] + solver.local_bodies.first, &Xbody[0] + solver.local_bodies.second, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
@@ -94,11 +85,13 @@ int main(int argc, char* argv[]) {
   double cerr = 0.;
   double refmatvec_time = MPI_Wtime();
 
-  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[body_local[0] * 3], &body[0]);
+  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[solver.local_bodies.first * 3], &body[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
 
   solveRelErr(&cerr, &X1[0], &X2[0], lenX);
 
+  int mpi_rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
     std::cout << "H^2-Matrix Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
