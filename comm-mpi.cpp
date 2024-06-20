@@ -46,7 +46,7 @@ void getNextLevelMapping(std::pair<long long, long long> Mapping[], const std::p
   std::copy(MappingNext.begin(), MappingNext.end(), Mapping);
 }
 
-ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], MPI_Comm world) : timer(nullptr) {
+ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world) : timer(nullptr) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
@@ -213,13 +213,3 @@ void ColCommMPI::record_mpi() const {
   }
 }
 
-void ColCommMPI::free_all_comms() {
-  MergeComm = MPI_COMM_NULL;
-  NeighborComm.clear();
-  AllReduceComm = MPI_COMM_NULL;
-  DupComm = MPI_COMM_NULL;
-
-  for (MPI_Comm& c : allocedComm)
-    MPI_Comm_free(&c);
-  allocedComm.clear();
-}

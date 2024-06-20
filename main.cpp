@@ -48,9 +48,6 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
 
-  std::vector<ColCommMPI> communicator(levels + 1);
-  std::vector<H2Matrix> A(levels + 1);
-
   //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
   uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
@@ -68,45 +65,21 @@ int main(int argc, char* argv[]) {
 
   CSR cellNear('N', cell, cell, theta);
   CSR cellFar('F', cell, cell, theta);
-  CSR cellNeighbor(cellNear, cellFar);
 
-  std::pair<double, double> timer(0, 0);
-  std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
-  std::vector<std::pair<long long, long long>> tree(ncells);
-  std::transform(cell.begin(), cell.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
-  
-  for (long long i = 0; i <= levels; i++) {
-    communicator[i] = ColCommMPI(&tree[0], &mapping[0], cellNeighbor.RowIndex.data(), cellNeighbor.ColIndex.data());
-    communicator[i].timer = &timer;
-  }
-
-  std::vector<WellSeparatedApproximation> wsa(levels + 1);
-  double h_construct_time = MPI_Wtime();
-
-  for (long long l = 1; l <= levels; l++)
-    wsa[l] = WellSeparatedApproximation(eval, epi, rank, communicator[l].oGlobal(), communicator[l].lenLocal(), &cell[0], cellFar, &body[0], wsa[l - 1]);
-  
-  h_construct_time = MPI_Wtime() - h_construct_time;
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-
-  A[levels] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[levels], communicator[levels], A[levels], communicator[levels], false);
-  for (long long l = levels - 1; l >= 0; l--)
-    A[l] = H2Matrix(eval, epi, &cell[0], cellNear, cellFar, &body[0], wsa[l], communicator[l], A[l + 1], communicator[l + 1], false);
+  H2MatrixSolver solver(eval, epi, rank, &cell[0], ncells, cellNear, cellFar, &body[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
-  h2_construct_comm_time = timer.first;
-  timer.first = 0;
+  h2_construct_comm_time = solver.timer.first;
+  solver.timer.first = 0;
 
-  long long llen = communicator[levels].lenLocal();
-  long long gbegin = communicator[levels].oGlobal();
-  long long body_local[2] = { cell[gbegin].Body[0], cell[gbegin + llen - 1].Body[1] };
+  long long body_local[2] = { solver.local_bodies.first, solver.local_bodies.second };
   long long lenX = body_local[1] - body_local[0];
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
-  H2MatrixSolver solver(&A[0], &communicator[0], levels);
   std::copy(&Xbody[0] + body_local[0], &Xbody[0] + body_local[1], &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -115,8 +88,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
-  matvec_comm_time = timer.first;
-  timer.first = 0;
+  matvec_comm_time = solver.timer.first;
+  solver.timer.first = 0;
 
   double cerr = 0.;
   double refmatvec_time = MPI_Wtime();
@@ -128,7 +101,6 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "H-Matrix Time: " << h_construct_time << std::endl;
     std::cout << "H^2-Matrix Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
@@ -142,16 +114,15 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
-  gmres_comm_time = timer.first;
-  timer.first = 0;
+  gmres_comm_time = solver.timer.first;
+  solver.timer.first = 0;
 
   if (mpi_rank == 0) {
     std::cout << "GMRES Residual: " << gmres_ret.first << ", Iters: " << gmres_ret.second << std::endl;
     std::cout << "GMRES Time: " << gmres_time << ", " << gmres_comm_time << std::endl;
   }
 
-  for (auto& c : communicator)
-    c.free_all_comms();
+  solver.free_all_comms();
   MPI_Finalize();
   return 0;
 }

@@ -16,7 +16,6 @@ protected:
   MPI_Comm MergeComm;
   MPI_Comm AllReduceComm;
   MPI_Comm DupComm;
-  std::vector<MPI_Comm> allocedComm;
 
   template<class T> inline void level_merge(T* data, long long len) const;
   template<class T> inline void level_sum(T* data, long long len) const;
@@ -26,8 +25,8 @@ protected:
 public:
   std::pair<double, double>* timer;
 
-  ColCommMPI() : Proc(-1), Boxes(), NeighborComm(), MergeComm(MPI_COMM_NULL), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL), allocedComm(), timer(nullptr) {};
-  ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], MPI_Comm world = MPI_COMM_WORLD);
+  ColCommMPI() : Proc(-1), Boxes(), NeighborComm(), MergeComm(MPI_COMM_NULL), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL), timer(nullptr) {};
+  ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world = MPI_COMM_WORLD);
   
   long long iLocal(long long iglobal) const;
   long long iGlobal(long long ilocal) const;
@@ -44,7 +43,5 @@ public:
   void neighbor_bcast(MatrixDataContainer<std::complex<double>>& dc) const;
 
   void record_mpi() const;
-
-  void free_all_comms();
 };
 
