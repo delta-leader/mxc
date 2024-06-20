@@ -56,6 +56,6 @@ public:
   void matVecLeafHorizontalPass(const ColCommMPI& comm);
   void resetX();
 
-  //void factorize(const ColCommMPI& comm);
+  void factorize(const ColCommMPI& comm);
 };
 

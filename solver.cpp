@@ -60,6 +60,11 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
   X_in = Y_leaf;
 }
 
+void H2MatrixSolver::factorizeM() {
+  for (long long l = levels; l >= 0; l--)
+    M[l].factorize(comm[l]);
+}
+
 void H2MatrixSolver::solvePrecondition(std::complex<double>[]) {
   // Default preconditioner = I
 }

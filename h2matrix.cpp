@@ -89,7 +89,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
   return rank;
 }
 
-long long lookupIJ(const std::vector<long long>& RowIndex, const std::vector<long long>& ColIndex, long long i, long long j) {
+inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vector<long long>& ColIndex, long long i, long long j) {
   if (i < 0 || RowIndex.size() <= (1ull + i))
     return -1;
   long long k = std::distance(ColIndex.begin(), std::find(ColIndex.begin() + RowIndex[i], ColIndex.begin() + RowIndex[i + 1], j));
@@ -209,7 +209,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
                 Matrix_t Cyx(dp, ny, nx, Stride_t(M, 1));
                 Eigen::MatrixXcd Ayx(ny, nx);
                 gen_matrix(eval, ny, nx, lowerA.S[y], lowerA.S[x], Ayx.data());
-                Cyx = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
+                Cyx.noalias() = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
               }
             }
           }
@@ -284,7 +284,7 @@ void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
       Vector_t x(X[i + ibegin], M);
       Vector_t xo(NX[i + ibegin], N);
       Matrix_t q(Q[i + ibegin], M, N, Stride_t(M, 1));
-      xo = q.transpose() * x;
+      xo.noalias() = q.transpose() * x;
     }
   }
 }
@@ -310,10 +310,10 @@ void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
 
         Vector_t xo(NX[j], N);
         Matrix_t c(C[ij], K, N, Stride_t(UpperStride[i], 1));
-        yo += c * xo;
+        yo.noalias() += c * xo;
       }
       Matrix_t q(Q[i + ibegin], M, K, Stride_t(M, 1));
-      y = q * yo;
+      y.noalias() = q * yo;
     }
   }
 }
@@ -336,7 +336,7 @@ void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
 
         Vector_t x(X[j], N);
         Matrix_t c(A[ij], M, N);
-        y += c * x;
+        y.noalias() += c * x;
       }
   }
 }
@@ -346,16 +346,35 @@ void H2Matrix::resetX() {
   std::fill(Y[0], Y[0] + Y.size(), std::complex<double>(0., 0.));
 }
 
-/*void H2Matrix::factorize(const ColCommMPI& comm) {
-  comm.level_merge(Adata.data(), Adata.size());
+void H2Matrix::factorize(const ColCommMPI& comm) {
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
 
-  long long lbegin = comm.oLocal();
-  long long llen = comm.lenLocal();
-  long long xlen = comm.lenNeighbors();
+  comm.level_merge(A[0], A.size());
+  for (long long i = 0; i < nodes; i++) {
+    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    long long M = Dims[i + ibegin];
+    long long Ms = DimsLr[i + ibegin];
+    long long Mr = M - Ms;
 
-  for (long long i = 0; i < llen; i++) {
-    long long diag = lookupIJ(ARows, ACols, i, i + lbegin);
+    Eigen::Map<Eigen::MatrixXcd> Ui(Q[i + ibegin], M, M);
+    Eigen::Map<Eigen::MatrixXcd> V(R[i + ibegin], M, M);
+    Eigen::Map<Eigen::MatrixXcd> Aii(A[diag], M, M);
+    V.noalias() = Ui.adjoint() * Aii.transpose();
+    Aii.noalias() = Ui.adjoint() * V.transpose();
+
+    Eigen::PartialPivLU<Eigen::MatrixXcd> plu(Aii.topLeftCorner(Mr, Mr));
+    Eigen::PermutationMatrix p = plu.permutationP();
+
+    /*Aii.topRightCorner(Mr, Ms).applyOnTheLeft(p);
+    Aii.topLeftCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(Aii.topRightCorner(Mr, Ms));
+    Aii.topLeftCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(Aii.topRightCorner(Mr, Ms));*/
+
+    Aii.topRightCorner(Mr, Ms) = plu.solve(Aii.topRightCorner(Mr, Ms));
+
+    Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> Ass(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
+    Ass.noalias() = Aii.bottomRightCorner(Ms, Ms) - Aii.bottomLeftCorner(Ms, Mr) * Aii.topRightCorner(Mr, Ms);
 
   }
-}*/
+}
 

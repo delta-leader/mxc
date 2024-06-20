@@ -99,6 +99,15 @@ int main(int argc, char* argv[]) {
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
   }
 
+  MPI_Barrier(MPI_COMM_WORLD);
+  double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
+  solver.factorizeM();
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  h2_factor_time = MPI_Wtime() - h2_factor_time;
+  h2_factor_comm_time = solver.timer.first;
+  solver.timer.first = 0;
+
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -111,6 +120,7 @@ int main(int argc, char* argv[]) {
   solver.timer.first = 0;
 
   if (mpi_rank == 0) {
+    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     std::cout << "GMRES Residual: " << gmres_ret.first << ", Iters: " << gmres_ret.second << std::endl;
     std::cout << "GMRES Time: " << gmres_time << ", " << gmres_comm_time << std::endl;
   }

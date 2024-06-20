@@ -24,9 +24,5 @@ target_include_directories(main.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} $<TARGET
 target_compile_definitions(main.app PRIVATE MKL_Complex16=std::complex<double> EIGEN_USE_MKL_ALL)
 target_compile_options(main.app PRIVATE $<TARGET_PROPERTY:MKL::MKL,INTERFACE_COMPILE_OPTIONS>)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(main.app PRIVATE
-    "-Wall" "-Wpedantic" "-Wextra" "-fexceptions"
-    "$<$<CONFIG:RELEASE>:-O3>"
-    "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>"
-    )
+    target_compile_options(main.app PRIVATE "-Wall" "-Wpedantic" "-Wextra" "-fexceptions" "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>")
 endif()
