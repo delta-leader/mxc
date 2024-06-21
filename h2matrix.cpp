@@ -402,10 +402,11 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
     Eigen::Map<Eigen::VectorXi> ipiv(Ipivots.data() + ipiv_offsets[i], Mr);
     Eigen::PermutationMatrix<Eigen::Dynamic> p(ipiv);
     y.noalias() = q.adjoint() * x;
-    y.bottomRows(Mr).applyOnTheLeft(p);
-    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
-    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
     x = y;
+
+    x.bottomRows(Mr).applyOnTheLeft(p);
+    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(x.bottomRows(Mr));
+    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(x.bottomRows(Mr));
   }
 
   comm.neighbor_bcast(X);
@@ -445,11 +446,12 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
 
     if (0 < Ms) {
       Vector_t xo(NX[i + ibegin], Ms);
-      y.topRows(Ms) = xo;
+      x.topRows(Ms) = xo;
     }
+    x.bottomRows(Mr) -= Aii.bottomLeftCorner(Mr, Ms) * x.topRows(Ms);
 
-    y.bottomRows(Mr) -= Aii.bottomLeftCorner(Mr, Ms) * y.topRows(Ms);
-    x.noalias() = q.conjugate() * y;
+    y.noalias() = q.conjugate() * x;
+    x = y;
   }
 
   comm.neighbor_bcast(X);

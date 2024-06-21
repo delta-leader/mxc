@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
-  std::copy(&Xbody[0] + solver.local_bodies.first, &Xbody[0] + solver.local_bodies.second, &X1[0]);
+  std::copy(&Xbody[solver.local_bodies.first], &Xbody[solver.local_bodies.second], &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
@@ -119,7 +119,7 @@ int main(int argc, char* argv[]) {
   solver.timer.first = 0;
   double serr = 0.;
 
-  solveRelErr(&serr, &X1[0], &Xbody[0] + solver.local_bodies.first, lenX);
+  solveRelErr(&serr, &X1[0], &Xbody[solver.local_bodies.first], lenX);
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {

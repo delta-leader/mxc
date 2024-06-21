@@ -54,7 +54,7 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
 
   for (long long l = levels; l >= 0; l--)
     A[l].matVecUpwardPass(comm[l]);
-  for (long long l = 1; l <= levels; l++)
+  for (long long l = 0; l <= levels; l++)
     A[l].matVecHorizontalandDownwardPass(comm[l]);
   A[levels].matVecLeafHorizontalPass(comm[levels]);
   X_in = Y_leaf;
@@ -80,7 +80,7 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
 
   for (long long l = levels; l >= 0; l--)
     M[l].forwardSubstitute(comm[l]);
-  for (long long l = 1; l <= levels; l++)
+  for (long long l = 0; l <= levels; l++)
     M[l].backwardSubstitute(comm[l]);
   X_in = X_leaf;
 }
