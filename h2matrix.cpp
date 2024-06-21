@@ -270,8 +270,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
 
 void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
-  typedef Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -284,7 +283,7 @@ void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
     if (0 < N) {
       Vector_t x(X[i + ibegin], M);
       Vector_t xo(NX[i + ibegin], N);
-      Matrix_t q(Q[i + ibegin], M, N, Stride_t(M, 1));
+      Matrix_t q(Q[i + ibegin], M, N);
       xo.noalias() = q.transpose() * x;
     }
   }
@@ -366,22 +365,93 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     V.noalias() = Ui.adjoint() * Aii.transpose();
     Aii.noalias() = Ui.adjoint() * V.transpose();
 
-    Eigen::PartialPivLU<Eigen::MatrixXcd> plu = Aii.topLeftCorner(Mr, Mr).lu();
+    Eigen::PartialPivLU<Eigen::MatrixXcd> plu = Aii.bottomRightCorner(Mr, Mr).lu();
     Eigen::Map<Eigen::VectorXi> ipiv(Ipivots.data() + ipiv_offsets[i], Mr);
 
-    Aii.topRightCorner(Mr, Ms) = plu.solve(Aii.topRightCorner(Mr, Ms));
-    Aii.topLeftCorner(Mr, Mr) = plu.matrixLU();
+    Aii.bottomLeftCorner(Mr, Ms) = plu.solve(Aii.bottomLeftCorner(Mr, Ms));
+    Aii.bottomRightCorner(Mr, Mr) = plu.matrixLU();
     ipiv = plu.permutationP().indices();
 
     Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
-    An.noalias() = Aii.bottomRightCorner(Ms, Ms) - Aii.bottomLeftCorner(Ms, Mr) * Aii.topRightCorner(Mr, Ms);
+    An.noalias() = Aii.topLeftCorner(Ms, Ms) - Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
 
   }
 }
 
+void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
+  std::vector<long long> ipiv_offsets(nodes);
+  std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
 
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
-    /*Aii.topRightCorner(Mr, Ms) = plu.permutationP() * Aii.topRightCorner(Mr, Ms);
-    plu.matrixLU().triangularView<Eigen::UnitLower>().solveInPlace(Aii.topRightCorner(Mr, Ms));
-    plu.matrixLU().triangularView<Eigen::Upper>().solveInPlace(Aii.topRightCorner(Mr, Ms));*/
+  comm.level_merge(X[0], X.size());
+  for (long long i = 0; i < nodes; i++) {
+    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    long long M = Dims[i + ibegin];
+    long long Ms = DimsLr[i + ibegin];
+    long long Mr = M - Ms;
+
+    Vector_t x(X[i + ibegin], M);
+    Vector_t y(Y[i + ibegin], M);
+    Matrix_t q(Q[i + ibegin], M, M);
+    Matrix_t Aii(A[diag], M, M);
+
+    Eigen::Map<Eigen::VectorXi> ipiv(Ipivots.data() + ipiv_offsets[i], Mr);
+    Eigen::PermutationMatrix<Eigen::Dynamic> p(ipiv);
+    y.noalias() = q.adjoint() * x;
+    y.bottomRows(Mr).applyOnTheLeft(p);
+    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
+    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
+    x = y;
+  }
+
+  comm.neighbor_bcast(X);
+  for (long long i = 0; i < nodes; i++) {
+    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    long long M = Dims[i + ibegin];
+    long long Ms = DimsLr[i + ibegin];
+    long long Mr = M - Ms;
+
+    Vector_t x(X[i + ibegin], M);
+    Matrix_t Aii(A[diag], M, M);
+
+    if (0 < Ms) {
+      Vector_t xo(NX[i + ibegin], Ms);
+      xo = x.topRows(Ms) - Aii.topRightCorner(Ms, Mr) * x.bottomRows(Mr);
+    }
+  }
+}
+
+void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
+
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+
+  for (long long i = 0; i < nodes; i++) {
+    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    long long M = Dims[i + ibegin];
+    long long Ms = DimsLr[i + ibegin];
+    long long Mr = M - Ms;
+
+    Vector_t x(X[i + ibegin], M);
+    Vector_t y(Y[i + ibegin], M);
+    Matrix_t q(Q[i + ibegin], M, M);
+    Matrix_t Aii(A[diag], M, M);
+
+    if (0 < Ms) {
+      Vector_t xo(NX[i + ibegin], Ms);
+      y.topRows(Ms) = xo;
+    }
+
+    y.bottomRows(Mr) -= Aii.bottomLeftCorner(Mr, Ms) * y.topRows(Ms);
+    x.noalias() = q.conjugate() * y;
+  }
+
+  comm.neighbor_bcast(X);
+}
 

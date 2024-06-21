@@ -65,8 +65,24 @@ void H2MatrixSolver::factorizeM() {
     M[l].factorize(comm[l]);
 }
 
-void H2MatrixSolver::solvePrecondition(std::complex<double>[]) {
-  // Default preconditioner = I
+void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  long long lbegin = comm[levels].oLocal();
+  long long llen = comm[levels].lenLocal();
+  long long lenX = std::reduce(M[levels].Dims.begin() + lbegin, M[levels].Dims.begin() + (lbegin + llen));
+  
+  Vector_t X_in(X, lenX);
+  Vector_t X_leaf(M[levels].X[lbegin], lenX);
+
+  for (long long l = levels; l >= 0; l--)
+    M[l].resetX();
+  X_leaf = X_in;
+
+  for (long long l = levels; l >= 0; l--)
+    M[l].forwardSubstitute(comm[l]);
+  for (long long l = 1; l <= levels; l++)
+    M[l].backwardSubstitute(comm[l]);
+  X_in = X_leaf;
 }
 
 std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {

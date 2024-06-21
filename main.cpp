@@ -108,7 +108,25 @@ int main(int argc, char* argv[]) {
   h2_factor_comm_time = solver.timer.first;
   solver.timer.first = 0;
 
+  std::copy(X2.begin(), X2.end(), X1.begin());
+  MPI_Barrier(MPI_COMM_WORLD);
+  double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
+  solver.solvePrecondition(&X1[0]);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  h2_sub_time = MPI_Wtime() - h2_sub_time;
+  h2_sub_comm_time = solver.timer.first;
+  solver.timer.first = 0;
+  double serr = 0.;
+
+  solveRelErr(&serr, &X1[0], &Xbody[0] + solver.local_bodies.first, lenX);
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+
+  if (mpi_rank == 0) {
+    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
+    std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
+    std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
+  }
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
@@ -120,7 +138,6 @@ int main(int argc, char* argv[]) {
   solver.timer.first = 0;
 
   if (mpi_rank == 0) {
-    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     std::cout << "GMRES Residual: " << gmres_ret.first << ", Iters: " << gmres_ret.second << std::endl;
     std::cout << "GMRES Time: " << gmres_time << ", " << gmres_comm_time << std::endl;
   }

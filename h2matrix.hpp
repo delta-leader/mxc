@@ -58,5 +58,7 @@ public:
   void resetX();
 
   void factorize(const ColCommMPI& comm);
+  void forwardSubstitute(const ColCommMPI& comm);
+  void backwardSubstitute(const ColCommMPI& comm);
 };
 
