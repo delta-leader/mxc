@@ -138,11 +138,12 @@ template<class T> inline MPI_Datatype get_mpi_datatype() {
 }
 
 template<class T> inline void ColCommMPI::level_merge(T* data, long long len) const {
-  if (MergeComm != MPI_COMM_NULL) {
-    record_mpi();
+  record_mpi();
+  if (MergeComm != MPI_COMM_NULL)
     MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, MergeComm);
-    record_mpi();
-  }
+  if (DupComm != MPI_COMM_NULL)
+    MPI_Bcast(data, len, get_mpi_datatype<T>(), 0, DupComm);
+  record_mpi();
 }
 
 template<class T> inline void ColCommMPI::level_sum(T* data, long long len) const {
