@@ -1,11 +1,11 @@
 
 #include <kernel.hpp>
 
-#include <mkl.h>
 #include <algorithm>
 #include <numeric>
 #include <vector>
 #include <array>
+#include <Eigen/Dense>
 
 void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
@@ -23,86 +23,77 @@ void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const doub
   });
 }
 
-long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], std::complex<double> U[]) {
-  std::vector<std::complex<double>> Vh(K * N), L(K * K, std::complex<double>(0., 0.)), Unrm(K), Vnrm(K);
-  std::vector<std::complex<double>> Acol(M), Arow(N);
-  std::vector<double> Rcol(M), Rrow(N);
-  std::vector<long long> jpiv(K);
+long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long piv[], std::complex<double> U[]) {
+  Eigen::MatrixXcd W(M, K), V(K, N), L(K, K);
+  Eigen::VectorXcd Acol(M), Arow(N);
+  Eigen::VectorXi ipiv(K), jpiv(K);
+  long long x = 0, y = 0;
 
-  gen_matrix(eval, M, 1, bi, bj, &Acol[0]);
-  std::transform(Acol.begin(), Acol.end(), Rcol.begin(), [](std::complex<double> c) { return std::abs(c); });
-  long long x = 0;
-  long long y = std::distance(Rcol.begin(), std::max_element(Rcol.begin(), Rcol.end()));
-  if (std::abs(Acol[y]) < std::numeric_limits<double>::min())
-    return 0;
+  gen_matrix(eval, M, 1, bi, bj, Acol.data());
+  Acol.cwiseAbs().maxCoeff(&y);
+  Acol *= 1. / Acol(y);
+  gen_matrix(eval, 1, N, &bi[y * 3], bj, Arow.data());
   
-  std::complex<double> div = 1. / Acol[y];
-  std::transform(Acol.begin(), Acol.end(), Acol.begin(), [=](std::complex<double> c) { return c * div; });
+  W.leftCols(1) = Acol;
+  V.topRows(1) = Arow.transpose();
+  ipiv(0) = y;
+  jpiv(0) = x;
 
-  gen_matrix(eval, N, 1, bj, &bi[y * 3], &Arow[0]);
-  std::copy(Acol.begin(), Acol.end(), &U[0]);
-  std::copy(Arow.begin(), Arow.end(), &Vh[0]);
-  ipiv[0] = y;
-  jpiv[0] = 0;
-
-  std::transform(Arow.begin(), Arow.end(), Rrow.begin(), [](std::complex<double> c) { return std::abs(c); });
-  std::for_each(&jpiv[0], &jpiv[1], [&](long long piv) { Rrow[piv] = 0.; });
-  x = std::distance(Rrow.begin(), std::max_element(Rrow.begin(), Rrow.end()));
-  
-  double nrm_z = cblas_dznrm2(M, &Acol[0], 1) * cblas_dznrm2(N, &Arow[0], 1);
+  Arow(jpiv.head(1)) = Eigen::VectorXcd::Zero(1);
+  Arow.cwiseAbs().maxCoeff(&x);
+  double nrm_z = Arow.norm() * Acol.norm();
   double nrm_k = nrm_z;
 
-  std::complex<double> zero(0., 0.), one(1., 0.), minus_one(-1., 0.);
   long long iters = 1;
   while (iters < K && std::numeric_limits<double>::min() < nrm_z && epi * nrm_z <= nrm_k) {
     gen_matrix(eval, M, 1, bi, &bj[x * 3], &Acol[0]);
-    cblas_zgemv(CblasColMajor, CblasNoTrans, M, iters, &minus_one, &U[0], M, &Vh[x], N, &one, &Acol[0], 1);
+    Acol -= W.leftCols(iters) * V.block(0, x, iters, 1);
+    Acol(ipiv.head(iters)) = Eigen::VectorXcd::Zero(iters);
+    Acol.cwiseAbs().maxCoeff(&y);
+    Acol *= 1. / Acol(y);
 
-    std::transform(Acol.begin(), Acol.end(), Rcol.begin(), [](std::complex<double> c) { return std::abs(c); });
-    std::for_each(&ipiv[0], &ipiv[iters], [&](long long piv) { Rcol[piv] = 0.; });
-    y = std::distance(Rcol.begin(), std::max_element(Rcol.begin(), Rcol.end()));
+    gen_matrix(eval, 1, N, &bi[y * 3], bj, Arow.data());
+    Arow -= (W.block(y, 0, 1, iters) * V.topRows(iters)).transpose();
 
-    std::complex<double> div = 1. / Acol[y];
-    std::transform(Acol.begin(), Acol.end(), Acol.begin(), [=](std::complex<double> c) { return c * div; });
-    gen_matrix(eval, N, 1, bj, &bi[y * 3], &Arow[0]);
-    cblas_zgemv(CblasColMajor, CblasNoTrans, N, iters, &minus_one, &Vh[0], N, &U[y], M, &one, &Arow[0], 1);
+    W.middleCols(iters, 1) = Acol;
+    V.middleRows(iters, 1) = Arow.transpose();
+    L.block(iters, 0, 1, iters) = W.block(y, 0, 1, iters);
+    ipiv(iters) = y;
+    jpiv(iters) = x;
 
-    std::copy(Acol.begin(), Acol.end(), &U[iters * M]);
-    std::copy(Arow.begin(), Arow.end(), &Vh[iters * N]);
-    cblas_zcopy(iters, &U[y], M, &L[iters], K);
-    ipiv[iters] = y;
-    jpiv[iters] = x;
-
-    cblas_zgemv(CblasColMajor, CblasConjTrans, M, iters, &one, &U[0], M, &Acol[0], 1, &zero, &Unrm[0], 1);
-    cblas_zgemv(CblasColMajor, CblasConjTrans, N, iters, &one, &Vh[0], N, &Arow[0], 1, &zero, &Vnrm[0], 1);
-    std::complex<double> Z_k = std::transform_reduce(&Unrm[0], &Unrm[iters], &Vnrm[0], std::complex<double>(0., 0.), 
-      std::plus<std::complex<double>>(), std::multiplies<std::complex<double>>());
-    nrm_k = cblas_dznrm2(M, &Acol[0], 1) * cblas_dznrm2(N, &Arow[0], 1);
+    Eigen::VectorXcd Unrm = W.leftCols(iters).adjoint() * Acol;
+    Eigen::VectorXcd Vnrm = V.topRows(iters).conjugate() * Arow;
+    std::complex<double> Z_k = Unrm.transpose() * Vnrm;
+    nrm_k = Arow.norm() * Acol.norm();
     nrm_z = std::sqrt(nrm_z * nrm_z + 2 * std::abs(Z_k) + nrm_k * nrm_k);
     iters++;
 
-    std::transform(Arow.begin(), Arow.end(), Rrow.begin(), [](std::complex<double> c) { return std::abs(c); });
-    std::for_each(jpiv.begin(), jpiv.begin() + iters, [&](long long piv) { Rrow[piv] = 0.; });
-    x = std::distance(Rrow.begin(), std::max_element(Rrow.begin(), Rrow.end()));
+    Arow(jpiv.head(iters)) = Eigen::VectorXcd::Zero(iters);
+    Arow.cwiseAbs().maxCoeff(&x);
   }
 
-  cblas_ztrsm(CblasColMajor, CblasRight, CblasLower, CblasNoTrans, CblasUnit, M, iters, &one, &L[0], K, &U[0], M);
+  if (U)
+    Eigen::Map<Eigen::MatrixXcd>(U, M, K) = L.triangularView<Eigen::Lower>().solve<Eigen::OnTheRight>(W);
+  if (piv)
+    std::transform(ipiv.data(), ipiv.data() + K, piv, [](int p) { return (long long)p; });
   return iters;
 }
 
 void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]) {
   constexpr long long size = 256;
-  std::vector<std::complex<double>> A(size * size);
-  std::complex<double> one(1., 0.);
+  Eigen::Map<const Eigen::VectorXcd> x(X, N);
+  Eigen::Map<Eigen::VectorXcd> b(B, M);
   
   for (long long i = 0; i < M; i += size) {
     long long m = std::min(M - i, size);
     const double* bi = &ibodies[i * 3];
+    Eigen::MatrixXcd A(m, size);
+
     for (long long j = 0; j < N; j += size) {
       const double* bj = &jbodies[j * 3];
       long long n = std::min(N - j, size);
-      gen_matrix(eval, m, n, bi, bj, &A[0]);
-      cblas_zgemv(CblasColMajor, CblasNoTrans, m, n, &one, &A[0], m, &X[j], 1, &one, &B[i], 1);
+      gen_matrix(eval, m, n, bi, bj, A.data());
+      b.segment(i, m) += A.leftCols(n) * x.segment(j, n);
     }
   }
 }

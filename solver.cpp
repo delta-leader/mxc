@@ -1,7 +1,6 @@
 
 #include <solver.hpp>
 
-#include <mkl.h>
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>

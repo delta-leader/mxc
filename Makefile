@@ -1,12 +1,14 @@
 
+EIGEN_DIR	= /mnt/nfs/packages/x86_64/eigen/eigen-3.4.0
+
 CXX		= mpicxx -std=c++17
-CFLAGS	= -O3 -m64 -Wall -Wextra -fopenmp -I. -I"${MKLROOT}/include" -D"MKL_ILP64" -D"MKL_Complex16=std::complex<double>"
-LDFLAGS	= -L${MKLROOT}/lib -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
+CFLAGS	= -O3 -m64 -Wall -Wextra -Wpedantic -fexceptions -fopenmp -I. -I"${EIGEN_DIR}/include/eigen3"
+LDFLAGS	= -lpthread -lm -ldl
 
 OBJDIR	= ./obj
 
-HEADER	= build_tree.hpp comm.hpp h2matrix.hpp kernel.hpp
-SRCS	= build_tree.cpp comm.cpp h2matrix.cpp kernel.cpp main.cpp
+HEADER	= build_tree.hpp comm-mpi.hpp h2matrix.hpp kernel.hpp solver.hpp
+SRCS	= build_tree.cpp comm-mpi.cpp h2matrix.cpp kernel.cpp solver.cpp main.cpp
 
 OBJS 	= $(addprefix $(OBJDIR)/,$(patsubst %.cpp,%.o,$(SRCS)))
 

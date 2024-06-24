@@ -3,7 +3,6 @@
 #include <comm-mpi.hpp>
 #include <kernel.hpp>
 
-#include <mkl.h>
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/LU>
