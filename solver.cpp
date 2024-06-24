@@ -85,7 +85,7 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   X_in = X_leaf;
 }
 
-std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
+void H2MatrixSolver::solveGMRES(double tol, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
   using Eigen::VectorXcd, Eigen::MatrixXcd;
 
   long long lbegin = comm[levels].oLocal();
@@ -103,8 +103,9 @@ std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex
   double normb = std::sqrt(normr.real());
   if (normb == 0.)
     normb = 1.;
+  resid = std::vector<double>(outer_iters + 1, 0.);
 
-  for (long long j = 0; j < outer_iters; j++) {
+  for (iters = 0; iters < outer_iters; iters++) {
     R = -X;
     matVecMul(R.data());
     R += B;
@@ -113,9 +114,9 @@ std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex
     normr = R.adjoint() * R;
     comm[levels].level_sum(&normr, 1);
     double beta = std::sqrt(normr.real());
-    double resid = beta / normb;
-    if (resid < tol)
-      return std::make_pair(resid, j);
+    resid[iters] = beta / normb;
+    if (resid[iters] < tol)
+      return;
 
     MatrixXcd H = MatrixXcd::Zero(ld, inner_iters);
     MatrixXcd v = MatrixXcd::Zero(N, ld);
@@ -154,8 +155,7 @@ std::pair<double, long long> H2MatrixSolver::solveGMRES(double tol, std::complex
   normr = R.adjoint() * R;
   comm[levels].level_sum(&normr, 1);
   double beta = std::sqrt(normr.real());
-  double resid = beta / normb;
-  return std::make_pair(resid, outer_iters);
+  resid[outer_iters] = beta / normb;
 }
 
 void H2MatrixSolver::free_all_comms() {

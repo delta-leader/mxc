@@ -9,7 +9,6 @@
 #include <Eigen/LU>
 #include <algorithm>
 #include <cmath>
-#include <iostream>
 
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
   lbegin(lbegin), lend(lbegin + len), M(len) {
@@ -397,8 +396,8 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
         Matrix_t Uj(Q[j], N, N);
         Matrix_t Aij(A[ij], M, N);
 
-        Eigen::MatrixXcd b = Uj.adjoint() * Aij.transpose();
-        Aij.noalias() = V * b.transpose();
+        b.topRows(N) = Uj.adjoint() * Aij.transpose();
+        Aij.noalias() = V * b.topRows(N).transpose();
 
         if (0 < Ms && 0 < Ns) {
           Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
@@ -418,7 +417,6 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
   comm.level_merge(X[0], X.size());
-  comm.neighbor_bcast(X);
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
@@ -429,10 +427,9 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
     Vector_t y(Y[i + ibegin], M);
     Matrix_t q(Q[i + ibegin], M, M);
     Matrix_t Aii(A[diag], M, M);
-
     Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
+    
     y.noalias() = q.adjoint() * x;
-
     y.bottomRows(Mr).applyOnTheLeft(p);
     Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
     Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
@@ -482,7 +479,6 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
     Vector_t y(Y[i + ibegin], M);
     x = y;
   }
-  comm.neighbor_bcast(X);
 }
 
 void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
