@@ -9,22 +9,22 @@ class H2MatrixSolver {
 private:
   long long levels;
   std::vector<H2Matrix> A;
-  std::vector<H2Matrix> M;
   std::vector<ColCommMPI> comm;
   std::vector<MPI_Comm> allocedComm;
 
 public:
-  std::pair<double, double> timer;
   std::pair<long long, long long> local_bodies;
   std::vector<double> resid;
   long long iters;
   
-  H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, const Cell cells[], long long ncells, const CSR& Near, const CSR& Far, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver();
+  H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, bool fix_rank = false, MPI_Comm world = MPI_COMM_WORLD);
 
   void matVecMul(std::complex<double> X[]);
   void factorizeM();
   void solvePrecondition(std::complex<double> X[]);
-  void solveGMRES(double tol, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
+  void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
+  static double solveRelErr(long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world = MPI_COMM_WORLD);
 };

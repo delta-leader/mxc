@@ -46,7 +46,7 @@ void getNextLevelMapping(std::pair<long long, long long> Mapping[], const std::p
   std::copy(MappingNext.begin(), MappingNext.end(), Mapping);
 }
 
-ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world) : timer(nullptr) {
+ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
@@ -205,12 +205,20 @@ void ColCommMPI::neighbor_bcast(MatrixDataContainer<std::complex<double>>& dc) c
   neighbor_bcast<std::complex<double>>(dc);
 }
 
-void ColCommMPI::record_mpi() const {
-  if (timer && timer->second == 0.)
-    timer->second = MPI_Wtime();
-  else if (timer) {
-    timer->first = timer->first + (MPI_Wtime() - timer->second);
-    timer->second = 0.;
+std::pair<double, double> timer = std::make_pair(0., 0.);
+
+double ColCommMPI::get_comm_time() {
+  double lapse = timer.first;
+  timer = std::make_pair(0., 0.);
+  return lapse;
+}
+
+void ColCommMPI::record_mpi() {
+  if (timer.second == 0.)
+    timer.second = MPI_Wtime();
+  else {
+    timer.first = timer.first + (MPI_Wtime() - timer.second);
+    timer.second = 0.;
   }
 }
 

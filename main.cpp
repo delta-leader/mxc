@@ -1,21 +1,7 @@
 
 #include <solver.hpp>
-
-#include <random>
-#include <algorithm>
-#include <cmath>
-#include <iostream>
-#include <fstream>
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
-void uniform_unit_cube(double* bodies, long long nbodies, double diameter, long long dim);
-void uniform_unit_cube_rnd(double* bodies, long long nbodies, double diameter, long long dim, unsigned int seed);
-void mesh_sphere(double* bodies, long long nbodies, double r);
-void solveRelErr(double* err_out, const std::complex<double>* X, const std::complex<double>* ref, long long lenX);
-void read_sorted_bodies(long long* nbodies, long long lbuckets, double* bodies, long long buckets[], const char* fname);
+#include <test_funcs.hpp>
+#include <string>
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
@@ -23,8 +9,9 @@ int main(int argc, char* argv[]) {
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
   long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 256;
-  double epi = argc > 4 ? std::atof(argv[4]) : 1e-10;
-  long long rank = argc > 5 ? std::atoll(argv[5]) : 100;
+  long long rank = argc > 4 ? std::atoll(argv[4]) : 100;
+  double epi = argc > 5 ? std::atof(argv[5]) : 1e-10;
+  std::string mode = argc > 6 ? std::string(argv[6]) : "h2";
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   long long levels = (long long)std::log2((double)Nbody / leaf_size);
@@ -55,74 +42,78 @@ int main(int argc, char* argv[]) {
   ncells = Nleaf + 1;
   levels = 1;*/
 
-  CSR cellNear('N', cell, cell, theta);
-  CSR cellFar('F', cell, cell, theta);
-
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-  H2MatrixSolver solver(eval, epi, rank, &cell[0], ncells, cellNear, cellFar, &body[0], levels);
+  H2MatrixSolver matA(eval, epi, rank, cell, theta, &body[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
-  h2_construct_comm_time = solver.timer.first;
-  solver.timer.first = 0;
+  h2_construct_comm_time = ColCommMPI::get_comm_time();
 
-  long long lenX = solver.local_bodies.second - solver.local_bodies.first;
+  long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
-  std::copy(&Xbody[solver.local_bodies.first], &Xbody[solver.local_bodies.second], &X1[0]);
+  std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  solver.matVecMul(&X1[0]);
+  matA.matVecMul(&X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
-  matvec_comm_time = solver.timer.first;
-  solver.timer.first = 0;
+  matvec_comm_time = ColCommMPI::get_comm_time();
 
-  double cerr = 0.;
   double refmatvec_time = MPI_Wtime();
 
-  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[solver.local_bodies.first * 3], &body[0]);
+  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[matA.local_bodies.first * 3], &body[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
-
-  solveRelErr(&cerr, &X1[0], &X2[0], lenX);
+  double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "H^2-Matrix Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
-    std::cout << "Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
+    std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
+    std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
   }
 
+  std::copy(X2.begin(), X2.end(), X1.begin());
+  MPI_Barrier(MPI_COMM_WORLD);
+  double m_construct_time = MPI_Wtime(), m_construct_comm_time;
+  H2MatrixSolver matM;
+  if (mode.compare("h2") == 0)
+    matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true);
+  else if (mode.compare("hss") == 0)
+    matM = H2MatrixSolver(eval, epi, rank, cell, 0., &body[0], levels, true);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  m_construct_time = MPI_Wtime() - m_construct_time;
+  m_construct_comm_time = ColCommMPI::get_comm_time();
+
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
-  solver.factorizeM();
+
+  matM.factorizeM();
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
-  h2_factor_comm_time = solver.timer.first;
-  solver.timer.first = 0;
+  h2_factor_comm_time = ColCommMPI::get_comm_time();
 
-  std::copy(X2.begin(), X2.end(), X1.begin());
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
-  solver.solvePrecondition(&X1[0]);
+
+  matM.solvePrecondition(&X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
-  h2_sub_comm_time = solver.timer.first;
-  solver.timer.first = 0;
-  double serr = 0.;
-
-  solveRelErr(&serr, &X1[0], &Xbody[solver.local_bodies.first], lenX);
+  h2_sub_comm_time = ColCommMPI::get_comm_time();
+  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
+    std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
     std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
@@ -130,110 +121,20 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  solver.solveGMRES(epi, &X1[0], &X2[0], 50, 40);
+  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
-  gmres_comm_time = solver.timer.first;
-  solver.timer.first = 0;
+  gmres_comm_time = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
-    std::cout << "GMRES Residual: " << solver.resid[solver.iters] << ", Iters: " << solver.iters << std::endl;
-    std::cout << "GMRES Time: " << gmres_time << ", " << gmres_comm_time << std::endl;
+    std::cout << "GMRES Residual: " << matA.resid[matA.iters] << ", Iters: " << matA.iters << std::endl;
+    std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
   }
 
-  solver.free_all_comms();
+  matA.free_all_comms();
+  matM.free_all_comms();
   MPI_Finalize();
   return 0;
 }
 
-void uniform_unit_cube(double* bodies, long long nbodies, double diameter, long long dim) {
-  long long side = ceil(pow(nbodies, 1. / dim));
-  long long lens[3] = { dim > 0 ? side : 1, dim > 1 ? side : 1, dim > 2 ? side : 1 };
-  double step = diameter / side;
-
-  for (long long i = 0; i < lens[0]; ++i)
-    for (long long j = 0; j < lens[1]; ++j)
-       for (long long k = 0; k < lens[2]; ++k) {
-    long long x = k + lens[2] * (j + lens[1] * i);
-    if (x < nbodies) {
-      bodies[x * 3] = i * step;
-      bodies[x * 3 + 1] = j * step;
-      bodies[x * 3 + 2] = k * step;
-    }
-  }
-}
-
-void uniform_unit_cube_rnd(double* bodies, long long nbodies, double diameter, long long dim, unsigned int seed) {
-  std::mt19937 gen(seed);
-  std::uniform_real_distribution uniform_dist(0., diameter);
-
-  std::array<double, 3>* b3 = reinterpret_cast<std::array<double, 3>*>(bodies);
-  std::array<double, 3>* b3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[3 * nbodies]);
-  std::for_each(b3, b3_end, [&](std::array<double, 3>& body) {
-    for (int i = 0; i < 3; i++)
-      body[i] = i < dim ? uniform_dist(gen) : 0.;
-  });
-}
-
-void mesh_sphere(double* bodies, long long nbodies, double r) {
-  const double phi = M_PI * (3. - std::sqrt(5.));  // golden angle in radians
-  const double d = r + r;
-  const double r2 = r * r;
-
-  for (long long i = 0; i < nbodies; ++i) {
-    const double y = r - ((double)i / (double)(nbodies - 1)) * d;  // y goes from r to -r
-
-    // Note: setting constant radius = 1 will produce a cylindrical shape
-    const double radius = std::sqrt(r2 - y * y);  // radius at y
-    const double theta = (double)i * phi;
-
-    const double x = radius * std::cos(theta);
-    const double z = radius * std::sin(theta);
-    bodies[i * 3] = x;
-    bodies[i * 3 + 1] = y;
-    bodies[i * 3 + 2] = z;
-  }
-}
-
-void solveRelErr(double* err_out, const std::complex<double>* X, const std::complex<double>* ref, long long lenX) {
-  double err[2] = { 0., 0. };
-  for (long long i = 0; i < lenX; i++) {
-    std::complex<double> diff = X[i] - ref[i];
-    err[0] = err[0] + (diff.real() * diff.real());
-    err[1] = err[1] + (ref[i].real() * ref[i].real());
-  }
-  MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  *err_out = std::sqrt(err[0] / err[1]);
-}
-
-void read_sorted_bodies(long long* nbodies, long long lbuckets, double* bodies, long long buckets[], const char* fname) {
-  std::ifstream file(fname);
-
-  long long curr = 1, cbegin = 0, iter = 0, len = *nbodies;
-  while (iter < len && !file.eof()) {
-    long long b = 0;
-    double x = 0., y = 0., z = 0.;
-    file >> x >> y >> z >> b;
-
-    if (lbuckets < b)
-      len = iter;
-    else if (!file.eof()) {
-      bodies[iter * 3] = x;
-      bodies[iter * 3 + 1] = y;
-      bodies[iter * 3 + 2] = z;
-      while (curr < b && curr <= lbuckets) {
-        buckets[curr - 1] = iter - cbegin;
-        cbegin = iter;
-        curr++;
-      }
-      iter++;
-    }
-  }
-  while (curr <= lbuckets) {
-    buckets[curr - 1] = iter - cbegin;
-    cbegin = iter;
-    curr++;
-  }
-  *nbodies = iter;
-}
