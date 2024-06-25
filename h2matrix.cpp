@@ -22,16 +22,18 @@ WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eva
       long long x = Far.ColIndex[yx];
       long long m = cells[y].Body[1] - cells[y].Body[0];
       long long n = cells[x].Body[1] - cells[x].Body[0];
-      const double* Xbodies = &bodies[3 * cells[x].Body[0]];
-      const double* Ybodies = &bodies[3 * cells[y].Body[0]];
+      const double* xbodies = &bodies[3 * cells[x].Body[0]];
+      const double* ybodies = &bodies[3 * cells[y].Body[0]];
 
       long long k = std::min(rank, std::min(m, n));
       std::vector<long long> ipiv(k);
-      std::vector<std::complex<double>> U(n * k);
-      long long iters = interpolative_decomp_aca(epi, eval, n, m, k, Xbodies, Ybodies, &ipiv[0], &U[0]);
-      std::vector<double> Fbodies(3 * iters);
-      for (long long i = 0; i < iters; i++)
-        std::copy(&Xbodies[3 * ipiv[i]], &Xbodies[3 * (ipiv[i] + 1)], &Fbodies[3 * i]);
+      long long iters = adaptive_cross_approximation(epi, eval, m, n, k, ybodies, xbodies, nullptr, &ipiv[0], nullptr, nullptr);
+      ipiv.resize(iters);
+
+      Eigen::Map<const Eigen::Matrix<double, 3, Eigen::Dynamic>> Xbodies(xbodies, 3, n);
+      Eigen::VectorXd Fbodies(3 * iters);
+
+      Fbodies = Xbodies(Eigen::all, ipiv).reshaped();
       M[y - lbegin].insert(M[y - lbegin].end(), Fbodies.begin(), Fbodies.end());
     }
   }

@@ -24,12 +24,8 @@ public:
 
 class H2Matrix {
 private:
-
-public:
-  std::vector<long long> Dims;
   std::vector<long long> DimsLr;
   std::vector<long long> UpperStride;
-
   MatrixDataContainer<std::complex<double>> Q;
   MatrixDataContainer<std::complex<double>> R;
   MatrixDataContainer<double> S;
@@ -44,10 +40,13 @@ public:
   std::vector<std::complex<double>*> NA;
   std::vector<int> Ipivots;
 
-  MatrixDataContainer<std::complex<double>> X;
-  MatrixDataContainer<std::complex<double>> Y;
   std::vector<std::complex<double>*> NX;
   std::vector<std::complex<double>*> NY;
+
+public:
+  std::vector<long long> Dims;
+  MatrixDataContainer<std::complex<double>> X;
+  MatrixDataContainer<std::complex<double>> Y;
   
   H2Matrix() {}
   H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);

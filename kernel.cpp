@@ -23,23 +23,25 @@ void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const doub
   });
 }
 
-long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long piv[], std::complex<double> U[]) {
-  Eigen::MatrixXcd W(M, K), V(K, N), L(K, K);
+long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], long long jpiv[], std::complex<double> u[], std::complex<double> v[]) {
+  Eigen::MatrixXcd U(M, K), V(K, N);
   Eigen::VectorXcd Acol(M), Arow(N);
-  Eigen::VectorXi ipiv(K), jpiv(K);
+  Eigen::VectorXi Ipiv(K), Jpiv(K);
   long long x = 0, y = 0;
 
-  gen_matrix(eval, M, 1, bi, bj, Acol.data());
+  gen_matrix(eval, 1, N, bi, bj, Arow.data());
+  Arow.cwiseAbs().maxCoeff(&x);
+  gen_matrix(eval, M, 1, bi, &bj[x * 3], Acol.data());
   Acol.cwiseAbs().maxCoeff(&y);
   Acol *= 1. / Acol(y);
   gen_matrix(eval, 1, N, &bi[y * 3], bj, Arow.data());
   
-  W.leftCols(1) = Acol;
+  U.leftCols(1) = Acol;
   V.topRows(1) = Arow.transpose();
-  ipiv(0) = y;
-  jpiv(0) = x;
+  Ipiv(0) = y;
+  Jpiv(0) = x;
 
-  Arow(jpiv.head(1)) = Eigen::VectorXcd::Zero(1);
+  Arow(x) = std::complex<double>(0., 0.);
   Arow.cwiseAbs().maxCoeff(&x);
   double nrm_z = Arow.norm() * Acol.norm();
   double nrm_k = nrm_z;
@@ -47,35 +49,39 @@ long long interpolative_decomp_aca(double epi, const MatrixAccessor& eval, long 
   long long iters = 1;
   while (iters < K && std::numeric_limits<double>::min() < nrm_z && epi * nrm_z <= nrm_k) {
     gen_matrix(eval, M, 1, bi, &bj[x * 3], &Acol[0]);
-    Acol -= W.leftCols(iters) * V.block(0, x, iters, 1);
-    Acol(ipiv.head(iters)) = Eigen::VectorXcd::Zero(iters);
+    Acol -= U.leftCols(iters) * V.block(0, x, iters, 1);
+    Acol(Ipiv.head(iters)).setZero();
     Acol.cwiseAbs().maxCoeff(&y);
     Acol *= 1. / Acol(y);
 
     gen_matrix(eval, 1, N, &bi[y * 3], bj, Arow.data());
-    Arow -= (W.block(y, 0, 1, iters) * V.topRows(iters)).transpose();
+    Arow -= (U.block(y, 0, 1, iters) * V.topRows(iters)).transpose();
 
-    W.middleCols(iters, 1) = Acol;
+    U.middleCols(iters, 1) = Acol;
     V.middleRows(iters, 1) = Arow.transpose();
-    L.block(iters, 0, 1, iters) = W.block(y, 0, 1, iters);
-    ipiv(iters) = y;
-    jpiv(iters) = x;
+    Ipiv(iters) = y;
+    Jpiv(iters) = x;
 
-    Eigen::VectorXcd Unrm = W.leftCols(iters).adjoint() * Acol;
+    Eigen::VectorXcd Unrm = U.leftCols(iters).adjoint() * Acol;
     Eigen::VectorXcd Vnrm = V.topRows(iters).conjugate() * Arow;
     std::complex<double> Z_k = Unrm.transpose() * Vnrm;
     nrm_k = Arow.norm() * Acol.norm();
     nrm_z = std::sqrt(nrm_z * nrm_z + 2 * std::abs(Z_k) + nrm_k * nrm_k);
     iters++;
 
-    Arow(jpiv.head(iters)) = Eigen::VectorXcd::Zero(iters);
+    Arow(Jpiv.head(iters)).setZero();
     Arow.cwiseAbs().maxCoeff(&x);
   }
 
-  if (U)
-    Eigen::Map<Eigen::MatrixXcd>(U, M, K) = L.triangularView<Eigen::Lower>().solve<Eigen::OnTheRight>(W);
-  if (piv)
-    std::transform(ipiv.data(), ipiv.data() + K, piv, [](int p) { return (long long)p; });
+  if (ipiv)
+    std::transform(Ipiv.data(), Ipiv.data() + K, ipiv, [](int p) { return (long long)p; });
+  if (jpiv)
+    std::transform(Jpiv.data(), Jpiv.data() + K, jpiv, [](int p) { return (long long)p; });
+  if (u)
+    Eigen::Map<Eigen::MatrixXcd>(u, M, K) = U;
+  if (v)
+    Eigen::Map<Eigen::MatrixXcd>(v, K, N) = V;
+
   return iters;
 }
 
