@@ -6,32 +6,50 @@
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
+  // N
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
+  // admis
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
+  // size of dense blocks
   long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 256;
   long long rank = argc > 4 ? std::atoll(argv[4]) : 100;
+  // epsilon
   double epi = argc > 5 ? std::atof(argv[5]) : 1e-10;
+  // hmatrix mode
   std::string mode = argc > 6 ? std::string(argv[6]) : "h2";
 
+  // if N <= leaf_size, we basically have a dense matrix
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
+  // number of levels, works only for multiples of 2
   long long levels = (long long)std::log2((double)Nbody / leaf_size);
+  // the max number of leaf level nodes (i.e. if we completely split the matrix)
   long long Nleaf = (long long)1 << levels;
+  // the number of cells (i.e. nodes) in the cluster tree
   long long ncells = Nleaf + Nleaf - 1;
   
+  // kernel functions, here we select the appropriate function
+  // by setting the corresponding parameters
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
   Helmholtz3D eval(1., 1.);
   
+  // body contains the points
+  // 3 corresponds to the dimension
   std::vector<double> body(Nbody * 3);
+  // contains the charges for each point?
   std::vector<std::complex<double>> Xbody(Nbody);
+  // array containing the noces in the cluster tree
   std::vector<Cell> cell(ncells);
 
+  // create the points (i.e. bodies)
   //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
   uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
+  //build the tree (i.e. set the values in the cell array)
   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
 
+  // generate the charges
   std::mt19937 gen(999);
   std::uniform_real_distribution uniform_dist(0., 1.);
   std::generate(Xbody.begin(), Xbody.end(), 
@@ -44,6 +62,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
+  // create the H2 matrix
   H2MatrixSolver matA(eval, epi, rank, cell, theta, &body[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
