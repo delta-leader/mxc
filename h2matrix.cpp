@@ -12,7 +12,9 @@
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
   lbegin(lbegin), lend(lbegin + len), M(len) {
   std::vector<std::vector<double>> Fbodies(len);
+  // loop over the cells in the upper level
   for (long long i = upper.lbegin; i < upper.lend; i++)
+    // loop over all columns contained in the children
     for (long long c = cells[i].Child[0]; c < cells[i].Child[1]; c++)
       if (lbegin <= c && c < lend)
         M[c - lbegin] = std::vector<double>(upper.M[i - upper.lbegin].begin(), upper.M[i - upper.lbegin].end());

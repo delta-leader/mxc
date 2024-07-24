@@ -10,12 +10,25 @@ class ColCommMPI;
 
 class WellSeparatedApproximation {
 private:
+  // first index in the cell array for the current level
   long long lbegin;
+  // last index in the cell array for the current level
   long long lend;
   std::vector<std::vector<double>> M;
 
 public:
   WellSeparatedApproximation() : lbegin(0), lend(0) {}
+  /*
+  eval: kernel function
+  epi: epsilon
+  rank: maximum rank
+  lbegin: first index in the cell array on the current level
+  lend: number oc cells on the current level
+  cells: the cell array
+  Far: Far field in CSR format
+  bodies: the points
+  upper: the approximation from the upper level
+  */
   WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper);
 
   long long fbodies_size_at_i(long long i) const;

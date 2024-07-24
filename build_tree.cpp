@@ -4,28 +4,43 @@
 #include <numeric>
 #include <algorithm>
 #include <set>
+#include <iostream>
 
-void get_bounds(const double* bodies, long long nbodies, double R[], double C[]) {
+/*
+In:
+  bodies: the points within the cell
+  nbodies: the number of points within the cell
+Out:
+  radius: the radius of the cell
+  center: the center point of the cell
+*/
+void get_bounds(const double* const bodies, const long long nbodies, double radius[], double center[]) { 
   const std::array<double, 3>* bodies3 = reinterpret_cast<const std::array<double, 3>*>(&bodies[0]);
   const std::array<double, 3>* bodies3_end = reinterpret_cast<const std::array<double, 3>*>(&bodies[nbodies * 3]);
 
-  double Xmin[3], Xmax[3];
-  for (int i = 0; i < 3; i++) {
+  // find the minimum and maximum values in each dimension
+  double dim_min[3], dim_max[3];
+  for (int d = 0; d < 3; d++) {
     auto minmax = std::minmax_element(bodies3, bodies3_end, 
-      [=](const std::array<double, 3>& x, const std::array<double, 3>& y) { return x[i] < y[i]; });
-    Xmin[i] = (*minmax.first)[i];
-    Xmax[i] = (*minmax.second)[i];
+      [=](const std::array<double, 3>& x, const std::array<double, 3>& y) { return x[d] < y[d]; });
+    dim_min[d] = (*minmax.first)[d];
+    dim_max[d] = (*minmax.second)[d];
   }
 
-  std::transform(Xmin, &Xmin[3], Xmax, C, [](double min, double max) { return (min + max) * 0.5; });
-  std::transform(Xmin, &Xmin[3], Xmax, R, [](double min, double max) { return (min == max && min == 0.) ? 0. : ((max - min) * 0.5 + 1.e-8); });
+  // calculate the center as (min + max) / 2
+  std::transform(dim_min, &dim_min[3], dim_max, center, [](double min, double max) { return (min + max) * 0.5; });
+  // calculate the radius as (max - min ) / 2 + border_offset
+  std::transform(dim_min, &dim_min[3], dim_max, radius, [](double min, double max) { return (min == max && min == 0.) ? 0. : ((max - min) * 0.5 + 1.e-8); });
 }
 
 void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long levels) {
+  // the root node contains all points
   cells[0].Body[0] = 0;
   cells[0].Body[1] = nbodies;
   get_bounds(bodies, nbodies, cells[0].R.data(), cells[0].C.data());
 
+  // actually this is the number of cells
+  //long long nleaf = levels;
   long long nleaf = (long long)1 << levels;
   for (long long i = 0; i < nleaf - 1; i++) {
     Cell& ci = cells[i];

@@ -4,6 +4,7 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
 }
@@ -11,23 +12,29 @@ H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local
 H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, bool fix_rank, MPI_Comm world) : 
   levels(levels), A(levels + 1), comm(levels + 1), allocedComm(), local_bodies(0, 0) {
   
+  // stores the indices of the cells in the near field for each cell
   CSR Near('N', cells, cells, theta);
+  // stores the indices of the cell in the far field for each cell
   CSR Far('F', cells, cells, theta);
+  // stores the indices of all cells on the same level (i.e. near and far field)
   CSR Neighbor(Near, Far);
   int mpi_size = 1;
   MPI_Comm_size(world, &mpi_size);
 
+  // is this the mapping of mpi processes to cells?
   std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
+  // this seems to be the cluster tree again, but each node contains the two children of that cell
   std::vector<std::pair<long long, long long>> tree(cells.size());
   std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
+  // create a communicator for each level
   for (long long i = 0; i <= levels; i++)
     comm[i] = ColCommMPI(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
 
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
-  for (long long l = 1; l <= levels; l++)
+  for (long long l = 1; l <= levels; l++) {
     wsa[l] = WellSeparatedApproximation(eval, epi, rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
-
+  }
   epi = fix_rank ? (double)rank : epi;
   A[levels] = H2Matrix(eval, epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], fix_rank);
   for (long long l = levels - 1; l >= 0; l--)

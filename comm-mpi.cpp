@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <set>
+#include <iostream>
 
 MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
@@ -51,14 +52,24 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
 
+  // gets the mapping for the mpi_rank (first element)
   long long pbegin = Mapping[mpi_rank].first;
+  // second element
   long long pend = Mapping[mpi_rank].second;
+  // looks for the first element in the mapping that has the same values as the current rank
+  // Then calculates the distance from the first element
   long long p = std::distance(&Mapping[0], std::find(&Mapping[0], &Mapping[mpi_rank], Mapping[mpi_rank]));
+  // find the next mapping whose values are not identical (from the previously found one)
+  // and calculate the distance between those two
   long long lenp = std::distance(&Mapping[p], 
     std::find_if_not(&Mapping[p], &Mapping[mpi_size], [&](std::pair<long long, long long> i) { return i == Mapping[mpi_rank]; }));
-
+  
+  
+  // my current guess is that the mapping stores the columns (for each level) that are stored on this process (first, last)
+  // and this function finds the mpi_rank for any given column
   auto col_to_mpi_rank = [&](long long col) { return std::distance(&Mapping[0], std::find_if(&Mapping[0], &Mapping[mpi_size], 
     [=](std::pair<long long, long long> i) { return i.first <= col && col < i.second; })); };
+  // stores the mpir rank for each column on that level
   std::set<long long> cols;
   std::for_each(&Cols[Rows[pbegin]], &Cols[Rows[pend]], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
 

@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
   std::vector<double> body(Nbody * 3);
   // contains the charges for each point?
   std::vector<std::complex<double>> Xbody(Nbody);
-  // array containing the noces in the cluster tree
+  // array containing the nodes in the cluster tree
   std::vector<Cell> cell(ncells);
 
   // create the points (i.e. bodies)
