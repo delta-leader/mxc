@@ -6,7 +6,11 @@
 
 class Cell {
 public:
+  // Start and End indices of the children cells
+  // within the cells array
   std::array<long long, 2> Child;
+  // Start and End indices of the points contained within the cell
+  // with respect to the bodies array
   std::array<long long, 2> Body;
   // radius
   std::array<double, 3> R;
@@ -36,9 +40,12 @@ public:
 };
 
 /*
-cells: the cell array (output)
-bodies: the points
-nbodies: N (number of points)
-levels: number of levels
+In: 
+  nlevels: the number of levels
+  nbodies: the number of points
+InOut:
+  bodies: the points (output is sorted)
+Out:
+  cells: the nodes in the cluster tree
 */
-void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long levels);
+void buildBinaryTree(long long nlevels, const long long nbodies, double* const bodies, Cell* const cells);

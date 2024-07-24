@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
   uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   //build the tree (i.e. set the values in the cell array)
-  buildBinaryTree(&cell[0], &body[0], Nbody, levels);
+  buildBinaryTree(levels, Nbody, &body[0], &cell[0]);
 
   // generate the charges
   std::mt19937 gen(999);

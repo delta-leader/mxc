@@ -33,40 +33,49 @@ void get_bounds(const double* const bodies, const long long nbodies, double radi
   std::transform(dim_min, &dim_min[3], dim_max, radius, [](double min, double max) { return (min == max && min == 0.) ? 0. : ((max - min) * 0.5 + 1.e-8); });
 }
 
-void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long levels) {
+void buildBinaryTree(const long long nlevels, const long long nbodies, double* const bodies, Cell* const cells) {
   // the root node contains all points
   cells[0].Body[0] = 0;
   cells[0].Body[1] = nbodies;
+  // calculate boundaries for the root
   get_bounds(bodies, nbodies, cells[0].R.data(), cells[0].C.data());
 
-  // actually this is the number of cells
-  //long long nleaf = levels;
-  long long nleaf = (long long)1 << levels;
-  for (long long i = 0; i < nleaf - 1; i++) {
-    Cell& ci = cells[i];
-    long long sdim = std::distance(ci.R.begin(), std::max_element(ci.R.begin(), ci.R.end()));
-    long long i_begin = ci.Body[0];
-    long long i_end = ci.Body[1];
+  // the number of non leaf nodes
+  long long inner_nodes = ((long long)1 << nlevels) - 1;
+  // iterate over all non-leaf nodes (in ascending order)
+  for (long long i = 0; i < inner_nodes; i++) {
+    Cell& parent = cells[i];
+    // split along the dimension with the longest radius
+    long long splitting_dim = std::distance(parent.R.begin(), std::max_element(parent.R.begin(), parent.R.end()));
+    // start and end indices of points from the parent
+    long long bodies_start = parent.Body[0];
+    long long bodies_end = parent.Body[1];
 
-    std::array<double, 3>* bodies3 = reinterpret_cast<std::array<double, 3>*>(&bodies[i_begin * 3]);
-    std::array<double, 3>* bodies3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[i_end * 3]);
+    // sort the bodies according to the splitting dimension
+    std::array<double, 3>* bodies3 = reinterpret_cast<std::array<double, 3>*>(&bodies[bodies_start * 3]);
+    std::array<double, 3>* bodies3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[bodies_end * 3]);
     std::sort(bodies3, bodies3_end, 
-      [=](std::array<double, 3>& i, std::array<double, 3>& j) { return i[sdim] < j[sdim]; });
+      [=](std::array<double, 3>& i, std::array<double, 3>& j) { return i[splitting_dim] < j[splitting_dim]; });
 
-    long long len = (i << 1) + 1;
-    Cell& c0 = cells[len];
-    Cell& c1 = cells[len + 1];
-    ci.Child[0] = len;
-    ci.Child[1] = len + 2;
+    // starting index of the children cells within the cell array
+    long long cells_start = (i << 1) + 1;
+    // create the children cells
+    Cell& child0 = cells[cells_start];
+    Cell& child1 = cells[cells_start + 1];
+    // set the children indices in the parent (end is non inclusive)
+    parent.Child[0] = cells_start;
+    parent.Child[1] = cells_start + 2;
 
-    long long loc = i_begin + (i_end - i_begin) / 2;
-    c0.Body[0] = i_begin;
-    c0.Body[1] = loc;
-    c1.Body[0] = loc;
-    c1.Body[1] = i_end;
+    // calculate the splitting index
+    long long splitting_idx = bodies_start + (bodies_end - bodies_start) / 2;
+    child0.Body[0] = bodies_start;
+    child0.Body[1] = splitting_idx;
+    child1.Body[0] = splitting_idx;
+    child1.Body[1] = bodies_end;
 
-    get_bounds(&bodies[i_begin * 3], loc - i_begin, c0.R.data(), c0.C.data());
-    get_bounds(&bodies[loc * 3], i_end - loc, c1.R.data(), c1.C.data());
+    // calculate boundaries for the children
+    get_bounds(&bodies[bodies_start * 3], splitting_idx - bodies_start, child0.R.data(), child0.C.data());
+    get_bounds(&bodies[splitting_idx * 3], bodies_end - splitting_idx, child1.R.data(), child1.C.data());
   }
 }
 
