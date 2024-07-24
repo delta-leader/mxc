@@ -117,22 +117,27 @@ void getList(const char NoF, const Cell cells[], const long long ci, const long 
         getList(NoF, cells, i, j, theta, blocks);
 }
 
-CSR::CSR(const char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, const double theta) {
-  long long ncells = ci.size();
-  std::vector<std::pair<long long, long long>> LIL;
-  getList(NoF, &ci[0], 0, 0, theta, LIL);
-  std::sort(LIL.begin(), LIL.end());
+CSR::CSR(const char NoF, const std::vector<Cell>& cells, const double theta) {
+  long long ncells = cells.size();
+  std::vector<std::pair<long long, long long>> blocks;
+  getList(NoF, &cells[0], 0, 0, theta, blocks);
+  // sorts the blocks according to i first, then according to j
+  std::sort(blocks.begin(), blocks.end());
 
-  long long len = LIL.size();
+  // number of elements
+  long long nblocks = blocks.size();
   RowIndex.resize(ncells + 1);
-  ColIndex.resize(len);
-  std::transform(LIL.begin(), LIL.end(), ColIndex.begin(), 
+  ColIndex.resize(nblocks);
+  // write the column indices in the CSR
+  std::transform(blocks.begin(), blocks.end(), ColIndex.begin(), 
     [](const std::pair<long long, long long>& i) { return i.second; });
 
   RowIndex[0] = 0;
+  // write the offests
+  // basically counts the number of elements until the row index i changes
   for (long long n = 1; n <= ncells; n++)
-    RowIndex[n] = std::distance(LIL.begin(), 
-      std::find_if(LIL.begin() + RowIndex[n - 1], LIL.end(), 
+    RowIndex[n] = std::distance(blocks.begin(), 
+      std::find_if(blocks.begin() + RowIndex[n - 1], blocks.end(), 
         [=](const std::pair<long long, long long>& i) { return n <= i.first; }));
 }
 

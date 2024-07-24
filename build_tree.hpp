@@ -32,11 +32,10 @@ public:
 
   /*
   NoF: either 'F' for far field or 'N' for near field
-  ci: cluster tree I
-  cj:  cluster tree J
+  cells: the cluster tree
   theta: admisibility
   */
-  CSR(const char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, const double theta);
+  CSR(const char NoF, const std::vector<Cell>& cells, const double theta);
   // combines the content of two sparse matrices
   CSR(const CSR& A, const CSR& B);
 };

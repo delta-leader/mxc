@@ -13,9 +13,9 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   levels(levels), A(levels + 1), comm(levels + 1), allocedComm(), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
-  CSR Near('N', cells, cells, theta);
+  CSR Near('N', cells, theta);
   // stores the indices of the cell in the far field for each cell
-  CSR Far('F', cells, cells, theta);
+  CSR Far('F', cells, theta);
   // stores the indices of all cells on the same level (i.e. near and far field)
   CSR Neighbor(Near, Far);
   int mpi_size = 1;
