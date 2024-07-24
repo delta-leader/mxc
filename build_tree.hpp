@@ -20,7 +20,9 @@ public:
   Cell() : Child(std::array<long long, 2>{ -1, -1 }), Body(std::array<long long, 2>{ -1, -1 }), R(std::array<double, 3>{ 0., 0., 0. }), C(std::array<double, 3>{ 0., 0., 0. }) {}
 };
 
-//compressed row storage
+// compressed row storage
+// a non-zero element i x j in the stored block cluster tree I x J
+// is given by ColIndex[RowIndex[i] + j]
 class CSR {
 public:
   // Starting index for each cell in ColIndex
@@ -30,12 +32,12 @@ public:
 
   /*
   NoF: either 'F' for far field or 'N' for near field
-  ci: node i from the cluster tree
-  cj:  node j from the cluster tree
+  ci: cluster tree I
+  cj:  cluster tree J
   theta: admisibility
   */
-  CSR(char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, double theta);
-  // combines the content of two sparse jmatrices
+  CSR(const char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, const double theta);
+  // combines the content of two sparse matrices
   CSR(const CSR& A, const CSR& B);
 };
 

@@ -79,27 +79,48 @@ void buildBinaryTree(const long long nlevels, const long long nbodies, double* c
   }
 }
 
-void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const Cell ci[], long long i, const Cell cj[], long long j, double theta) {
-  double dC = std::transform_reduce(ci[i].C.begin(), ci[i].C.end(), cj[j].C.begin(), (double)0., std::plus<double>(), [](double x, double y) { return (x - y) * (x - y); });
-  double dR1 = std::transform_reduce(ci[i].R.begin(), ci[i].R.end(), ci[i].R.begin(), (double)0., std::plus<double>(), std::multiplies<double>());
-  double dR2 = std::transform_reduce(cj[j].R.begin(), cj[j].R.end(), cj[j].R.begin(), (double)0., std::plus<double>(), std::multiplies<double>());
+/*
+Recursive function to calculate the indices of the near/far field
+In:
+  NoF: 'N' for near and 'F' for far field
+  cells: the cell array
+  ci: index of cell i
+  cj: indx of cell cj
+  theta: admisibility
+Out:
+  blocks: The index pairs of the near/far field (vector of pairs)
+*/
+void getList(const char NoF, const Cell cells[], const long long ci, const long long cj, const double theta, std::vector<std::pair<long long, long long>>& blocks) {
+  // squared distance between (the centers of) ci and cj
+  double distance = std::transform_reduce(cells[ci].C.begin(), cells[ci].C.end(), cells[cj].C.begin(), (double)0., std::plus<double>(), [](double x, double y) { return (x - y) * (x - y); });
+  // squared diameter of ci
+  double diam_ci = std::transform_reduce(cells[ci].R.begin(), cells[ci].R.end(), cells[ci].R.begin(), (double)0., std::plus<double>(), std::multiplies<double>());
+  // squared diameter of cj
+  double diam_cj = std::transform_reduce(cells[cj].R.begin(), cells[cj].R.end(), cells[cj].R.begin(), (double)0., std::plus<double>(), std::multiplies<double>());
 
-  bool admis = dC > (theta * (dR1 + dR2));
+  // TODO confirm admissibility condition,
+  // usually it is either min or max of the diameters
+  bool admis = distance > (theta * (diam_ci + diam_cj));
   bool write_far = NoF == 'F' || NoF == 'f';
   bool write_near = NoF == 'N' || NoF == 'n';
+  // store the index pair in blocks if it is in the near/far field
   if (admis ? write_far : write_near)
-    rels.emplace_back(i, j);
+    blocks.emplace_back(ci, cj);
   
-  if (!admis && ci[i].Child[0] >= 0 && cj[j].Child[0] >= 0)
-    for (long long k = ci[i].Child[0]; k < ci[i].Child[1]; k++)
-      for (long long l = cj[j].Child[0]; l < cj[j].Child[1]; l++)
-        getList(NoF, rels, ci, k, cj, l, theta);
+  // if a block is not admissible and both cells have children,
+  // TODO since the cluster tree is split to the leaf level, only nodes on the same level can have no children, correct?
+  // then call the function recursively for the cross product of each
+  // cells children
+  if (!admis && cells[ci].Child[0] >= 0 && cells[cj].Child[0] >= 0)
+    for (long long i = cells[ci].Child[0]; i < cells[ci].Child[1]; i++)
+      for (long long j = cells[cj].Child[0]; j < cells[cj].Child[1]; j++)
+        getList(NoF, cells, i, j, theta, blocks);
 }
 
-CSR::CSR(char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, double theta) {
+CSR::CSR(const char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, const double theta) {
   long long ncells = ci.size();
   std::vector<std::pair<long long, long long>> LIL;
-  getList(NoF, LIL, &ci[0], 0, &cj[0], 0, theta);
+  getList(NoF, &ci[0], 0, 0, theta, LIL);
   std::sort(LIL.begin(), LIL.end());
 
   long long len = LIL.size();
