@@ -29,7 +29,7 @@ WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eva
 
       long long k = std::min(rank, std::min(m, n));
       std::vector<long long> ipiv(k);
-      long long iters = adaptive_cross_approximation(epi, eval, m, n, k, ybodies, xbodies, nullptr, &ipiv[0], nullptr, nullptr);
+      long long iters = adaptive_cross_approximation(epi, eval, m, n, k, ybodies, xbodies, nullptr, &ipiv[0]);
       ipiv.resize(iters);
 
       Eigen::Map<const Eigen::Matrix<double, 3, Eigen::Dynamic>> Xbodies(xbodies, 3, n);

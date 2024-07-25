@@ -27,38 +27,61 @@ void gen_matrix(const MatrixAccessor& eval, const long long M, const long long N
   });
 }
 
-long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], long long jpiv[], std::complex<double> u[], std::complex<double> v[]) {
-  Eigen::MatrixXcd U(M, K), V(K, N);
-  Eigen::VectorXcd Acol(M), Arow(N);
-  Eigen::VectorXi Ipiv(K), Jpiv(K);
+long long adaptive_cross_approximation(const double epi, const MatrixAccessor& eval, const long long nrows, const long long ncols, const long long max_rank, const double bi[], const double bj[], long long ipiv[], long long jpiv[]) {
+  // low-rank matrices U & V
+  Eigen::MatrixXcd U(nrows, max_rank), V(max_rank, ncols);
+  // workspace for selected rows/columns of A
+  Eigen::VectorXcd Acol(nrows), Arow(ncols);
+  // pivots
+  Eigen::VectorXi Ipiv(max_rank), Jpiv(max_rank);
   long long x = 0, y = 0;
 
-  gen_matrix(eval, 1, N, bi, bj, Arow.data());
+  // generate the first row of A
+  gen_matrix(eval, 1, ncols, bi, bj, Arow.data());
+  // store the index of the maximum absolute value in x
   Arow.cwiseAbs().maxCoeff(&x);
-  gen_matrix(eval, M, 1, bi, &bj[x * 3], Acol.data());
+  // generate the column containing the maximum absolute value
+  gen_matrix(eval, nrows, 1, bi, &bj[x * 3], Acol.data());
+  // store the index of the maximum absolute value in y
   Acol.cwiseAbs().maxCoeff(&y);
+  // normalize the column by the maximum element
   Acol *= 1. / Acol(y);
-  gen_matrix(eval, 1, N, &bi[y * 3], bj, Arow.data());
+  // generate the row containing the maximum absolute value
+  gen_matrix(eval, 1, ncols, &bi[y * 3], bj, Arow.data());
   
+  // add the selected column to U
   U.leftCols(1) = Acol;
+  // add the selected row to V
   V.topRows(1) = Arow.transpose();
+  // store the indices of the selected row/column
   Ipiv(0) = y;
   Jpiv(0) = x;
-
+  
+  // set the maximum row element to zero
+  // TODO does this affect V?
   Arow(x) = std::complex<double>(0., 0.);
+  // find the column with the containing the new maximum absolute value
   Arow.cwiseAbs().maxCoeff(&x);
+  // ||Z||
   double nrm_z = Arow.norm() * Acol.norm();
+  // ||u|| * ||v||
   double nrm_k = nrm_z;
 
   long long iters = 1;
-  while (iters < K && std::numeric_limits<double>::min() < nrm_z && epi * nrm_z <= nrm_k) {
-    gen_matrix(eval, M, 1, bi, &bj[x * 3], &Acol[0]);
+  // iterate until either the desired accuracy or the maximum rank is reached
+  // the convergence criteria for ACA is ||u|| * ||v|| <= epsilon * ||Z||
+  // where u and v are the newly selected row/column and Z is the low rank approximation so far
+  // the complete algorithm can be found in
+  // "The Adaptive Cross Approximation Algorithm for Accelerated Method of Moments Computations of EMC Problems"
+  while (iters < max_rank && std::numeric_limits<double>::min() < nrm_z && epi * nrm_z <= nrm_k) {
+    // create the new column
+    gen_matrix(eval, nrows, 1, bi, &bj[x * 3], &Acol[0]);
     Acol -= U.leftCols(iters) * V.block(0, x, iters, 1);
     Acol(Ipiv.head(iters)).setZero();
     Acol.cwiseAbs().maxCoeff(&y);
     Acol *= 1. / Acol(y);
 
-    gen_matrix(eval, 1, N, &bi[y * 3], bj, Arow.data());
+    gen_matrix(eval, 1, ncols, &bi[y * 3], bj, Arow.data());
     Arow -= (U.block(y, 0, 1, iters) * V.topRows(iters)).transpose();
 
     U.middleCols(iters, 1) = Acol;
@@ -78,14 +101,16 @@ long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, l
   }
 
   if (ipiv)
-    std::transform(Ipiv.data(), Ipiv.data() + K, ipiv, [](int p) { return (long long)p; });
+    std::transform(Ipiv.data(), Ipiv.data() + max_rank, ipiv, [](int p) { return (long long)p; });
   if (jpiv)
-    std::transform(Jpiv.data(), Jpiv.data() + K, jpiv, [](int p) { return (long long)p; });
+    std::transform(Jpiv.data(), Jpiv.data() + max_rank, jpiv, [](int p) { return (long long)p; });
+  // removed since they are always passed as nullptrs
+  /*
   if (u)
-    Eigen::Map<Eigen::MatrixXcd>(u, M, K) = U;
+    Eigen::Map<Eigen::MatrixXcd>(u, M, max_rank) = U;
   if (v)
-    Eigen::Map<Eigen::MatrixXcd>(v, K, N) = V;
-
+    Eigen::Map<Eigen::MatrixXcd>(v, max_rank, N) = V;
+  */
   return iters;
 }
 

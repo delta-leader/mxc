@@ -70,18 +70,19 @@ void gen_matrix(const MatrixAccessor& eval, const long long M, const long long N
 /*
 ACA
 In:
-  epi: accuracy
+  epsilon: accuracy
   eval: kernel function
   M: number of rows
   N: number of columns
-  K: maximum rank?
+  max_rank: maximum rank
   bi: row points
   bj: column points
-  ipiv: nullptr
-  jpiv: vector to store pivots
-  u: nullptr
-  v: nullptr
+Out:
+  ipiv: selected rows 
+  jpiv: selected columns
+Returns:
+  iters: number of iterations (i.e. the real rank)
 */
-long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], long long jpiv[], std::complex<double> u[], std::complex<double> v[]);
+long long adaptive_cross_approximation(const double epi, const MatrixAccessor& eval, const long long M, const long long N, const long long max_rank, const double bi[], const double bj[], long long ipiv[], long long jpiv[]);
 
-void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]);
+void mat_vec_reference(const MatrixAccessor& eval, long long nrows, long long ncols, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]);
