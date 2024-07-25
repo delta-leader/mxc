@@ -54,9 +54,34 @@ public:
   }
 };
 
+/*
+Generates a matrix from a kernel function
+In:
+  eval: kernel function
+  m: number of rows
+  n: number of columns
+  bi: points in the row
+  bj: points in the column
+Out:
+  Aij: generated matrix
+*/
+void gen_matrix(const MatrixAccessor& eval, const long long M, const long long N, const double* const bi, const double* const bj, std::complex<double> Aij[]);
 
-void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]);
-
+/*
+ACA
+In:
+  epi: accuracy
+  eval: kernel function
+  M: number of rows
+  N: number of columns
+  K: maximum rank?
+  bi: row points
+  bj: column points
+  ipiv: nullptr
+  jpiv: vector to store pivots
+  u: nullptr
+  v: nullptr
+*/
 long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], long long jpiv[], std::complex<double> u[], std::complex<double> v[]);
 
 void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]);

@@ -7,18 +7,22 @@
 #include <array>
 #include <Eigen/Dense>
 
-void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]) {
+void gen_matrix(const MatrixAccessor& eval, const long long M, const long long N, const double* const bi, const double* const bj, std::complex<double> Aij[]) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
-  const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * m]);
+  const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * M]);
   const std::array<double, 3>* bj3 = reinterpret_cast<const std::array<double, 3>*>(bj);
-  const std::array<double, 3>* bj3_end = reinterpret_cast<const std::array<double, 3>*>(&bj[3 * n]);
+  const std::array<double, 3>* bj3_end = reinterpret_cast<const std::array<double, 3>*>(&bj[3 * N]);
 
   std::for_each(bj3, bj3_end, [&](const std::array<double, 3>& j) -> void {
+    // row coordinate
     long long ix = std::distance(bj3, &j);
     std::for_each(bi3, bi3_end, [&](const std::array<double, 3>& i) -> void {
+      // column coordinate
       long long iy = std::distance(bi3, &i);
+      // square root of the sum of squares (i.e. distance)
       double d = std::hypot(i[0] - j[0], i[1] - j[1], i[2] - j[2]);
-      Aij[iy + ix * m] = eval(d);
+      // TODO confirm that this is row major
+      Aij[iy + ix * M] = eval(d);
     });
   });
 }

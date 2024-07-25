@@ -21,6 +21,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   int mpi_size = 1;
   MPI_Comm_size(world, &mpi_size);
 
+  // TODO skip this for now, as I will focus on a single process
   // is this the mapping of mpi processes to cells?
   std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
   // this seems to be the cluster tree again, but each node contains the two children of that cell
@@ -31,6 +32,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   for (long long i = 0; i <= levels; i++)
     comm[i] = ColCommMPI(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
 
+  // create ab H-matrix for each level
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++) {
     wsa[l] = WellSeparatedApproximation(eval, epi, rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
