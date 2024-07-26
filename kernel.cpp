@@ -7,7 +7,7 @@
 #include <array>
 #include <Eigen/Dense>
 
-void gen_matrix(const MatrixAccessor& eval, const long long M, const long long N, const double* const bi, const double* const bj, std::complex<double> Aij[]) {
+void gen_matrix(const MatrixAccessor& kernel, const long long M, const long long N, const double* const bi, const double* const bj, std::complex<double> Aij[]) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
   const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * M]);
   const std::array<double, 3>* bj3 = reinterpret_cast<const std::array<double, 3>*>(bj);
@@ -22,32 +22,32 @@ void gen_matrix(const MatrixAccessor& eval, const long long M, const long long N
       // square root of the sum of squares (i.e. distance)
       double d = std::hypot(i[0] - j[0], i[1] - j[1], i[2] - j[2]);
       // TODO confirm that this is row major
-      Aij[iy + ix * M] = eval(d);
+      Aij[iy + ix * M] = kernel(d);
     });
   });
 }
 
-long long adaptive_cross_approximation(const double epi, const MatrixAccessor& eval, const long long nrows, const long long ncols, const long long max_rank, const double bi[], const double bj[], long long ipiv[], long long jpiv[]) {
+long long adaptive_cross_approximation(const MatrixAccessor& kernel, const double epsilon, const long long max_rank, const long long nrows, const long long ncols, const double row_bodies[], const double col_bodies[], long long row_piv[], long long col_piv[]) {
   // low-rank matrices U & V
   Eigen::MatrixXcd U(nrows, max_rank), V(max_rank, ncols);
   // workspace for selected rows/columns of A
   Eigen::VectorXcd Acol(nrows), Arow(ncols);
-  // pivots
+  // row/column pivots
   Eigen::VectorXi Ipiv(max_rank), Jpiv(max_rank);
   long long x = 0, y = 0;
 
   // generate the first row of A
-  gen_matrix(eval, 1, ncols, bi, bj, Arow.data());
+  gen_matrix(kernel, 1, ncols, row_bodies, col_bodies, Arow.data());
   // store the index of the maximum absolute value in x
   Arow.cwiseAbs().maxCoeff(&x);
   // generate the column containing the maximum absolute value
-  gen_matrix(eval, nrows, 1, bi, &bj[x * 3], Acol.data());
+  gen_matrix(kernel, nrows, 1, row_bodies, &col_bodies[x * 3], Acol.data());
   // store the index of the maximum absolute value in y
   Acol.cwiseAbs().maxCoeff(&y);
   // normalize the column by the maximum element
   Acol *= 1. / Acol(y);
   // generate the row containing the maximum absolute value
-  gen_matrix(eval, 1, ncols, &bi[y * 3], bj, Arow.data());
+  gen_matrix(kernel, 1, ncols, &row_bodies[y * 3], col_bodies, Arow.data());
   
   // add the selected column to U
   U.leftCols(1) = Acol;
@@ -73,15 +73,15 @@ long long adaptive_cross_approximation(const double epi, const MatrixAccessor& e
   // where u and v are the newly selected row/column and Z is the low rank approximation so far
   // the complete algorithm can be found in
   // "The Adaptive Cross Approximation Algorithm for Accelerated Method of Moments Computations of EMC Problems"
-  while (iters < max_rank && std::numeric_limits<double>::min() < nrm_z && epi * nrm_z <= nrm_k) {
+  while (iters < max_rank && std::numeric_limits<double>::min() < nrm_z && epsilon * nrm_z <= nrm_k) {
     // create the new column
-    gen_matrix(eval, nrows, 1, bi, &bj[x * 3], &Acol[0]);
+    gen_matrix(kernel, nrows, 1, row_bodies, &col_bodies[x * 3], &Acol[0]);
     Acol -= U.leftCols(iters) * V.block(0, x, iters, 1);
     Acol(Ipiv.head(iters)).setZero();
     Acol.cwiseAbs().maxCoeff(&y);
     Acol *= 1. / Acol(y);
 
-    gen_matrix(eval, 1, ncols, &bi[y * 3], bj, Arow.data());
+    gen_matrix(kernel, 1, ncols, &row_bodies[y * 3], col_bodies, Arow.data());
     Arow -= (U.block(y, 0, 1, iters) * V.topRows(iters)).transpose();
 
     U.middleCols(iters, 1) = Acol;
@@ -100,10 +100,10 @@ long long adaptive_cross_approximation(const double epi, const MatrixAccessor& e
     Arow.cwiseAbs().maxCoeff(&x);
   }
 
-  if (ipiv)
-    std::transform(Ipiv.data(), Ipiv.data() + max_rank, ipiv, [](int p) { return (long long)p; });
-  if (jpiv)
-    std::transform(Jpiv.data(), Jpiv.data() + max_rank, jpiv, [](int p) { return (long long)p; });
+  if (row_piv)
+    std::transform(Ipiv.data(), Ipiv.data() + max_rank, row_piv, [](int p) { return (long long)p; });
+  if (col_piv)
+    std::transform(Jpiv.data(), Jpiv.data() + max_rank, col_piv, [](int p) { return (long long)p; });
   // removed since they are always passed as nullptrs
   /*
   if (u)

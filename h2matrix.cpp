@@ -9,34 +9,40 @@
 #include <algorithm>
 #include <cmath>
 
-WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
-  lbegin(lbegin), lend(lbegin + len), M(len) {
-  std::vector<std::vector<double>> Fbodies(len);
+
+WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& kernel, double epsilon, long long rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level) :
+  lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
   // loop over the cells in the upper level
-  for (long long i = upper.lbegin; i < upper.lend; i++)
-    // loop over all children
+  for (long long i = upper_level.lbegin; i < upper_level.lend; i++)
+    // collect the far field points from the upper level
     for (long long c = cells[i].Child[0]; c < cells[i].Child[1]; c++)
-      if (lbegin <= c && c < lend)
-        M[c - lbegin] = std::vector<double>(upper.M[i - upper.lbegin].begin(), upper.M[i - upper.lbegin].end());
+      if (lbegin <= c && c < lend){
+        // c - lbegin converts the global cell index to a local one
+        M[c - lbegin] = std::vector<double>(upper_level.M[i - upper_level.lbegin].begin(), upper_level.M[i - upper_level.lbegin].end());
+      }
+  // loop over all cells on the current level
+  for (long long c = lbegin; c < lend; c++) {
+    // for each cell in the far field
+    for (long long i = Far.RowIndex[c]; i < Far.RowIndex[c + 1]; i++) {
+      long long j = Far.ColIndex[i];
+      long long nrows = cells[c].Body[1] - cells[c].Body[0];
+      const double* row_bodies = &bodies[3 * cells[c].Body[0]];
+      long long ncols = cells[j].Body[1] - cells[j].Body[0];
+      const double* col_bodies = &bodies[3 * cells[j].Body[0]];
+      
+      long long max_rank = std::min(rank, std::min(nrows, ncols));
+      // sample the bodies, note that we only sample the columns
+      std::vector<long long> piv(max_rank);
+      long long iters = adaptive_cross_approximation(kernel, epsilon, max_rank, nrows, ncols, row_bodies, col_bodies, nullptr, &piv[0]);
+      // resize to the actual rank (could be less than max_rank)
+      piv.resize(iters);
 
-  for (long long y = lbegin; y < lend; y++) {
-    for (long long yx = Far.RowIndex[y]; yx < Far.RowIndex[y + 1]; yx++) {
-      long long x = Far.ColIndex[yx];
-      long long m = cells[y].Body[1] - cells[y].Body[0];
-      long long n = cells[x].Body[1] - cells[x].Body[0];
-      const double* xbodies = &bodies[3 * cells[x].Body[0]];
-      const double* ybodies = &bodies[3 * cells[y].Body[0]];
+      Eigen::Map<const Eigen::Matrix<double, 3, Eigen::Dynamic>> col_bodies_map(col_bodies, 3, ncols);
+      Eigen::VectorXd sampled_bodies(3 * iters);
 
-      long long k = std::min(rank, std::min(m, n));
-      std::vector<long long> ipiv(k);
-      long long iters = adaptive_cross_approximation(epi, eval, m, n, k, ybodies, xbodies, nullptr, &ipiv[0]);
-      ipiv.resize(iters);
-
-      Eigen::Map<const Eigen::Matrix<double, 3, Eigen::Dynamic>> Xbodies(xbodies, 3, n);
-      Eigen::VectorXd Fbodies(3 * iters);
-
-      Fbodies = Xbodies(Eigen::all, ipiv).reshaped();
-      M[y - lbegin].insert(M[y - lbegin].end(), Fbodies.begin(), Fbodies.end());
+      sampled_bodies = col_bodies_map(Eigen::all, piv).reshaped();
+      // add the sampled bodies to the far field of the current cell
+      M[c - lbegin].insert(M[c - lbegin].end(), sampled_bodies.begin(), sampled_bodies.end());
     }
   }
 }

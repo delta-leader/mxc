@@ -8,28 +8,41 @@ class CSR;
 class Cell;
 class ColCommMPI;
 
+/*
+Basically, this class is used to sample the far field of a node
+in the cluster tree.
+Let us take the example of a leaf level cell in an HSS cluster tree.
+The far field would be of dimension leaf x N-leaf.
+In order to reduce this to leaf x max_rank (or less if a desired
+accuracy is already satisfied), we can sample the far field.
+This sampling is done for each level seperately and lower level nodes
+can reuse the samples from higher levels if necessary.
+*/
 class WellSeparatedApproximation {
 private:
   // first index in the cell array for the current level
   long long lbegin;
   // last index in the cell array for the current level
   long long lend;
+  // the sampled bodies for each cell in the level
+  // local index (i.e. starts from 0 for each level)
   std::vector<std::vector<double>> M;
 
 public:
   WellSeparatedApproximation() : lbegin(0), lend(0) {}
   /*
-  eval: kernel function
-  epi: epsilon
-  rank: maximum rank
-  lbegin: first index in the cell array on the current level
-  lend: number oc cells on the current level
-  cells: the cell array
-  Far: Far field in CSR format
-  bodies: the points
-  upper: the approximation from the upper level
+  In:
+    kernel: kernel function
+    epsilon: epsilon
+    max_rank: maximum rank
+    cell_begin: first index in the cell array on the current level
+    ncells: number of cells on the current level
+    cells: the cell array
+    Far: Far field in CSR format
+    bodies: the points
+    upper_level: the approximation from the upper level
   */
-  WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper);
+  WellSeparatedApproximation(const MatrixAccessor& kernel, const double epsilon, const long long max_rank, const long long cell_begin, const long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level);
 
   long long fbodies_size_at_i(long long i) const;
   const double* fbodies_at_i(long long i) const;
