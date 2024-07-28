@@ -2,6 +2,7 @@
 #include <solver.hpp>
 #include <test_funcs.hpp>
 #include <string>
+#include <Eigen/Dense>
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
@@ -20,7 +21,7 @@ int main(int argc, char* argv[]) {
   
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
-  //Gaussian eval(8);
+  //Gaussian eval(0.2);
   Helmholtz3D eval(1., 1.);
   
   std::vector<double> body(Nbody * 3);
@@ -28,7 +29,7 @@ int main(int argc, char* argv[]) {
   std::vector<Cell> cell(ncells);
 
   //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
-  uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
+  uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
 
@@ -77,9 +78,12 @@ int main(int argc, char* argv[]) {
     std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
+    /*Eigen::MatrixXcd A(Nbody, Nbody);
+    gen_matrix(eval, Nbody, Nbody, body.data(), body.data(), A.data());
+    double cond = 1. / A.lu().rcond();
+    std::cout << "Condition #: " << cond << std::endl;*/
   }
 
-  std::copy(X2.begin(), X2.end(), X1.begin());
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   H2MatrixSolver matM;
@@ -92,6 +96,10 @@ int main(int argc, char* argv[]) {
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
 
+  std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
+  matM.matVecMul(&X1[0]);
+  double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
+
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
@@ -100,6 +108,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
   h2_factor_comm_time = ColCommMPI::get_comm_time();
+  std::copy(X2.begin(), X2.end(), X1.begin());
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
@@ -114,6 +123,7 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
+    std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
     std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
@@ -121,7 +131,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
+  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 20, 50);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
@@ -130,6 +140,8 @@ int main(int argc, char* argv[]) {
   if (mpi_rank == 0) {
     std::cout << "GMRES Residual: " << matA.resid[matA.iters] << ", Iters: " << matA.iters << std::endl;
     std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
+    for (long long i = 0; i <= matA.iters; i++)
+      std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
   }
 
   matA.free_all_comms();
