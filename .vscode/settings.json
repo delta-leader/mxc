@@ -81,6 +81,7 @@
         "__locale": "cpp",
         "locale": "cpp",
         "__config": "cpp",
-        "core": "cpp"
+        "core": "cpp",
+        "ios": "cpp"
     }
 }

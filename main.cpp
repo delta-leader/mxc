@@ -13,6 +13,7 @@ int main(int argc, char* argv[]) {
   long long rank = argc > 4 ? std::atoll(argv[4]) : 100;
   double epi = argc > 5 ? std::atof(argv[5]) : 1e-10;
   std::string mode = argc > 6 ? std::string(argv[6]) : "h2";
+  const char* csv = argc > 7 ? argv[7] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   long long levels = (long long)std::log2((double)Nbody / leaf_size);
@@ -142,6 +143,14 @@ int main(int argc, char* argv[]) {
     std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
     for (long long i = 0; i <= matA.iters; i++)
       std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
+
+    int mpi_size = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    if (csv != nullptr)
+      write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
+        h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
+        m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
+        matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());
   }
 
   matA.free_all_comms();
