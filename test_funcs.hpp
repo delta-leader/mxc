@@ -99,12 +99,12 @@ void write_to_csv(const char* fname, int mpi_size, long long N, double theta, lo
   std::ofstream file(fname, std::ios_base::app);
   if (!file.bad())
   {
-    file << mpi_size << ',' << N << ',' << theta << ',' << leaf_size << ',' << rank << ',' << epi << ',' << mode << ',';
-    file << h2cerr << ',' << h2ctime << ',' << h2ctime_comm << ',' << h2mvtime << ',' << h2mvtime_comm << ',' << dense_mvtime << ',';
-    file << mctime << ',' << mctime_comm << ',' << mcerr << ',' << factor_time << ',' << factor_time_comm << ',' << sub_time << ',' << sub_time_comm << ',' << sub_err << ',';
-    file << gmres_err << ',' << gmres_iters << ',' << gmres_time << ',' << gmres_time_comm << ',';
+    file << mpi_size << ',' << N << ',' << theta << ',' << leaf_size << ',' << rank << ',' << epi << ',' << mode << ','; // 0 - 6
+    file << h2cerr << ',' << h2ctime << ',' << h2ctime_comm << ',' << h2mvtime << ',' << h2mvtime_comm << ',' << dense_mvtime << ','; // 7 - 12
+    file << mctime << ',' << mctime_comm << ',' << mcerr << ',' << factor_time << ',' << factor_time_comm << ',' << sub_time << ',' << sub_time_comm << ',' << sub_err << ','; // 13 - 20
+    file << gmres_err << ',' << gmres_iters << ',' << gmres_time << ',' << gmres_time_comm; // 21 - 24
     for (long long i = 0; i <= gmres_iters; i++)
-      file << iter_err[i] << ',';
+      file << ',' << iter_err[i];
     file << std::endl;
     file.close();
   }
