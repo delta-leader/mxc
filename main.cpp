@@ -21,8 +21,8 @@ int main(int argc, char* argv[]) {
   
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
-  //Gaussian eval(0.2);
-  Helmholtz3D eval(1., 1.);
+  //Gaussian eval(0.03);
+  Helmholtz3D eval(1., 4.);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody);

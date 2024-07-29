@@ -424,17 +424,19 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
 
-    Vector_t x(X[i + ibegin], M);
-    Vector_t y(Y[i + ibegin], M);
-    Matrix_t q(Q[i + ibegin], M, M);
-    Matrix_t Aii(A[diag], M, M);
-    Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
-    
-    y.noalias() = q.adjoint() * x;
-    y.bottomRows(Mr).applyOnTheLeft(p);
-    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
-    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
-    x = y;
+    if (0 < Mr) {
+      Vector_t x(X[i + ibegin], M);
+      Vector_t y(Y[i + ibegin], M);
+      Matrix_t q(Q[i + ibegin], M, M);
+      Matrix_t Aii(A[diag], M, M);
+      Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
+      
+      y.noalias() = q.adjoint() * x;
+      y.bottomRows(Mr).applyOnTheLeft(p);
+      Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
+      Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
+      x = y;
+    }
   }
 
   comm.neighbor_bcast(X);
@@ -452,33 +454,41 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
         long long Ns = DimsLr[j];
         long long Nr = N - Ns;
 
-        Vector_t xj(X[j], N);
-        Matrix_t Aij(A[ij], M, N);
-        x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
+        if (0 < Nr) {
+          Vector_t xj(X[j], N);
+          Matrix_t Aij(A[ij], M, N);
+          x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
+        }
       }
       Vector_t xo(NX[i + ibegin], Ms);
       xo = x.topRows(Ms);
     }
 
-    Vector_t y(Y[i + ibegin], M);
-    y = x;
-    for (long long ij = ARows[i]; ij < diag; ij++) {
-      long long j = ACols[ij];
-      long long N = Dims[j];
-      long long Ns = DimsLr[j];
-      long long Nr = N - Ns;
+    if (0 < Mr) {
+      Vector_t y(Y[i + ibegin], M);
+      y = x;
+      for (long long ij = ARows[i]; ij < diag; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
 
-      Vector_t xj(X[j], N);
-      Matrix_t Aij(A[ij], M, N);
-      y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        if (0 < Nr) {
+          Vector_t xj(X[j], N);
+          Matrix_t Aij(A[ij], M, N);
+          y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        }
+      }
     }
   }
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
-    Vector_t x(X[i + ibegin], M);
-    Vector_t y(Y[i + ibegin], M);
-    x = y;
+    if (0 < M) {
+      Vector_t x(X[i + ibegin], M);
+      Vector_t y(Y[i + ibegin], M);
+      x = y;
+    }
   }
 }
 
@@ -499,42 +509,48 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
     Vector_t x(X[i + ibegin], M);
     Vector_t y(Y[i + ibegin], M);
 
-    y.bottomRows(Mr) = x.bottomRows(Mr);
+    if (0 < Mr) {
+      y.bottomRows(Mr) = x.bottomRows(Mr);
+      for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
+        
+        if (0 < Nr) {
+          Vector_t xj(X[j], N);
+          Matrix_t Aij(A[ij], M, N);
+          y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        }
+      }
+
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+
+        if (0 < Ns) {
+          Vector_t xo(NX[j], Ns);
+          Matrix_t Aij(A[ij], M, N);
+          y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xo;
+        }
+      }
+    }
+
     if (0 < Ms) {
       Vector_t xo(NX[i + ibegin], Ms);
       y.topRows(Ms) = xo;
-    }
-
-    for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
-      long long j = ACols[ij];
-      long long N = Dims[j];
-      long long Ns = DimsLr[j];
-      long long Nr = N - Ns;
-
-      Vector_t xj(X[j], N);
-      Matrix_t Aij(A[ij], M, N);
-      y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
-    }
-
-    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-      long long j = ACols[ij];
-      long long N = Dims[j];
-      long long Ns = DimsLr[j];
-
-      if (0 < Ns) {
-        Vector_t xo(NX[j], Ns);
-        Matrix_t Aij(A[ij], M, N);
-        y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xo;
-      }
     }
   }
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
-    Vector_t x(X[i + ibegin], M);
-    Vector_t y(Y[i + ibegin], M);
-    Matrix_t q(Q[i + ibegin], M, M);
-    x.noalias() = q.conjugate() * y;
+    if (0 < M) {
+      Vector_t x(X[i + ibegin], M);
+      Vector_t y(Y[i + ibegin], M);
+      Matrix_t q(Q[i + ibegin], M, M);
+      x.noalias() = q.conjugate() * y;
+    }
   }
 
   comm.neighbor_bcast(X);
