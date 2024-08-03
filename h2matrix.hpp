@@ -60,6 +60,7 @@ private:
   // stores the rank for each cell
   std::vector<long long> DimsLr;
   // the dimension (Dim) of the parent of each cell
+  // i.e. the number of points in the parent
   std::vector<long long> UpperStride;
   // the basis matrices
   // the basis is computed as a row ID such that A = X A(rows)
@@ -67,8 +68,7 @@ private:
   MatrixDataContainer<std::complex<double>> Q;
   // the corresponding R matrices (see above)
   MatrixDataContainer<std::complex<double>> R;
-  // stores the rank k far field points for each cell
-  // TODO or leaf level points?
+  // stores the points corresponding to each cell
   MatrixDataContainer<double> S;
 
   // Far field rows and columns in CSR format
@@ -84,16 +84,15 @@ private:
   std::vector<long long> ARows;
   std::vector<long long> ACols;
   // stores the dense matrices at the leaf level
-  // at the upper levels it stores the skeleten matrices
-  // of all low-rank children in the near field
+  // at the upper levels it stores the skeleton matrices
+  // TODO what about the skeleton matrices on the leaf level?
   MatrixDataContainer<std::complex<double>> A;
-  // Pointer to the upper level skeleton matrices for the near field
+  // Pointer to the upper level skeleton/dense matrices for the near field
   // 0 initialized as far as I can tell
-  // TODO confirm
+  // TODO not sure how this is used?
   std::vector<std::complex<double>*> NA;
   // length is equal to the total number of points at this level
-  // can be less than N due to sampling?
-  // TODP confirm
+  // TODO not used yet
   std::vector<int> Ipivots;
 
   // pointers to X of the parent
@@ -103,7 +102,6 @@ private:
 
 public:
   // the number of points contained in each cell for this level
-  // after sampling
   std::vector<long long> Dims;
   // TODO not setup so far
   MatrixDataContainer<std::complex<double>> X;
@@ -112,19 +110,19 @@ public:
   H2Matrix() {}
   /*
   creates an H2 matrix for a certain level
-  eval: kernel function
-  epi: accuracy
+  kernel: kernel function
+  epsilon: accuracy
   cells: the cell array (nodes in the cluster tree)
   Near: Near field in CSR format
   Far: Far field in CSR format
   bodies: the points
   wsa: the sampled far field points
   comm: MPI communicator for this level
-  lowerA:
-  lowerComm:
-  use_near_bodies: default: false
+  lowerA: the H2Matrix for the level one below the current one
+  lowerComm: communicator for this level
+  use_near_bodies: not exactly sure what this does, default: false
   */
-  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
+  H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies = false);
 
   void matVecUpwardPass(const ColCommMPI& comm);
   void matVecHorizontalandDownwardPass(const ColCommMPI& comm);
