@@ -32,16 +32,19 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   for (long long i = 0; i <= levels; i++)
     comm[i] = ColCommMPI(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
 
-  // create ab H-matrix for each level
+  // sample the far field for all cells in each level
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++) {
     wsa[l] = WellSeparatedApproximation(eval, epi, rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
   }
   epi = fix_rank ? (double)rank : epi;
+  // Create an H2 matrix for each level
+  std::cout<<"Level: "<<levels<<std::endl;
   A[levels] = H2Matrix(eval, epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], fix_rank);
-  for (long long l = levels - 1; l >= 0; l--)
+  for (long long l = levels - 1; l >= 0; l--){
+    std::cout<<"Level: "<<l<<std::endl;
     A[l] = H2Matrix(eval, epi, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], fix_rank);
-
+  }
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);

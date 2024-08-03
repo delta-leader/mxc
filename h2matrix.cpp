@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <iostream>
 
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& kernel, double epsilon, long long rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level) :
   lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
@@ -47,58 +48,117 @@ WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& ker
   }
 }
 
-long long WellSeparatedApproximation::fbodies_size_at_i(long long i) const {
+long long WellSeparatedApproximation::fbodies_size_at_i(const long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].size() / 3 : 0;
 }
 
-const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
+const double* WellSeparatedApproximation::fbodies_at_i(const long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].data() : nullptr;
 }
 
-long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> a[], std::complex<double> c[]) {
-  long long K = std::min(M, N), rank = 0;
-  if (0 < K) {
-    Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(K, M);
+/*
+In:
+  kernel: kernel function
+  epsilon: accuracy threshold for rank revealing QR
+  nrows: number of rows (i.e. the current cell), also a and c are square matrices of nrows x nrows
+  ncols: number of columns (in the far field)
+  col_bodies: the far field points (column points)
+Inout:
+  row_bodies: the points in this cell (row points - S in the H2matrix class)
+  Q: input: identity for leaf nodes, R matrix from the lower level otherwise
+     output: Q matrix for the the current level in the H2matrix class
+Out:
+  R: the R matrix in the H2matrix class
+Returns:
+  rank: The rank corresponding to epsilon from the column pivoted QR
+*/
+long long compute_basis(const MatrixAccessor& kernel, const double epsilon, long long nrows, long long ncols, double row_bodies[], const double col_bodies[], std::complex<double> Q[], std::complex<double> R[]) {
+  const long long MIN_D = std::min(nrows, ncols);
+  long long rank = 0;
+  // safeguard against empty matrix
+  if (0 < MIN_D) {
+    // RX is the transpose of the far field
+    // We need the transpose because we compute a row ID
+    Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(MIN_D, nrows);
 
-    if (K < N) {
-      Eigen::MatrixXcd XF(N, M);
-      gen_matrix(eval, N, M, Fbodies, Xbodies, XF.data());
+    if (MIN_D < ncols) {
+      // N is the larger dimension, so RX is M x M
+      // The QR assures we actually have those dimensions
+      // Note that in this case, the following rank revealing QR
+      // wouldn't actually do anything if it were not for the column pivoting
+      Eigen::MatrixXcd XF(ncols, nrows);
+      gen_matrix(kernel, ncols, nrows, col_bodies, row_bodies, XF.data());
       Eigen::HouseholderQR<Eigen::MatrixXcd> qr(XF);
-      RX = qr.matrixQR().topRows(K).triangularView<Eigen::Upper>();
+      RX = qr.matrixQR().topRows(MIN_D).triangularView<Eigen::Upper>();
     }
-    else
-      gen_matrix(eval, N, M, Fbodies, Xbodies, RX.data());
+    else {
+      // M is the largest dimension, so RX is N X M
+      gen_matrix(kernel, ncols, nrows, col_bodies, row_bodies, RX.data());
+    }
     
+    // Rank revealing QR of the far field
     Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(RX);
-    rank = std::min(K, (long long)std::floor(epi));
-    if (epi < 1.) {
-      rrqr.setThreshold(epi);
+    // TODO not sure what this should accomplish
+    // maybe for debugging?
+    rank = std::min(MIN_D, (long long)std::floor(epsilon));
+    // set the accuracy threshold and
+    // get the corresponding rank
+    if (epsilon < 1.) {
+      rrqr.setThreshold(epsilon);
       rank = rrqr.rank();
     }
 
-    Eigen::Map<Eigen::MatrixXcd> A(a, M, M), C(c, M, M);
-    if (0 < rank && rank < M) {
-      C.topRows(rank) = rrqr.matrixR().topRows(rank);
-      C.topLeftCorner(rank, rank).triangularView<Eigen::Upper>().solveInPlace(C.topRightCorner(rank, M - rank));
-      C.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
+    // on the leaf level a contains the identity matrix
+    // R matrix from the lower level otherwise
+    Eigen::Map<Eigen::MatrixXcd> Q_ref(Q, nrows, nrows), R_ref(R, nrows, nrows);
+    if (0 < rank && rank < nrows) {
+      // QR successful
+      // We use R_ref to store the intermediate results
+      // compute the row ID from the RRQR
+      // see https://users.oden.utexas.edu/~pgm/Teaching/APPM5720_2016s/scribe_week07_wed.pdf
+      R_ref.topRows(rank) = rrqr.matrixR().topRows(rank);
+      R_ref.topLeftCorner(rank, rank).triangularView<Eigen::Upper>().solveInPlace(R_ref.topRightCorner(rank, nrows - rank));
+      R_ref.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
 
-      Eigen::Map<Eigen::MatrixXd> body(Xbodies, 3, M);
+      // We reorder the row points stored in S accordingly
+      // Supposedly because the upper levels reuse them
+      // TODO confirm this
+      Eigen::Map<Eigen::MatrixXd> body(row_bodies, 3, nrows);
       body = body * rrqr.colsPermutation();
 
-      Eigen::HouseholderQR<Eigen::MatrixXcd> qr = (A.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * C.topRows(rank).transpose())).householderQr();
-      A = qr.householderQ();
-      C = Eigen::MatrixXcd::Zero(M, M);
-      C.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
+      // transpose back and reorder
+      // TODO why do I need to reorder?
+      // We now have the row ID A = X * A(rows) and calculate the QR of X
+      // because we want an orthogonal basis
+      Eigen::HouseholderQR<Eigen::MatrixXcd> qr = (Q_ref.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * R_ref.topRows(rank).transpose())).householderQr();
+      // A stores the Q matrix
+      Q_ref = qr.householderQ();
+      // C stores the R matrix, since the memory was already allocated before
+      // we knew the real rank we just zero out the rest (delete intermediate results)
+      R_ref = Eigen::MatrixXcd::Zero(nrows, nrows);
+      R_ref.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
     }
     else {
-      A = Eigen::MatrixXcd::Identity(M, M);
-      C = Eigen::MatrixXcd::Identity(M, M);
+      // QR failed for some reason
+      Q_ref = Eigen::MatrixXcd::Identity(nrows, nrows);
+      R_ref = Eigen::MatrixXcd::Identity(nrows, nrows);
     }
   }
   return rank;
 }
 
-inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vector<long long>& ColIndex, long long i, long long j) {
+/*
+Translates 2D to 1D index for example for finding the corresponding
+locatiion in C from CRows and Cols
+In:
+  RowIndex: vector or row indices in CSR format
+  ColIndex: vector of column indices in CSR format
+  i: column index
+  j: row index
+Returns:
+  desired 1D index
+*/
+inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vector<long long>& ColIndex, const long long i, const long long j) {
   if (i < 0 || RowIndex.size() <= (1ull + i))
     return -1;
   long long k = std::distance(ColIndex.begin(), std::find(ColIndex.begin() + RowIndex[i], ColIndex.begin() + RowIndex[i + 1], j));
@@ -106,53 +166,95 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
 }
 
 H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies) {
+  // number of cells on the same level
   long long xlen = comm.lenNeighbors();
+  // index of the first cell for this process on this level (always 0 for a single process)
   long long ibegin = comm.oLocal();
+  // number of cells for this process on this level (same as xlen for a single process)
   long long nodes = comm.lenLocal();
+  // index of the first cell for this process on this level in the global cell array (xlen-1 for a single process)
   long long ybegin = comm.oGlobal();
 
+  // first child of first cell
   long long ychild = cells[ybegin].Child[0];
+  // convert to local index
   long long localChildIndex = lowerComm.iLocal(ychild);
 
+  // stores the offsets to the first child of each cell on this level
+  // local means it starts from 0 (i.e. it does not include the level offset)
+  // Usually a sequence of 0, 2, 4, etc. (all 0s for the leaf level)
   std::vector<long long> localChildOffsets(nodes + 1);
   localChildOffsets[0] = 0;
   std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return c.Child[1] - ychild; });
+
+  // initalize vectors
   Dims = std::vector<long long>(xlen, 0);
   DimsLr = std::vector<long long>(xlen, 0);
   UpperStride = std::vector<long long>(nodes, 0);
 
+  // extract the indices of the near field for this level
   ARows = std::vector<long long>(Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
   ACols = std::vector<long long>(Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
+  // transform to entries local for this level
   long long offset = ARows[0];
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
   NA = std::vector<std::complex<double>*>(ARows[nodes], nullptr);
 
+  // extract the indices of the far field (sampled bodies) for this level
   CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
   CCols = std::vector<long long>(Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
+  // transform to entries local for this level
   offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
   C = std::vector<std::complex<double>*>(CRows[nodes], nullptr);
 
-  if (localChildOffsets.back() == 0)
+  // get the number of points for each cell
+  if (localChildOffsets.back() == 0){
+    // leaf level case (i.e. there is no lower level)
+    // all cells are leaf size (at least for multiples of two)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
-  else {
+  } else {
+    // get the dimensions from the lower level, i.e. add the
+    // dimensions of the (two) children.
+    // Note that the low-rank dimensions are used here
+    // (i.e. the number of sampled points)
+    // TODO where is DimsLr set? (probably in the previous level)
     std::vector<long long>::const_iterator iter = lowerA.DimsLr.begin() + localChildIndex;
     std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
       [&](long long start, long long end) { return std::reduce(iter + start, iter + end); });
   }
+  /*std::cout<<"Dims: ";
+  for (size_t i=0; i<Dims.size(); ++i)
+    std::cout<<Dims[i]<<", ";
+  std::cout<<std::endl;
+  std::cout<<"lowerA.DimsLr: ";
+  for (size_t i=0; i<lowerA.DimsLr.size(); ++i)
+    std::cout<<lowerA.DimsLr[i]<<", ";
+  std::cout<<std::endl;*/
+  
 
+  // cast the dimensions to all processes (on the same level)
   comm.neighbor_bcast(Dims.data());
+  // allocates storage for the total number of points on this level
+  // i.e. sum of points per cell
   X = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
   Y = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
+  // pointers to X/Y on the parent cell
+  // i.e. if a parent has two children with 128 elements each
+  // the corresponding pointers for the first block would be set 
+  // to NX[0] -> X[0], NX[1] -> X[128]
   NX = std::vector<std::complex<double>*>(xlen, nullptr);
   NY = std::vector<std::complex<double>*>(xlen, nullptr);
 
+  // basically sets the NX, NY pointers of the children (i.e. lower level)
+  // for every node on this level
   for (long long i = 0; i < xlen; i++) {
     long long ci = comm.iGlobal(i);
     long long child = lowerComm.iLocal(cells[ci].Child[0]);
     long long cend = 0 <= child ? (child + cells[ci].Child[1] - cells[ci].Child[0]) : -1;
+    // for all children of that node
     for (long long y = child; y < cend; y++) {
       long long offset_y = std::reduce(&lowerA.DimsLr[child], &lowerA.DimsLr[y]);
       lowerA.NX[y] = X[i] + offset_y;
@@ -160,62 +262,112 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     }
   }
 
+  // size of Q seems to be dim x dim for each cell
+  // so Q stores a matrix for every cell on this level
+  // note that all of these matrices are square
   std::vector<long long> Qsizes(xlen, 0);
   std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
   Q = MatrixDataContainer<std::complex<double>>(xlen, Qsizes.data());
   R = MatrixDataContainer<std::complex<double>>(xlen, Qsizes.data());
+  /*std::cout<<"Qsizes ("<<xlen<<"): ";
+  for (size_t i=0; i<Qsizes.size(); ++i)
+    std::cout<<Qsizes[i]<<", ";
+  std::cout<<std::endl;
+  */
 
+  // S stores the points for every cell on this level
+  // The dimensions are given by 3 * Dims
   std::vector<long long> Ssizes(xlen);
   std::transform(Dims.begin(), Dims.end(), Ssizes.begin(), [](const long long d) { return 3 * d; });
+  /*std::cout<<"Ssizes ("<<xlen<<"): ";
+  for (size_t i=0; i<Ssizes.size(); ++i)
+    std::cout<<Ssizes[i]<<", ";
+  std::cout<<std::endl;*/
   S = MatrixDataContainer<double>(xlen, Ssizes.data());
 
+  // Create a storage container for the near field (dense matrices?)
+  // TODO cannot be the near field (dense matrices only exist on the lowest level)
+  // for the lowest level, it seems to be the near field (dense matrices) indeed
+  // but I don't know what is stored on the upper levels
+  // this forms the cross product of cells, i.e. block cluster tree I x J
   std::vector<long long> Asizes(ARows[nodes]);
   for (long long i = 0; i < nodes; i++)
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
+  /*std::cout<<"Asizes ("<<ARows[nodes]<<"): ";
+  for (size_t i=0; i<Asizes.size(); ++i)
+    std::cout<<Asizes[i]<<", ";
+  std::cout<<std::endl;*/
   A = MatrixDataContainer<std::complex<double>>(ARows[nodes], Asizes.data());
+  // the lenght of this vector is the number of points aross the whole level
+  // can be less than N due to the sampling
   Ipivots = std::vector<int>(std::reduce(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes)));
 
+  // TODO I think this allows for the skipping of upper levels
+  // e.g. levels that have neither LR nor Dense matrices
   if (std::reduce(Dims.begin(), Dims.end())) {
     typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
     typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
+    // index of the first cell for this process on this level (always 0 for a single process)
+    // same as ibegin
     long long pbegin = lowerComm.oLocal();
+    // number of cells for this process on this level (same as xlen for a single process)
+    // same as nodes
     long long pend = pbegin + lowerComm.lenLocal();
 
+    // for every node/cell on the current level
     for (long long i = 0; i < nodes; i++) {
+      // get the number of points in that cell
       long long M = Dims[i + ibegin];
+      // get the child cell indices
       long long childi = localChildIndex + localChildOffsets[i];
       long long cendi = localChildIndex + localChildOffsets[i + 1];
+      // get the corresponding Q matrix for this cell
+      // note that this is a reference
       Eigen::Map<Eigen::MatrixXcd> Qi(Q[i + ibegin], M, M);
 
-      for (long long y = childi; y < cendi; y++) { // Intermediate levels
+      // for all children
+      for (long long y = childi; y < cendi; y++) { 
+        // Intermediate levels (i.e. only cells that have children)
+        // dimensions from the children
         long long offset_y = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[y]);
         long long ny = lowerA.DimsLr[y];
+        // combine the points from the children into S
         std::copy(lowerA.S[y], lowerA.S[y] + (ny * 3), &(S[i + ibegin])[offset_y * 3]);
 
+        // TODO I assume this pieces together the R matrix from the children
         Matrix_t Ry(lowerA.R[y], ny, ny, Stride_t(lowerA.Dims[y], 1));
         Qi.block(offset_y, offset_y, ny, ny) = Ry;
 
+        // TODO some kind of security check, but afaik this always triggers
         if (pbegin <= y && y < pend && 0 < M) {
           long long py = y - pbegin;
+          // set the upper stride for each child
           lowerA.UpperStride[py] = M;
 
+          // for all cells in the near field
+          // remember, this is an intermediate level, so the near field is hierarchical
           for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
             long long j_global = Near.ColIndex[ij + Near.RowIndex[ybegin]];
             long long childj = lowerComm.iLocal(cells[j_global].Child[0]);
             long long cendj = (0 <= childj) ? (childj + cells[j_global].Child[1] - cells[j_global].Child[0]) : -1;
 
+            // for all child nodes
             for (long long x = childj; x < cendj; x++) {
+              // set the  pointer of the children
               long long offset_x = std::reduce(&lowerA.DimsLr[childj], &lowerA.DimsLr[x]);
               long long nx = lowerA.DimsLr[x];
               long long lowN = lookupIJ(lowerA.ARows, lowerA.ACols, py, x);
               long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, py, x);
+              // This sets A for the upper levels
               std::complex<double>* dp = A[ij] + offset_y + offset_x * M;
               if (0 <= lowN)
                 lowerA.NA[lowN] = dp;
               if (0 <= lowC) {
                 lowerA.C[lowC] = dp;
+                // construct R from the children
                 Matrix_t Rx(lowerA.R[x], nx, nx, Stride_t(lowerA.Dims[x], 1));
+                // construct C from the children
                 Matrix_t Cyx(dp, ny, nx, Stride_t(M, 1));
                 Eigen::MatrixXcd Ayx(ny, nx);
                 gen_matrix(eval, ny, nx, lowerA.S[y], lowerA.S[x], Ayx.data());
@@ -226,24 +378,41 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
         }
       }
 
-      if (cendi <= childi) { // Leaf level
+      if (cendi <= childi) { 
+        // Leaf level (i.e. no children)
+        //std::cout<<"NoC"<<std::endl;
+        // global cell array index
         long long ci = i + ybegin;
+        // copy all the particles in that cell to S
+        // TODO if we are not on the lowest level, does S remain empty?
         std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
+        // set the corresponding Q matrix to the identity
         Qi = Eigen::MatrixXcd::Identity(M, M);
-
+        // ARows and AColumns contain the near field
+        // so this creates the dense matrices and stores them in A
         for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+          // M and N are the box dimensions
+          //.at the leaf level this is always leaf_size x leaf_size
+          //.TODO maybe this accounts for overall non-square dimensions
           long long N = Dims[ACols[ij]];
           long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
           gen_matrix(eval, M, N, &bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[cj].Body[0]], A[ij]);
         }
       }
-    }
+    } // loop over nodes finished
+    
+    // We broadcast all the particles
+    // not entirely sure why, were they not created on every node?
     comm.neighbor_bcast(S);
     std::vector<std::vector<double>> cbodies(nodes);
+    // loop over all nodes
     for (long long i = 0; i < nodes; i++) {
+      // get the sampled bodies
+      // TODO this is the first time we actually touch the sampled bodies
       long long fsize = wsa.fbodies_size_at_i(i);
       const double* fbodies = wsa.fbodies_at_i(i);
 
+      // TODO look into that later, for now assume it is not used (at least for the initial H2)
       if (use_near_bodies) {
         std::vector<long long>::iterator neighbors = ACols.begin() + ARows[i];
         std::vector<long long>::iterator neighbors_end = ACols.begin() + ARows[i + 1];
@@ -262,17 +431,24 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
         std::copy(fbodies, &fbodies[3 * fsize], cbodies[i].begin() + loc);
       }
       else {
+        // copies the far field points into cbodies
         cbodies[i] = std::vector<double>(3 * fsize);
         std::copy(fbodies, &fbodies[3 * fsize], cbodies[i].begin());
       }
     }
 
+    // loop over all the nodes again
     for (long long i = 0; i < nodes; i++) {
       long long fsize = cbodies[i].size() / 3;
       const double* fbodies = cbodies[i].data();
+      // compute the far field basis for each cell
       long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, Q[i + ibegin], R[i + ibegin]);
       DimsLr[i + ibegin] = rank;
     }
+    /*std::cout<<"DimsLr: ";
+  for (size_t i=0; i<DimsLr.size(); ++i)
+    std::cout<<DimsLr[i]<<", ";
+  std::cout<<std::endl;*/
 
     comm.neighbor_bcast(DimsLr.data());
     comm.neighbor_bcast(S);

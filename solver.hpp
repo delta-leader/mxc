@@ -27,7 +27,7 @@ public:
   eval: kernel function
   epi: epsilon, accuracy
   rank
-  cells: array with the nodes of the index tree
+  cells: cell array containing the nodes of the index tree
   theta: admisibility
   bodies: the points
   levels: the depth of the tree;
