@@ -85,4 +85,16 @@ Returns:
 */
 long long adaptive_cross_approximation(const MatrixAccessor& kernel, const double epsilon, const long long max_rank, const long long nrows, const long long ncols, const double row_bodies[], const double col_bodies[], long long row_piv[], long long col_piv[]);
 
-void mat_vec_reference(const MatrixAccessor& eval, long long nrows, long long ncols, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]);
+/*
+reference matrix vector multiplication
+In:
+  kernel: kernel function
+  nrows: number of rows
+  ncols: number of columns
+  X: the vector to be multiplied
+  row_bodies: the row points
+  col_bodies: the column points
+Out:
+  B: the result
+*/
+void mat_vec_reference(const MatrixAccessor& kernel, const long long nrows, const long long ncols, std::complex<double> B[], const std::complex<double> X[], const double row_bodies[], const double col_bodies[]);

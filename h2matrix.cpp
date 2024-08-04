@@ -447,51 +447,71 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
 }
 
 void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
+  // from the lowest level to the highest level
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
+  // starting index for the current level (on this process)
+  const long long ibegin = comm.oLocal();
+  // number of cells on this process
+  const long long nodes = comm.lenLocal();
+  // TODO confirm
+  // reduce and broadcast X to all processes?
   comm.level_merge(X[0], X.size());
   comm.neighbor_bcast(X);
 
+  // for all cells on this process
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long N = DimsLr[i + ibegin];
-    if (0 < N) {
-      Vector_t x(X[i + ibegin], M);
-      Vector_t xo(NX[i + ibegin], N);
-      Matrix_t q(Q[i + ibegin], M, N);
-      xo.noalias() = q.transpose() * x;
+    const long long nrows = Dims[i + ibegin];
+    const long long rank = DimsLr[i + ibegin];
+    // skip levels without data
+    if (0 < rank) {
+      // multiply the vector with the row basis
+      // and store it to X of the upper level
+      Vector_t x(X[i + ibegin], nrows);
+      Vector_t x_parent(NX[i + ibegin], rank);
+      Matrix_t q(Q[i + ibegin], nrows, rank);
+      x_parent.noalias() = q.transpose() * x;
     }
   }
 }
 
 void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
+  // from the highest level to the lowest level
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
   typedef Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t;
 
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
+  // the first cell for this process on this level
+  const long long ibegin = comm.oLocal();
+  // the number of cells for this process on this level
+  const long long nodes = comm.lenLocal();
 
+  // for every cell on this process
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long K = DimsLr[i + ibegin];
-    if (0 < K) {
-      Vector_t y(Y[i + ibegin], M);
-      Vector_t yo(NY[i + ibegin], K);
+    const long long nrows = Dims[i + ibegin];
+    const long long rank_i = DimsLr[i + ibegin];
+    // skip upper levels
+    // e.g. where NY is not set
+    if (0 < rank_i) {
+      Vector_t y(Y[i + ibegin], nrows);
+      Vector_t y_parent(NY[i + ibegin], rank_i);
 
+      // for all cells in the far field (can be multiple per row)
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
-        long long j = CCols[ij];
-        long long N = DimsLr[j];
+        const long long j = CCols[ij];
+        const long long rank_j = DimsLr[j];
 
-        Vector_t xo(NX[j], N);
-        Matrix_t c(C[ij], K, N, Stride_t(UpperStride[i], 1));
-        yo.noalias() += c * xo;
+        Vector_t x_parent(NX[j], rank_j);
+        // skeleton matrix
+        Matrix_t c(C[ij], rank_i, rank_j, Stride_t(UpperStride[i], 1));
+        // multiply with the skeleton matrix
+        y_parent.noalias() += c * x_parent;
       }
-      Matrix_t q(Q[i + ibegin], M, K, Stride_t(M, 1));
-      y.noalias() = q * yo;
+      // multiply the vector with the column basis
+      // and store in Y
+      Matrix_t q(Q[i + ibegin], nrows, rank_i, Stride_t(nrows, 1));
+      y.noalias() = q * y_parent;
     }
   }
 }
@@ -500,20 +520,25 @@ void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
 
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
+  // the first cell for this process on this level
+  const long long ibegin = comm.oLocal();
+  // the number of cells for this process on this level
+  const long long nodes = comm.lenLocal();
 
+  // for all cells
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    Vector_t y(Y[i + ibegin], M);
-
-    if (0 < M)
+    const long long nrows = Dims[i + ibegin];
+    Vector_t y(Y[i + ibegin], nrows);
+    
+    // TODO does this ever not trigger? (doesn't seem like it)
+    if (0 < nrows)
+      // multiplies the near field (i.e. dense) matrices
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        long long j = ACols[ij];
-        long long N = Dims[j];
+        const long long j = ACols[ij];
+        const long long ncols = Dims[j];
 
-        Vector_t x(X[j], N);
-        Matrix_t c(A[ij], M, N);
+        Vector_t x(X[j], ncols);
+        Matrix_t c(A[ij], nrows, ncols);
         y.noalias() += c * x;
       }
   }

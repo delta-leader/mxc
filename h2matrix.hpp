@@ -103,7 +103,8 @@ private:
 public:
   // the number of points contained in each cell for this level
   std::vector<long long> Dims;
-  // TODO not setup so far
+  // Used for storing the input/output vector
+  // and intermediate results during matrix-vector multiplication
   MatrixDataContainer<std::complex<double>> X;
   MatrixDataContainer<std::complex<double>> Y;
   
@@ -124,9 +125,28 @@ public:
   */
   H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies = false);
 
+  /*
+  multiplies the Q matrices for all cells on this level with a vector
+  the vector needs to be stored in X beforehand
+  the result is stored in X of the parent node
+  comm: the communicator for this level
+  */
   void matVecUpwardPass(const ColCommMPI& comm);
+  /*
+  multiplies the C matrices and the Q matrices for all cell on this 
+  level with a vector (stored in X)
+  the result is stored in Y
+  comm: the communicator for this level
+  */
   void matVecHorizontalandDownwardPass(const ColCommMPI& comm);
+  /*
+  multiplies the dense matrices for the leaf level
+  Y and X must be calculated beforehand
+  the result is stored in Y
+  comm: the communicator for this level
+  */
   void matVecLeafHorizontalPass(const ColCommMPI& comm);
+  // initializes X and Y to zero
   void resetX();
 
   void factorize(const ColCommMPI& comm);

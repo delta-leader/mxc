@@ -114,21 +114,22 @@ long long adaptive_cross_approximation(const MatrixAccessor& kernel, const doubl
   return iters;
 }
 
-void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]) {
-  constexpr long long size = 256;
-  Eigen::Map<const Eigen::VectorXcd> x(X, N);
-  Eigen::Map<Eigen::VectorXcd> b(B, M);
+void mat_vec_reference(const MatrixAccessor& kernel, const long long nrows, const long long ncols, std::complex<double> B[], const std::complex<double> X[], const double row_bodies[], const double col_bodies[]) {
+  // calculate in blocks  (to prevent memory issues?)
+  constexpr long long block_size = 256;
+  Eigen::Map<const Eigen::VectorXcd> X_ref(X, ncols);
+  Eigen::Map<Eigen::VectorXcd> B_ref(B, nrows);
   
-  for (long long i = 0; i < M; i += size) {
-    long long m = std::min(M - i, size);
-    const double* bi = &ibodies[i * 3];
-    Eigen::MatrixXcd A(m, size);
+  for (long long i = 0; i < nrows; i += block_size) {
+    const long long brows = std::min(nrows - i, block_size);
+    const double* const bi_bodies = &row_bodies[i * 3];
+    Eigen::MatrixXcd A_block(brows, block_size);
 
-    for (long long j = 0; j < N; j += size) {
-      const double* bj = &jbodies[j * 3];
-      long long n = std::min(N - j, size);
-      gen_matrix(eval, m, n, bi, bj, A.data());
-      b.segment(i, m) += A.leftCols(n) * x.segment(j, n);
+    for (long long j = 0; j < ncols; j += block_size) {
+      const double* const bj_bodies = &col_bodies[j * 3];
+      const long long bcols = std::min(ncols - j, block_size);
+      gen_matrix(kernel, brows, bcols, bi_bodies, bj_bodies, A_block.data());
+      B_ref.segment(i, brows) += A_block.leftCols(bcols) * X_ref.segment(j, bcols);
     }
   }
 }

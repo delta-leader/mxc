@@ -9,7 +9,7 @@
 H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
 }
 
-H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, bool fix_rank, MPI_Comm world) : 
+H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, MPI_Comm world) : 
   levels(max_level), A(max_level + 1), comm(max_level + 1), allocedComm(), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
@@ -52,27 +52,43 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, con
 }
 
 void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
+  // if the solver has not been initialized, return
   if (levels < 0)
     return;
   
+  // on the lowest level
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  // starting index for the lowest level on this process (single process: 0)
   long long lbegin = comm[levels].oLocal();
+  // number of cells for the lowest level on this process (single process: all cells)
   long long llen = comm[levels].lenLocal();
+  // number of points the lowest level for this process (single process: all)
   long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
-  
+
+  // reference to X
   Vector_t X_in(X, lenX);
+  // reference to the lowest level X and Y
   Vector_t X_leaf(A[levels].X[lbegin], lenX);
   Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
 
+  // set the X and Y of all levels to 0
   for (long long l = levels; l >= 0; l--)
     A[l].resetX();
+  // X_leaf initially stores the input vector
   X_leaf = X_in;
-
+  
+  // Multiply all the row bases with the vector
   for (long long l = levels; l >= 0; l--)
     A[l].matVecUpwardPass(comm[l]);
-  for (long long l = 0; l <= levels; l++)
+  // TODO is there any point in calling this for level 0?
+  // because NX and NY would just be nullptr
+  // multiply all the skeleton matrices and column bases
+  for (long long l = 0; l <= levels; l++) {
     A[l].matVecHorizontalandDownwardPass(comm[l]);
+  }
+  // multiply the leaf level dense matrices
   A[levels].matVecLeafHorizontalPass(comm[levels]);
+  // write back the result (accumulated in Y_leaf)
   X_in = Y_leaf;
 }
 

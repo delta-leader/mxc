@@ -35,8 +35,14 @@ public:
   fixed_rank: if true, use max_rank, use epsilon otherwise default; false
   world: MPI communicator, default: all processes
   */
-  H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, bool fix_rank = false, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank = false, MPI_Comm world = MPI_COMM_WORLD);
 
+  /*
+  Matrix vector multiplication
+  Inout:
+    X: the vector to be multiplied 
+       (overwritten with the result)
+  */
   void matVecMul(std::complex<double> X[]);
   void factorizeM();
   void solvePrecondition(std::complex<double> X[]);

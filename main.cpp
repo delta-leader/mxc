@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
   //build the tree (i.e. set the values in the cell array)
   buildBinaryTree(levels, Nbody, &body[0], &cell[0]);
 
-  // generate the charges
+  // generate a random vector Xbody (used in Matvec)
   std::mt19937 gen(999);
   std::uniform_real_distribution uniform_dist(0., 1.);
   std::generate(Xbody.begin(), Xbody.end(), 
@@ -70,8 +70,7 @@ int main(int argc, char* argv[]) {
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
-  // creates two vectors that of length as the number of local bodies
-  // initialized with (0, 0) pairs
+  // creates two vectors of zeroes with the same length as the number of local bodies
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
