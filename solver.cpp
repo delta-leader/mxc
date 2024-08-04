@@ -199,7 +199,7 @@ void H2MatrixSolver::free_all_comms() {
   allocedComm.clear();
 }
 
-double H2MatrixSolver::solveRelErr(long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world) {
+double H2MatrixSolver::computeRelErr(const long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world) {
   double err[2] = { 0., 0. };
   for (long long i = 0; i < lenX; i++) {
     std::complex<double> diff = X[i] - ref[i];

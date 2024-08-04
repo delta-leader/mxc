@@ -59,5 +59,5 @@ In:
 Returns:
   the relative error
   */
-  static double solveRelErr(long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world = MPI_COMM_WORLD);
+  static double computeRelErr(const long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world = MPI_COMM_WORLD);
 };
