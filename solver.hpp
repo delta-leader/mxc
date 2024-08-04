@@ -17,24 +17,25 @@ private:
   std::vector<MPI_Comm> allocedComm;
 
 public:
-  // (0, 0)
+  // Contains the starting and ending index of the bodies
+  // local for each process
   std::pair<long long, long long> local_bodies;
   std::vector<double> resid;
   long long iters;
   
   H2MatrixSolver();
   /*
-  eval: kernel function
-  epi: epsilon, accuracy
-  rank
+  kernel: kernel function
+  epsilon: accuracy
+  max_rank: the maximum rank if fixed rank is used
   cells: cell array containing the nodes of the index tree
   theta: admisibility
   bodies: the points
-  levels: the depth of the tree;
-  fixed_rank: if true all bases use the same rank, default; false
-  world; MPI communicator, default: all processes
+  max_level: the maximum level
+  fixed_rank: if true, use max_rank, use epsilon otherwise default; false
+  world: MPI communicator, default: all processes
   */
-  H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, bool fix_rank = false, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, bool fix_rank = false, MPI_Comm world = MPI_COMM_WORLD);
 
   void matVecMul(std::complex<double> X[]);
   void factorizeM();

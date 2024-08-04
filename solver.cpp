@@ -9,8 +9,8 @@
 H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
 }
 
-H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, bool fix_rank, MPI_Comm world) : 
-  levels(levels), A(levels + 1), comm(levels + 1), allocedComm(), local_bodies(0, 0) {
+H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, bool fix_rank, MPI_Comm world) : 
+  levels(max_level), A(max_level + 1), comm(max_level + 1), allocedComm(), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
   CSR Near('N', cells, theta);
@@ -35,16 +35,17 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   // sample the far field for all cells in each level
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++) {
-    wsa[l] = WellSeparatedApproximation(eval, epi, rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
+    wsa[l] = WellSeparatedApproximation(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
   }
-  epi = fix_rank ? (double)rank : epi;
+  // this is an ugly fix to pack the max_rank into epsilon
+  epsilon = fix_rank ? (double)max_rank : epsilon;
   // Create an H2 matrix for each level
-  std::cout<<"Level: "<<levels<<std::endl;
-  A[levels] = H2Matrix(eval, epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], fix_rank);
+  A[levels] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], fix_rank);
   for (long long l = levels - 1; l >= 0; l--){
-    std::cout<<"Level: "<<l<<std::endl;
-    A[l] = H2Matrix(eval, epi, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], fix_rank);
+    A[l] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], fix_rank);
   }
+  // the bodies local to each process
+  // TODO confirm if this only references the S or the bodies array
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);

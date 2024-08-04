@@ -111,7 +111,7 @@ public:
   /*
   creates an H2 matrix for a certain level
   kernel: kernel function
-  epsilon: accuracy
+  epsilon: accuracy, if fixed rank is used it contains the max_rank
   cells: the cell array (nodes in the cluster tree)
   Near: Near field in CSR format
   Far: Far field in CSR format

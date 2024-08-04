@@ -65,28 +65,36 @@ int main(int argc, char* argv[]) {
   // create the H2 matrix
   H2MatrixSolver matA(eval, epi, rank, cell, theta, &body[0], levels);
 
+  // timing of construction
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
+  // creates two vectors that of length as the number of local bodies
+  // initialized with (0, 0) pairs
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
+  // copy the local charges?
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
+  // Sample matrix vector multiplication
   matA.matVecMul(&X1[0]);
 
+  // MatVec timing
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
   matvec_comm_time = ColCommMPI::get_comm_time();
 
   double refmatvec_time = MPI_Wtime();
 
+  // Reference matrix vector multiplication
   mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[matA.local_bodies.first * 3], &body[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
+  // solve
   double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
   int mpi_rank = 0;

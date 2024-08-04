@@ -59,7 +59,7 @@ const double* WellSeparatedApproximation::fbodies_at_i(const long long i) const 
 /*
 In:
   kernel: kernel function
-  epsilon: accuracy threshold for rank revealing QR
+  epsilon: accuracy threshold for rank revealing QR, or the maximum fank (fixed rank)
   nrows: number of rows (i.e. the current cell), also a and c are square matrices of nrows x nrows
   ncols: number of columns (in the far field)
   col_bodies: the far field points (column points)
@@ -98,12 +98,13 @@ long long compute_basis(const MatrixAccessor& kernel, const double epsilon, cons
     
     // Rank revealing QR of the far field
     Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(RX);
-    // TODO not sure what this should accomplish
-    // maybe for debugging?
+    // if epsilon contains the maximum rank, extract it here
     rank = std::min(MIN_D, (long long)std::floor(epsilon));
-    // set the accuracy threshold and
-    // get the corresponding rank
+    // if epsilon does not contain the maximum rank
+    // use it as intended
     if (epsilon < 1.) {
+      // set the accuracy threshold and
+      // get the corresponding rank
       rrqr.setThreshold(epsilon);
       rank = rrqr.rank();
     }
