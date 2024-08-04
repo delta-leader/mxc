@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
-  // copy the local charges?
+  // copy the random vector
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -99,6 +99,7 @@ int main(int argc, char* argv[]) {
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
+    std::cout<<cerr<<std::endl;
     std::cout << "Construct Err: " << cerr << std::endl;
     std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;

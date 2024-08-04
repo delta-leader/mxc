@@ -49,5 +49,15 @@ public:
   void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
+  /*
+  calculates the relative error between 2 vectors
+In:
+  lenX: the number of rows in the vector
+  X: the first vector
+  ref: the second vector
+  world: MPI communicator, default: all processes
+Returns:
+  the relative error
+  */
   static double solveRelErr(long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world = MPI_COMM_WORLD);
 };

@@ -203,9 +203,12 @@ double H2MatrixSolver::solveRelErr(long long lenX, const std::complex<double> X[
   double err[2] = { 0., 0. };
   for (long long i = 0; i < lenX; i++) {
     std::complex<double> diff = X[i] - ref[i];
+    // sum of squares of diff
     err[0] = err[0] + (diff.real() * diff.real());
+    // sum of squared of the reference
     err[1] = err[1] + (ref[i].real() * ref[i].real());
   }
   MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
+  // the relative error
   return std::sqrt(err[0] / err[1]);
 }
