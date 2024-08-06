@@ -669,8 +669,8 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
   // stored in ipiv_offsets
   std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
 
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> Vector_dt;
+  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Matrix_dt;
 
   comm.level_merge(X[0], X.size());
   // for all cells on this level
@@ -684,11 +684,11 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
     // redundant dimension
     long long Mr = M - Ms;
 
-    Vector_t x(X[i + ibegin], M);
-    Vector_t y(Y[i + ibegin], M);
-    Matrix_t q(Q[i + ibegin], M, M);
+    Vector_dt x(X[i + ibegin], M);
+    Vector_dt y(Y[i + ibegin], M);
+    Matrix_dt q(Q[i + ibegin], M, M);
     // the diagonal block
-    Matrix_t Aii(A[diag], M, M);
+    Matrix_dt Aii(A[diag], M, M);
     // get the pivots for the redudandant part
     Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
     
@@ -697,9 +697,9 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
     // privot Yr
     y.bottomRows(Mr).applyOnTheLeft(p);
     // solve Lrr y = Yr
-    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
+    Aii.bottomRightCorner(Mr, Mr).template triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
     // solve Urr y = y
-    Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
+    Aii.bottomRightCorner(Mr, Mr).template triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
     // store result in x
     x = y;
   }
@@ -713,7 +713,7 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
 
-    Vector_t x(X[i + ibegin], M);
+    Vector_dt x(X[i + ibegin], M);
     if (0 < Ms) {
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
@@ -721,15 +721,15 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
         long long Ns = DimsLr[j];
         long long Nr = N - Ns;
 
-        Vector_t xj(X[j], N);
-        Matrix_t Aij(A[ij], M, N);
+        Vector_dt xj(X[j], N);
+        Matrix_dt Aij(A[ij], M, N);
         x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
       }
-      Vector_t xo(NX[i + ibegin], Ms);
+      Vector_dt xo(NX[i + ibegin], Ms);
       xo = x.topRows(Ms);
     }
 
-    Vector_t y(Y[i + ibegin], M);
+    Vector_dt y(Y[i + ibegin], M);
     y = x;
     for (long long ij = ARows[i]; ij < diag; ij++) {
       long long j = ACols[ij];
@@ -737,16 +737,16 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
       long long Ns = DimsLr[j];
       long long Nr = N - Ns;
 
-      Vector_t xj(X[j], N);
-      Matrix_t Aij(A[ij], M, N);
+      Vector_dt xj(X[j], N);
+      Matrix_dt Aij(A[ij], M, N);
       y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
     }
   }
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
-    Vector_t x(X[i + ibegin], M);
-    Vector_t y(Y[i + ibegin], M);
+    Vector_dt x(X[i + ibegin], M);
+    Vector_dt y(Y[i + ibegin], M);
     x = y;
   }
 }
@@ -756,8 +756,8 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
 
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> Vector_dt;
+  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Matrix_dt;
 
   comm.neighbor_bcast(X);
   for (long long i = 0; i < nodes; i++) {
@@ -766,12 +766,12 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
 
-    Vector_t x(X[i + ibegin], M);
-    Vector_t y(Y[i + ibegin], M);
+    Vector_dt x(X[i + ibegin], M);
+    Vector_dt y(Y[i + ibegin], M);
 
     y.bottomRows(Mr) = x.bottomRows(Mr);
     if (0 < Ms) {
-      Vector_t xo(NX[i + ibegin], Ms);
+      Vector_dt xo(NX[i + ibegin], Ms);
       y.topRows(Ms) = xo;
     }
 
@@ -781,8 +781,8 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
       long long Ns = DimsLr[j];
       long long Nr = N - Ns;
 
-      Vector_t xj(X[j], N);
-      Matrix_t Aij(A[ij], M, N);
+      Vector_dt xj(X[j], N);
+      Matrix_dt Aij(A[ij], M, N);
       y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
     }
 
@@ -792,8 +792,8 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
       long long Ns = DimsLr[j];
 
       if (0 < Ns) {
-        Vector_t xo(NX[j], Ns);
-        Matrix_t Aij(A[ij], M, N);
+        Vector_dt xo(NX[j], Ns);
+        Matrix_dt Aij(A[ij], M, N);
         y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xo;
       }
     }
@@ -801,9 +801,9 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
-    Vector_t x(X[i + ibegin], M);
-    Vector_t y(Y[i + ibegin], M);
-    Matrix_t q(Q[i + ibegin], M, M);
+    Vector_dt x(X[i + ibegin], M);
+    Vector_dt y(Y[i + ibegin], M);
+    Matrix_dt q(Q[i + ibegin], M, M);
     x.noalias() = q.conjugate() * y;
   }
 
