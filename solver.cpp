@@ -63,7 +63,7 @@ void H2MatrixSolver<DT>::matVecMul(DT X[]) {
     return;
   
   // on the lowest level
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   // starting index for the lowest level on this process (single process: 0)
   long long lbegin = comm[levels].oLocal();
   // number of cells for the lowest level on this process (single process: all cells)
@@ -72,10 +72,10 @@ void H2MatrixSolver<DT>::matVecMul(DT X[]) {
   long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
 
   // reference to X
-  Vector_t X_in(X, lenX);
+  VectorMap_dt X_in(X, lenX);
   // reference to the lowest level X and Y
-  Vector_t X_leaf(A[levels].X[lbegin], lenX);
-  Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
+  VectorMap_dt X_leaf(A[levels].X[lbegin], lenX);
+  VectorMap_dt Y_leaf(A[levels].Y[lbegin], lenX);
 
   // set the X and Y of all levels to 0
   for (long long l = levels; l >= 0; l--)
@@ -112,13 +112,13 @@ void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   if (levels < 0)
     return;
   
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   long long lbegin = comm[levels].oLocal();
   long long llen = comm[levels].lenLocal();
   long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
   
-  Vector_t X_in(X, lenX);
-  Vector_t X_leaf(A[levels].X[lbegin], lenX);
+  VectorMap_dt X_in(X, lenX);
+  VectorMap_dt X_leaf(A[levels].X[lbegin], lenX);
 
   // reset X to 0 for all levels
   for (long long l = levels; l >= 0; l--)
@@ -145,9 +145,11 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   long long N = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
   long long ld = inner_iters + 1;
 
-  Eigen::Map<const Eigen::VectorXcd> B(b, N);
-  Eigen::Map<Eigen::VectorXcd> X(x, N);
-  VectorXcd R = B;
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
+  Eigen::Map<const Vector_dt> B(b, N);
+  Eigen::Map<Vector_dt> X(x, N);
+  Vector_dt R = B;
   M.solvePrecondition(R.data());
 
   DT normr = R.adjoint() * R;
@@ -170,12 +172,12 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
     if (resid[iters] < tol)
       return;
 
-    MatrixXcd H = MatrixXcd::Zero(ld, inner_iters);
-    MatrixXcd v = MatrixXcd::Zero(N, ld);
+    Matrix_dt H = Matrix_dt::Zero(ld, inner_iters);
+    Matrix_dt v = Matrix_dt::Zero(N, ld);
     v.col(0) = R * (1. / beta);
     
     for (long long i = 0; i < inner_iters; i++) {
-      VectorXcd w = v.col(i);
+      Vector_dt w = v.col(i);
       matVecMul(w.data());
       M.solvePrecondition(w.data());
 
@@ -192,10 +194,10 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
       v.col(i + 1) = w * (1. / H(i + 1, i));
     }
 
-    VectorXcd s = VectorXcd::Zero(ld);
+    Vector_dt s = Vector_dt::Zero(ld);
     s(0) = beta;
 
-    VectorXcd y = H.colPivHouseholderQr().solve(s);
+    Vector_dt y = H.colPivHouseholderQr().solve(s);
     X += v.leftCols(inner_iters) * y;
   }
 
