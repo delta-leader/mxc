@@ -8,6 +8,7 @@
 
 // explicit template instantiation
 template class H2MatrixSolver<std::complex<double>>;
+template double computeRelErr<std::complex<double>>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
@@ -220,7 +221,7 @@ void H2MatrixSolver<DT>::free_all_comms() {
 }
 
 template <typename DT>
-double H2MatrixSolver<DT>::computeRelErr(const long long lenX, const DT X[], const DT ref[], MPI_Comm world) {
+double computeRelErr(const long long lenX, const DT X[], const DT ref[], MPI_Comm world) {
   double err[2] = { 0., 0. };
   for (long long i = 0; i < lenX; i++) {
     DT diff = X[i] - ref[i];

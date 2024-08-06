@@ -58,8 +58,10 @@ public:
   void solveGMRES(double tol, H2MatrixSolver& M, DT X[], const DT B[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
-  /*
-  calculates the relative error between 2 vectors
+};
+
+/*
+calculates the relative error between 2 vectors
 In:
   lenX: the number of rows in the vector
   X: the first vector
@@ -67,6 +69,7 @@ In:
   world: MPI communicator, default: all processes
 Returns:
   the relative error
-  */
-  static double computeRelErr(const long long lenX, const DT X[], const DT ref[], MPI_Comm world = MPI_COMM_WORLD);
-};
+*/
+template <typename DT>
+double computeRelErr(const long long lenX, const DT X[], const DT ref[], MPI_Comm world = MPI_COMM_WORLD);
+

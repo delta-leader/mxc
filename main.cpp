@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
   mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[matA.local_bodies.first * 3], &body[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   // calculate relative error between H-matvec and dense matvec
-  double cerr = H2MatrixSolver<std::complex<double>>::computeRelErr(lenX, &X1[0], &X2[0]);
+  double cerr = computeRelErr(lenX, &X1[0], &X2[0]);
 
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
@@ -139,7 +139,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  double serr = H2MatrixSolver<std::complex<double>>::computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
+  double serr = computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
