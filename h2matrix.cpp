@@ -11,6 +11,9 @@
 
 #include <iostream>
 
+// explicit template instantiation
+template class H2Matrix<std::complex<double>>;
+
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& kernel, double epsilon, long long rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level) :
   lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
   // loop over the cells in the upper level
@@ -166,7 +169,8 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
   return (k < RowIndex[i + 1]) ? k : -1;
 }
 
-H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies) {
+template <typename DT>
+H2Matrix<DT>::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies) {
   // number of cells on the same level
   long long xlen = comm.lenNeighbors();
   // index of the first cell for this process on this level (always 0 for a single process)
@@ -200,7 +204,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
   long long offset = ARows[0];
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  NA = std::vector<std::complex<double>*>(ARows[nodes], nullptr);
+  NA = std::vector<DT*>(ARows[nodes], nullptr);
 
   // extract the indices of the far field (sampled bodies) for this level
   CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
@@ -209,7 +213,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
   offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  C = std::vector<std::complex<double>*>(CRows[nodes], nullptr);
+  C = std::vector<DT*>(CRows[nodes], nullptr);
 
   // get the number of points for each cell
   if (localChildOffsets.back() == 0){
@@ -228,14 +232,14 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
   comm.neighbor_bcast(Dims.data());
   // allocates storage for the total number of points on this level
   // i.e. sum of points per cell
-  X = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
-  Y = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
+  X = MatrixDataContainer<DT>(xlen, Dims.data());
+  Y = MatrixDataContainer<DT>(xlen, Dims.data());
   // pointers to X/Y on the parent cell
   // i.e. if a parent has two children with 128 elements each
   // the corresponding pointers for the first block would be set 
   // to NX[0] -> X[0], NX[1] -> X[128]
-  NX = std::vector<std::complex<double>*>(xlen, nullptr);
-  NY = std::vector<std::complex<double>*>(xlen, nullptr);
+  NX = std::vector<DT*>(xlen, nullptr);
+  NY = std::vector<DT*>(xlen, nullptr);
 
   // basically sets the NX, NY pointers of the children (i.e. lower level)
   // for every node on this level
@@ -256,9 +260,9 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
   // note that the storage is 0 initialized
   std::vector<long long> Qsizes(xlen, 0);
   std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
-  Q = MatrixDataContainer<std::complex<double>>(xlen, Qsizes.data());
+  Q = MatrixDataContainer<DT>(xlen, Qsizes.data());
   // stores the corresponding R from the QR factorization of the basis
-  R = MatrixDataContainer<std::complex<double>>(xlen, Qsizes.data());
+  R = MatrixDataContainer<DT>(xlen, Qsizes.data());
 
   // S stores the (rank) points contained within each cell
   // the dimensions are given by 3 * Dims
@@ -278,7 +282,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
   for (long long i = 0; i < nodes; i++)
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
-  A = MatrixDataContainer<std::complex<double>>(ARows[nodes], Asizes.data());
+  A = MatrixDataContainer<DT>(ARows[nodes], Asizes.data());
   // the lenght of this vector is the total number of points stores for all S on this level
   // within the constructor this is only allocated, but not used
   Ipivots = std::vector<int>(std::reduce(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes)));
@@ -349,7 +353,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
               // this assembles the skeleton matrix stored in A from the children
               // i.e. it is a 2 x 2 block matrix (since we are looping over I x J now)
               // get the pointer to the corresponding block in A
-              std::complex<double>* const A_ptr = A[ij] + offset_i + offset_j * nrows;
+              DT* const A_ptr = A[ij] + offset_i + offset_j * nrows;
               // set the pointer for the children
               if (0 <= low_near_idx)
                 // TODO is this ever used? It just points to zeroes I think
@@ -448,7 +452,8 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
   }
 }
 
-void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
+template <typename DT>
+void H2Matrix<DT>::matVecUpwardPass(const ColCommMPI& comm) {
   // from the lowest level to the highest level
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
@@ -478,7 +483,8 @@ void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
   }
 }
 
-void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
+template <typename DT>
+void H2Matrix<DT>::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
   // from the highest level to the lowest level
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
@@ -518,7 +524,8 @@ void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
   }
 }
 
-void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
+template <typename DT>
+void H2Matrix<DT>::matVecLeafHorizontalPass(const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
 
@@ -546,12 +553,14 @@ void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
   }
 }
 
-void H2Matrix::resetX() {
-  std::fill(X[0], X[0] + X.size(), std::complex<double>(0., 0.));
-  std::fill(Y[0], Y[0] + Y.size(), std::complex<double>(0., 0.));
+template <typename DT>
+void H2Matrix<DT>::resetX() {
+  std::fill(X[0], X[0] + X.size(), DT{});
+  std::fill(Y[0], Y[0] + Y.size(), DT{});
 }
 
-void H2Matrix::factorize(const ColCommMPI& comm) {
+template <typename DT>
+void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   // the first cell for this process on this level
   long long ibegin = comm.oLocal();
   // the number of cells for this process on this level
@@ -645,7 +654,8 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
 }
 
 // This part is not the same as the paper, only the basic ideas
-void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
+template <typename DT>
+void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
   // the first cell for this process on this level
   long long ibegin = comm.oLocal();
   // the number of cells for this process on this level
@@ -737,7 +747,8 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
   }
 }
 
-void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
+template <typename DT>
+void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
 

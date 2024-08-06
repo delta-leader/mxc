@@ -55,6 +55,7 @@ public:
   const double* fbodies_at_i(const long long i) const;
 };
 
+template <typename DT = std::complex<double>>
 class H2Matrix {
 private:
   // stores the rank for each cell
@@ -65,9 +66,9 @@ private:
   // the basis matrices
   // the basis is computed as a row ID such that A = X A(rows)
   // where X = QR
-  MatrixDataContainer<std::complex<double>> Q;
+  MatrixDataContainer<DT> Q;
   // the corresponding R matrices (see above)
-  MatrixDataContainer<std::complex<double>> R;
+  MatrixDataContainer<DT> R;
   // stores the points corresponding to each cell
   MatrixDataContainer<double> S;
 
@@ -78,7 +79,7 @@ private:
   // at the upper level
   // this pointer provides a convenient way of accessing them
   // from this level
-  std::vector<std::complex<double>*> C;
+  std::vector<DT*> C;
 
   // Near field rows and columns in CSR format
   std::vector<long long> ARows;
@@ -86,27 +87,27 @@ private:
   // stores the dense matrices at the leaf level
   // at the upper levels it stores the skeleton matrices
   // TODO what about the skeleton matrices on the leaf level?
-  MatrixDataContainer<std::complex<double>> A;
+  MatrixDataContainer<DT> A;
   // Pointer to the upper level skeleton/dense matrices for the near field
   // 0 initialized as far as I can tell
   // TODO not sure how this is used?
-  std::vector<std::complex<double>*> NA;
+  std::vector<DT*> NA;
   // length is equal to the total number of points at this level
   // TODO not used yet
   std::vector<int> Ipivots;
 
   // pointers to X of the parent
-  std::vector<std::complex<double>*> NX;
+  std::vector<DT*> NX;
   // pointers ot Y of the parent
-  std::vector<std::complex<double>*> NY;
+  std::vector<DT*> NY;
 
 public:
   // the number of points contained in each cell for this level
   std::vector<long long> Dims;
   // Used for storing the input/output vector
   // and intermediate results during matrix-vector multiplication
-  MatrixDataContainer<std::complex<double>> X;
-  MatrixDataContainer<std::complex<double>> Y;
+  MatrixDataContainer<DT> X;
+  MatrixDataContainer<DT> Y;
   
   H2Matrix() {}
   /*

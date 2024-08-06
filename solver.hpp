@@ -10,7 +10,7 @@ private:
   // the depth of the tree
   long long levels;
   // vector of H2 matrices for each level, levels + 1
-  std::vector<H2Matrix> A;
+  std::vector<H2Matrix<std::complex<double>>> A;
   // communicator for each level, levels + 1
   std::vector<ColCommMPI> comm;
   // empty
