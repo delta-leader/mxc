@@ -571,7 +571,8 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   // the maximum dimension on this level
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
 
-  typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
+  typedef Eigen::Map<Matrix_dt> MatrixMap_dt;
   std::vector<long long> ipiv_offsets(nodes);
   // prefix sum over the dimensions on this process
   std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
@@ -590,11 +591,11 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
     long long Mr = M - Ms;
 
     // the basis (Q matrix) for this cell
-    Matrix_t Ui(Q[i + ibegin], M, M);
+    MatrixMap_dt Ui(Q[i + ibegin], M, M);
     // the R matrix for this cell
-    Matrix_t V(R[i + ibegin], M, M);
+    MatrixMap_dt V(R[i + ibegin], M, M);
     // the diagonal block for this cell 
-    Matrix_t Aii(A[diag], M, M);
+    MatrixMap_dt Aii(A[diag], M, M);
     // V = Q^-1 A^T (note that this overwrites R)
     V.noalias() = Ui.adjoint() * Aii.transpose();
     // Aii = Q^-1 Aii (Q^-1)^T, so we baically decompose into the skeleton matrix
@@ -603,8 +604,8 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
     Aii.noalias() = Ui.adjoint() * V.transpose();
 
     // factorize the redundant part, i.e. Srr
-    Eigen::PartialPivLU<Eigen::MatrixXcd> plu = Aii.bottomRightCorner(Mr, Mr).lu();
-    Eigen::MatrixXcd b(dims_max, M);
+    Eigen::PartialPivLU<Matrix_dt> plu = Aii.bottomRightCorner(Mr, Mr).lu();
+    Matrix_dt b(dims_max, M);
     // this is a reference
     Eigen::Map<Eigen::VectorXi> ipiv(Ipivots.data() + ipiv_offsets[i], Mr);
 
@@ -620,7 +621,7 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
     // TODO should always trigger, unless all blocks are dense
     if (0 < Ms) {
       // update the skeleton part
-      Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
+      Eigen::Map<Matrix_dt, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
       // Srs = Srr^-1 Srs = Urr^-1 Lrr^-1 Srs 
       Aii.bottomLeftCorner(Mr, Ms) = plu.solve(Aii.bottomLeftCorner(Mr, Ms));
       // Schur complement update (only on the upper level)
@@ -637,8 +638,8 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
         long long N = Dims[j];
         long long Ns = DimsLr[j];
 
-        Matrix_t Uj(Q[j], N, N);
-        Matrix_t Aij(A[ij], M, N);
+        MatrixMap_dt Uj(Q[j], N, N);
+        MatrixMap_dt Aij(A[ij], M, N);
         
         // Decompse Aij as Qi^-1 Aij (Qj^-1)^T
         // note that V (i.e. Qi) already contains Arr^-1 (from Aii)
@@ -648,7 +649,7 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
 
         if (0 < Ms && 0 < Ns) {
           // update the skeleton matrix on the upper level
-          Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
+          Eigen::Map<Matrix_dt, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
           An = Aij.topLeftCorner(Ms, Ns);
         }
       }
