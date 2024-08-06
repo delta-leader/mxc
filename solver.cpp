@@ -8,7 +8,7 @@
 
 // explicit template instantiation
 template class H2MatrixSolver<std::complex<double>>;
-template double computeRelErr<std::complex<double>>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
+template double computeRelErr<double>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
@@ -225,6 +225,20 @@ double computeRelErr(const long long lenX, const DT X[], const DT ref[], MPI_Com
   double err[2] = { 0., 0. };
   for (long long i = 0; i < lenX; i++) {
     DT diff = X[i] - ref[i];
+    // sum of squares of diff
+    err[0] = err[0] + diff * diff;
+    // sum of squared of the reference
+    err[1] = err[1] + ref[i] * ref[i];
+  }
+  MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
+  // the relative error
+  return std::sqrt(err[0] / err[1]);
+}
+template <typename DT>
+double computeRelErr(const long long lenX, const std::complex<DT> X[], const std::complex<DT> ref[], MPI_Comm world) {
+  double err[2] = { 0., 0. };
+  for (long long i = 0; i < lenX; i++) {
+    std::complex<DT> diff = X[i] - ref[i];
     // sum of squares of diff
     err[0] = err[0] + (diff.real() * diff.real());
     // sum of squared of the reference

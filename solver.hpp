@@ -72,4 +72,5 @@ Returns:
 */
 template <typename DT>
 double computeRelErr(const long long lenX, const DT X[], const DT ref[], MPI_Comm world = MPI_COMM_WORLD);
-
+template <typename DT>
+double computeRelErr(const long long lenX, const std::complex<DT> X[], const std::complex<DT> ref[], MPI_Comm world = MPI_COMM_WORLD);
