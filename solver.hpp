@@ -5,12 +5,13 @@
 #include <h2matrix.hpp>
 #include <kernel.hpp>
 
+template <typename DT = std::complex<double>>
 class H2MatrixSolver {
 private:
   // the depth of the tree
   long long levels;
   // vector of H2 matrices for each level, levels + 1
-  std::vector<H2Matrix<std::complex<double>>> A;
+  std::vector<H2Matrix<DT>> A;
   // communicator for each level, levels + 1
   std::vector<ColCommMPI> comm;
   // empty
@@ -43,7 +44,7 @@ public:
     X: the vector to be multiplied 
        (overwritten with the result)
   */
-  void matVecMul(std::complex<double> X[]);
+  void matVecMul(DT X[]);
   // factorize the matrix
   void factorizeM();
   /*
@@ -53,8 +54,8 @@ public:
     X: the vector b
        (overwritten with x as the output)
   */
-  void solvePrecondition(std::complex<double> X[]);
-  void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
+  void solvePrecondition(DT X[]);
+  void solveGMRES(double tol, H2MatrixSolver& M, DT X[], const DT B[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
   /*
@@ -67,5 +68,5 @@ In:
 Returns:
   the relative error
   */
-  static double computeRelErr(const long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world = MPI_COMM_WORLD);
+  static double computeRelErr(const long long lenX, const DT X[], const DT ref[], MPI_Comm world = MPI_COMM_WORLD);
 };

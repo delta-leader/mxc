@@ -6,10 +6,15 @@
 #include <cmath>
 #include <iostream>
 
-H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
+// explicit template instantiation
+template class H2MatrixSolver<std::complex<double>>;
+
+template <typename DT>
+H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
 }
 
-H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, MPI_Comm world) : 
+template <typename DT>
+H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, MPI_Comm world) : 
   levels(max_level), A(max_level + 1), comm(max_level + 1), allocedComm(), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
@@ -51,7 +56,8 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, con
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
 }
 
-void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
+template <typename DT>
+void H2MatrixSolver<DT>::matVecMul(DT X[]) {
   // if the solver has not been initialized, return
   if (levels < 0)
     return;
@@ -92,7 +98,8 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
   X_in = Y_leaf;
 }
 
-void H2MatrixSolver::factorizeM() {
+template <typename DT>
+void H2MatrixSolver<DT>::factorizeM() {
   // factorize all levels, bottom  up
   // TODO how does this precompute the fill-ins?
   // I thought that would require 2 loops?
@@ -100,7 +107,8 @@ void H2MatrixSolver::factorizeM() {
     A[l].factorize(comm[l]);
 }
 
-void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
+template <typename DT>
+void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   if (levels < 0)
     return;
   
@@ -128,7 +136,8 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   X_in = X_leaf;
 }
 
-void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
+template <typename DT>
+void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const DT b[], long long inner_iters, long long outer_iters) {
   using Eigen::VectorXcd, Eigen::MatrixXcd;
 
   long long lbegin = comm[levels].oLocal();
@@ -141,7 +150,7 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
   VectorXcd R = B;
   M.solvePrecondition(R.data());
 
-  std::complex<double> normr = R.adjoint() * R;
+  DT normr = R.adjoint() * R;
   comm[levels].level_sum(&normr, 1);
   double normb = std::sqrt(normr.real());
   if (normb == 0.)
@@ -177,7 +186,7 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
       for (long long k = 0; k <= i; k++)
         w -= H(k, i) * v.col(k);
 
-      std::complex<double> normw = w.adjoint() * w;
+      DT normw = w.adjoint() * w;
       comm[levels].level_sum(&normw, 1);
       H(i + 1, i) = std::sqrt(normw.real());
       v.col(i + 1) = w * (1. / H(i + 1, i));
@@ -201,16 +210,18 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
   resid[outer_iters] = beta / normb;
 }
 
-void H2MatrixSolver::free_all_comms() {
+template <typename DT>
+void H2MatrixSolver<DT>::free_all_comms() {
   for (MPI_Comm& c : allocedComm)
     MPI_Comm_free(&c);
   allocedComm.clear();
 }
 
-double H2MatrixSolver::computeRelErr(const long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world) {
+template <typename DT>
+double H2MatrixSolver<DT>::computeRelErr(const long long lenX, const DT X[], const DT ref[], MPI_Comm world) {
   double err[2] = { 0., 0. };
   for (long long i = 0; i < lenX; i++) {
-    std::complex<double> diff = X[i] - ref[i];
+    DT diff = X[i] - ref[i];
     // sum of squares of diff
     err[0] = err[0] + (diff.real() * diff.real());
     // sum of squared of the reference
