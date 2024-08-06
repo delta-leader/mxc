@@ -97,4 +97,5 @@ In:
 Out:
   B: the result
 */
-void mat_vec_reference(const MatrixAccessor& kernel, const long long nrows, const long long ncols, std::complex<double> B[], const std::complex<double> X[], const double row_bodies[], const double col_bodies[]);
+template <typename DT>
+void mat_vec_reference(const MatrixAccessor& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]);

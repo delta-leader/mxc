@@ -7,6 +7,9 @@
 #include <array>
 #include <Eigen/Dense>
 
+// explicit template instantiation
+template void mat_vec_reference<std::complex<double>> (const MatrixAccessor&, const long long, const long long, std::complex<double> B[], const std::complex<double> X[], const double[], const double[]);
+
 void gen_matrix(const MatrixAccessor& kernel, const long long M, const long long N, const double* const bi, const double* const bj, std::complex<double> Aij[]) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
   const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * M]);
@@ -114,16 +117,18 @@ long long adaptive_cross_approximation(const MatrixAccessor& kernel, const doubl
   return iters;
 }
 
-void mat_vec_reference(const MatrixAccessor& kernel, const long long nrows, const long long ncols, std::complex<double> B[], const std::complex<double> X[], const double row_bodies[], const double col_bodies[]) {
+template <typename DT>
+void mat_vec_reference(const MatrixAccessor& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]) {
   // calculate in blocks  (to prevent memory issues?)
   constexpr long long block_size = 256;
-  Eigen::Map<const Eigen::VectorXcd> X_ref(X, ncols);
-  Eigen::Map<Eigen::VectorXcd> B_ref(B, nrows);
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
+  Eigen::Map<const Vector_dt> X_ref(X, ncols);
+  Eigen::Map<Vector_dt> B_ref(B, nrows);
   
   for (long long i = 0; i < nrows; i += block_size) {
     const long long brows = std::min(nrows - i, block_size);
     const double* const bi_bodies = &row_bodies[i * 3];
-    Eigen::MatrixXcd A_block(brows, block_size);
+    Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> A_block(brows, block_size);
 
     for (long long j = 0; j < ncols; j += block_size) {
       const double* const bj_bodies = &col_bodies[j * 3];
