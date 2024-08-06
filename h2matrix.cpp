@@ -458,8 +458,8 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const
 template <typename DT>
 void H2Matrix<DT>::matVecUpwardPass(const ColCommMPI& comm) {
   // from the lowest level to the highest level
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> Vector_dt;
+  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Matrix_dt;
 
   // starting index for the current level (on this process)
   const long long ibegin = comm.oLocal();
@@ -478,9 +478,9 @@ void H2Matrix<DT>::matVecUpwardPass(const ColCommMPI& comm) {
     if (0 < rank) {
       // multiply the vector with the row basis
       // and store it to X of the upper level
-      Vector_t x(X[i + ibegin], nrows);
-      Vector_t x_parent(NX[i + ibegin], rank);
-      Matrix_t q(Q[i + ibegin], nrows, rank);
+      Vector_dt x(X[i + ibegin], nrows);
+      Vector_dt x_parent(NX[i + ibegin], rank);
+      Matrix_dt q(Q[i + ibegin], nrows, rank);
       x_parent.noalias() = q.transpose() * x;
     }
   }
@@ -489,9 +489,9 @@ void H2Matrix<DT>::matVecUpwardPass(const ColCommMPI& comm) {
 template <typename DT>
 void H2Matrix<DT>::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
   // from the highest level to the lowest level
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> Vector_dt;
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
-  typedef Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t;
+  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>, Eigen::Unaligned, Stride_t> Matrix_dt;
 
   // the first cell for this process on this level
   const long long ibegin = comm.oLocal();
@@ -505,23 +505,23 @@ void H2Matrix<DT>::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
     // skip upper levels
     // e.g. where NY is not set
     if (0 < rank_i) {
-      Vector_t y(Y[i + ibegin], nrows);
-      Vector_t y_parent(NY[i + ibegin], rank_i);
+      Vector_dt y(Y[i + ibegin], nrows);
+      Vector_dt y_parent(NY[i + ibegin], rank_i);
 
       // for all cells in the far field (can be multiple per row)
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         const long long j = CCols[ij];
         const long long rank_j = DimsLr[j];
 
-        Vector_t x_parent(NX[j], rank_j);
+        Vector_dt x_parent(NX[j], rank_j);
         // skeleton matrix
-        Matrix_t c(C[ij], rank_i, rank_j, Stride_t(UpperStride[i], 1));
+        Matrix_dt c(C[ij], rank_i, rank_j, Stride_t(UpperStride[i], 1));
         // multiply with the skeleton matrix
         y_parent.noalias() += c * x_parent;
       }
       // multiply the vector with the column basis
       // and store in Y
-      Matrix_t q(Q[i + ibegin], nrows, rank_i, Stride_t(nrows, 1));
+      Matrix_dt q(Q[i + ibegin], nrows, rank_i, Stride_t(nrows, 1));
       y.noalias() = q * y_parent;
     }
   }
@@ -529,8 +529,8 @@ void H2Matrix<DT>::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
 
 template <typename DT>
 void H2Matrix<DT>::matVecLeafHorizontalPass(const ColCommMPI& comm) {
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> Vector_dt;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Matrix_dt;
 
   // the first cell for this process on this level
   const long long ibegin = comm.oLocal();
@@ -540,7 +540,7 @@ void H2Matrix<DT>::matVecLeafHorizontalPass(const ColCommMPI& comm) {
   // for all cells
   for (long long i = 0; i < nodes; i++) {
     const long long nrows = Dims[i + ibegin];
-    Vector_t y(Y[i + ibegin], nrows);
+    Vector_dt y(Y[i + ibegin], nrows);
     
     // TODO does this ever not trigger? (doesn't seem like it)
     if (0 < nrows)
@@ -549,8 +549,8 @@ void H2Matrix<DT>::matVecLeafHorizontalPass(const ColCommMPI& comm) {
         const long long j = ACols[ij];
         const long long ncols = Dims[j];
 
-        Vector_t x(X[j], ncols);
-        Matrix_t c(A[ij], nrows, ncols);
+        Vector_dt x(X[j], ncols);
+        Matrix_dt c(A[ij], nrows, ncols);
         y.noalias() += c * x;
       }
   }
