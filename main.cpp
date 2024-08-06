@@ -105,9 +105,11 @@ int main(int argc, char* argv[]) {
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
   }
 
+  // copy X2 into X1
   std::copy(X2.begin(), X2.end(), X1.begin());
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
+  // new H2 matrix using a fixed rank
   H2MatrixSolver matM;
   if (mode.compare("h2") == 0)
     matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true);
@@ -121,6 +123,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
+  // factorization
   matM.factorizeM();
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -130,6 +133,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
+  // solve the system using the factorized matrix
   matM.solvePrecondition(&X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);

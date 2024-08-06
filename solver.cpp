@@ -93,6 +93,9 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
 }
 
 void H2MatrixSolver::factorizeM() {
+  // factorize all levels, bottom  up
+  // TODO how does this precompute the fill-ins?
+  // I thought that would require 2 loops?
   for (long long l = levels; l >= 0; l--)
     A[l].factorize(comm[l]);
 }
@@ -109,14 +112,19 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   Vector_t X_in(X, lenX);
   Vector_t X_leaf(A[levels].X[lbegin], lenX);
 
+  // reset X to 0 for all levels
   for (long long l = levels; l >= 0; l--)
     A[l].resetX();
+  // store X_in in X of the leaf levels
   X_leaf = X_in;
 
+  // forward substitution for all levels
   for (long long l = levels; l >= 0; l--)
     A[l].forwardSubstitute(comm[l]);
+  // backward substitution for all levels
   for (long long l = 0; l <= levels; l++)
     A[l].backwardSubstitute(comm[l]);
+  // get the result from the leaf level and stor in X_in
   X_in = X_leaf;
 }
 

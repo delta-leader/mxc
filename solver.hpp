@@ -44,7 +44,15 @@ public:
        (overwritten with the result)
   */
   void matVecMul(std::complex<double> X[]);
+  // factorize the matrix
   void factorizeM();
+  /*
+  solve the system LUx = b
+  after the matrix has been factorized
+  Inout:
+    X: the vector b
+       (overwritten with x as the output)
+  */
   void solvePrecondition(std::complex<double> X[]);
   void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
 

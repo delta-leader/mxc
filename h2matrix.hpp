@@ -149,8 +149,20 @@ public:
   // initializes X and Y to zero
   void resetX();
 
+  /*
+  factorize the matrix on this level
+  comm: the communicator for this level
+  */
   void factorize(const ColCommMPI& comm);
+  /*
+  forward substitution for this level
+  comm: the communicator for this level
+  */
   void forwardSubstitute(const ColCommMPI& comm);
+  /*
+  backward substitution for this level
+  comm: the communicator for this level
+  */
   void backwardSubstitute(const ColCommMPI& comm);
 };
 

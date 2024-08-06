@@ -403,6 +403,8 @@ H2Matrix::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cel
       const double* fbodies = wsa.fbodies_at_i(i);
 
       // TODO look into that later, for now assume it is not used (at least for the initial H2)
+      // If I understand it correctly, this adds the near field points to the far field points
+      // in order to build a factorization basis that incorporates the fill-ins
       if (use_near_bodies) {
         std::vector<long long>::iterator neighbors = ACols.begin() + ARows[i];
         std::vector<long long>::iterator neighbors_end = ACols.begin() + ARows[i + 1];
@@ -550,43 +552,74 @@ void H2Matrix::resetX() {
 }
 
 void H2Matrix::factorize(const ColCommMPI& comm) {
+  // the first cell for this process on this level
   long long ibegin = comm.oLocal();
+  // the number of cells for this process on this level
   long long nodes = comm.lenLocal();
+  // the maximum dimension on this level
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
 
   typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
   std::vector<long long> ipiv_offsets(nodes);
+  // prefix sum over the dimensions on this process
   std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
-
+ 
+  // supposedly, this merges the A matrices from all processes?
   comm.level_merge(A[0], A.size());
+  // for all cells (we should be able to process each cell in parallel)
   for (long long i = 0; i < nodes; i++) {
+    // index of the diagonal block
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    // nrows
     long long M = Dims[i + ibegin];
+    // rank
     long long Ms = DimsLr[i + ibegin];
+    // leftover
     long long Mr = M - Ms;
 
+    // the basis (Q matrix) for this cell
     Matrix_t Ui(Q[i + ibegin], M, M);
+    // the R matrix for this cell
     Matrix_t V(R[i + ibegin], M, M);
+    // the diagonal block for this cell 
     Matrix_t Aii(A[diag], M, M);
+    // V = Q^-1 A^T (note that this overwrites R)
     V.noalias() = Ui.adjoint() * Aii.transpose();
+    // Aii = Q^-1 Aii (Q^-1)^T, so we baically decompose into the skeleton matrix
+    //       | Sss Ssr|
+    // Aii = | Srs Srr|
     Aii.noalias() = Ui.adjoint() * V.transpose();
 
+    // factorize the redundant part, i.e. Srr
     Eigen::PartialPivLU<Eigen::MatrixXcd> plu = Aii.bottomRightCorner(Mr, Mr).lu();
     Eigen::MatrixXcd b(dims_max, M);
+    // this is a reference
     Eigen::Map<Eigen::VectorXi> ipiv(Ipivots.data() + ipiv_offsets[i], Mr);
 
+    // write the factorization back into A
     Aii.bottomRightCorner(Mr, Mr) = plu.matrixLU();
+    // write back the pivots
     ipiv = plu.permutationP().indices();
+    // Srr^-1 Qr^-1 
+    // note that V is completely overwritten (see below)
     V.bottomRows(Mr) = plu.solve(Ui.rightCols(Mr).adjoint());
 
+    // if there is a skeleton part
+    // TODO should always trigger, unless all blocks are dense
     if (0 < Ms) {
+      // update the skeleton part
       Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
+      // Srs = Srr^-1 Srs = Urr^-1 Lrr^-1 Srs 
       Aii.bottomLeftCorner(Mr, Ms) = plu.solve(Aii.bottomLeftCorner(Mr, Ms));
+      // Schur complement update (only on the upper level)
+      // Srr = Srr - Ssr Urr^-1 Lrr^-1 Srs
       An.noalias() = Aii.topLeftCorner(Ms, Ms) - Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
+      // write the rest of Qr^-1 into V to finish the overwrite
       V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
     }
 
-    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 
+    // for all cells in the near field
+    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
       if (ij != diag) {
         long long j = ACols[ij];
         long long N = Dims[j];
@@ -594,48 +627,72 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
 
         Matrix_t Uj(Q[j], N, N);
         Matrix_t Aij(A[ij], M, N);
-
+        
+        // Decompse Aij as Qi^-1 Aij (Qj^-1)^T
+        // note that V (i.e. Qi) already contains Arr^-1 (from Aii)
+        // TODO not sure, confirm this
         b.topRows(N) = Uj.adjoint() * Aij.transpose();
         Aij.noalias() = V * b.topRows(N).transpose();
 
         if (0 < Ms && 0 < Ns) {
+          // update the skeleton matrix on the upper level
           Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
           An = Aij.topLeftCorner(Ms, Ns);
         }
       }
+    }
   }
 }
 
+// This part is not the same as the paper, only the basic ideas
 void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
+  // the first cell for this process on this level
   long long ibegin = comm.oLocal();
+  // the number of cells for this process on this level
   long long nodes = comm.lenLocal();
   std::vector<long long> ipiv_offsets(nodes);
+  // prefix sum over the dimensions on this process
+  // stored in ipiv_offsets
   std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
 
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
   comm.level_merge(X[0], X.size());
+  // for all cells on this level
   for (long long i = 0; i < nodes; i++) {
+    // index of the diagonal block
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    // nrows
     long long M = Dims[i + ibegin];
+    // skeleton dimension
     long long Ms = DimsLr[i + ibegin];
+    // redundant dimension
     long long Mr = M - Ms;
 
     Vector_t x(X[i + ibegin], M);
     Vector_t y(Y[i + ibegin], M);
     Matrix_t q(Q[i + ibegin], M, M);
+    // the diagonal block
     Matrix_t Aii(A[diag], M, M);
+    // get the pivots for the redudandant part
     Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
     
+    // Y = Q^-1 X
     y.noalias() = q.adjoint() * x;
+    // privot Yr
     y.bottomRows(Mr).applyOnTheLeft(p);
+    // solve Lrr y = Yr
     Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
+    // solve Urr y = y
     Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
+    // store result in x
     x = y;
   }
 
+  // broadcast X
   comm.neighbor_bcast(X);
+  // for all cells
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
