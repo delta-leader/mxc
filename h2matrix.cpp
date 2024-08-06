@@ -75,24 +75,26 @@ Out:
 Returns:
   rank: The rank corresponding to epsilon from the column pivoted QR
 */
-long long compute_basis(const MatrixAccessor& kernel, const double epsilon, const long long nrows, const long long ncols, double row_bodies[], const double col_bodies[], std::complex<double> Q[], std::complex<double> R[]) {
+template <typename DT>
+long long compute_basis(const MatrixAccessor& kernel, const double epsilon, const long long nrows, const long long ncols, double row_bodies[], const double col_bodies[], DT Q[], DT R[]) {
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
   const long long MIN_D = std::min(nrows, ncols);
   long long rank = 0;
   // safeguard against empty matrix
   if (0 < MIN_D) {
     // RX is the transpose of the far field
     // We need the transpose because we compute a row ID
-    Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(MIN_D, nrows);
+    Matrix_dt RX = Matrix_dt::Zero(MIN_D, nrows);
 
     if (MIN_D < ncols) {
       // N is the larger dimension, so RX is M x M
       // The QR assures we actually have those dimensions
       // Note that in this case, the following rank revealing QR
       // wouldn't actually do anything if it were not for the column pivoting
-      Eigen::MatrixXcd XF(ncols, nrows);
+      Matrix_dt XF(ncols, nrows);
       gen_matrix(kernel, ncols, nrows, col_bodies, row_bodies, XF.data());
-      Eigen::HouseholderQR<Eigen::MatrixXcd> qr(XF);
-      RX = qr.matrixQR().topRows(MIN_D).triangularView<Eigen::Upper>();
+      Eigen::HouseholderQR<Matrix_dt> qr(XF);
+      RX = qr.matrixQR().topRows(MIN_D).template triangularView<Eigen::Upper>();
     }
     else {
       // M is the largest dimension, so RX is N X M
@@ -100,7 +102,7 @@ long long compute_basis(const MatrixAccessor& kernel, const double epsilon, cons
     }
     
     // Rank revealing QR of the far field
-    Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(RX);
+    Eigen::ColPivHouseholderQR<Matrix_dt> rrqr(RX);
     // if epsilon contains the maximum rank, extract it here
     rank = std::min(MIN_D, (long long)std::floor(epsilon));
     // if epsilon does not contain the maximum rank
@@ -114,15 +116,15 @@ long long compute_basis(const MatrixAccessor& kernel, const double epsilon, cons
 
     // on the leaf level a contains the identity matrix
     // R matrix from the lower level otherwise
-    Eigen::Map<Eigen::MatrixXcd> Q_ref(Q, nrows, nrows), R_ref(R, nrows, nrows);
+    Eigen::Map<Matrix_dt> Q_ref(Q, nrows, nrows), R_ref(R, nrows, nrows);
     if (0 < rank && rank < nrows) {
       // QR successful
       // We use R_ref to store the intermediate results
       // compute the row ID from the RRQR
       // see https://users.oden.utexas.edu/~pgm/Teaching/APPM5720_2016s/scribe_week07_wed.pdf
       R_ref.topRows(rank) = rrqr.matrixR().topRows(rank);
-      R_ref.topLeftCorner(rank, rank).triangularView<Eigen::Upper>().solveInPlace(R_ref.topRightCorner(rank, nrows - rank));
-      R_ref.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
+      R_ref.topLeftCorner(rank, rank).template triangularView<Eigen::Upper>().solveInPlace(R_ref.topRightCorner(rank, nrows - rank));
+      R_ref.topLeftCorner(rank, rank) = Matrix_dt::Identity(rank, rank);
 
       // We reorder the row points stored in S accordingly
       // Supposedly because the upper levels reuse them
@@ -134,18 +136,18 @@ long long compute_basis(const MatrixAccessor& kernel, const double epsilon, cons
       // TODO why do I need to reorder?
       // We now have the row ID A = X * A(rows) and calculate the QR of X
       // because we want an orthogonal basis
-      Eigen::HouseholderQR<Eigen::MatrixXcd> qr = (Q_ref.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * R_ref.topRows(rank).transpose())).householderQr();
+      Eigen::HouseholderQR<Matrix_dt> qr = (Q_ref.template triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * R_ref.topRows(rank).transpose())).householderQr();
       // A stores the Q matrix
       Q_ref = qr.householderQ();
       // C stores the R matrix, since the memory was already allocated before
       // we knew the real rank we just zero out the rest (delete intermediate results)
-      R_ref = Eigen::MatrixXcd::Zero(nrows, nrows);
-      R_ref.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
+      R_ref = Matrix_dt::Zero(nrows, nrows);
+      R_ref.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).template triangularView<Eigen::Upper>();
     }
     else {
       // QR failed for some reason
-      Q_ref = Eigen::MatrixXcd::Identity(nrows, nrows);
-      R_ref = Eigen::MatrixXcd::Identity(nrows, nrows);
+      Q_ref = Matrix_dt::Identity(nrows, nrows);
+      R_ref = Matrix_dt::Identity(nrows, nrows);
     }
   }
   return rank;
@@ -290,8 +292,9 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const
   // skips levels that contain no points
   // e.g. if there are no low-rank blocks on this level (because they are split further)
   if (std::reduce(Dims.begin(), Dims.end())) {
+    typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
     typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
-    typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
+    typedef Eigen::Map<Matrix_dt, Eigen::Unaligned, Stride_t> Matrix_dt_stride; 
     // index of the first cell for this process on this level (always 0 for a single process)
     // same as ibegin
     long long pbegin = lowerComm.oLocal();
@@ -308,7 +311,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const
       long long childi_end = localChildIndex + localChildOffsets[i + 1];
       // get the corresponding Q matrix for this cell
       // note that this is a reference
-      Eigen::Map<Eigen::MatrixXcd> Qi_ref(Q[i + ibegin], nrows, nrows);
+      Eigen::Map<Matrix_dt> Qi_ref(Q[i + ibegin], nrows, nrows);
 
       // for all children (if there are any, so only for intermediate levels)
       for (long long ci = childi_start; ci < childi_end; ci++) { 
@@ -319,7 +322,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const
         std::copy(h2_lower.S[ci], h2_lower.S[ci] + (ni * 3), &(S[i + ibegin])[offset_i * 3]);
 
         // get the R matrix from the child
-        Matrix_t Ri(h2_lower.R[ci], ni, ni, Stride_t(h2_lower.Dims[ci], 1));
+        Matrix_dt_stride Ri(h2_lower.R[ci], ni, ni, Stride_t(h2_lower.Dims[ci], 1));
         // assemble the R matrices into Q (used only during the basis computation)
         // Basically         |R1 0 |
         //           Qi_ref =|0  R2|
@@ -361,14 +364,14 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const
               if (0 <= low_far_idx) {
                 h2_lower.C[low_far_idx] = A_ptr;
                 // construct R from the child
-                Matrix_t Rj(h2_lower.R[childj], nj, nj, Stride_t(h2_lower.Dims[childj], 1));
+                Matrix_dt_stride Rj(h2_lower.R[childj], nj, nj, Stride_t(h2_lower.Dims[childj], 1));
                 // this is a reference to the corresponding block in A
-                Matrix_t A_ref(A_ptr, ni, nj, Stride_t(nrows, 1));
+                Matrix_dt_stride A_ref(A_ptr, ni, nj, Stride_t(nrows, 1));
                 // generate the rank1 x rank2 matrix corresponding to i x y
-                Eigen::MatrixXcd Aij(ni, nj);
+                Matrix_dt Aij(ni, nj);
                 gen_matrix(kernel, ni, nj, h2_lower.S[ci], h2_lower.S[childj], Aij.data());
                 // compute the skeleton matrix R A(rows, cols) R^T
-                A_ref.noalias() = Ri.triangularView<Eigen::Upper>() * Aij * Rj.transpose().triangularView<Eigen::Lower>();
+                A_ref.noalias() = Ri.template triangularView<Eigen::Upper>() * Aij * Rj.transpose().template triangularView<Eigen::Lower>();
               }
             }
           }
@@ -382,7 +385,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const
         // copy all the particles in that cell to S
         std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
         // set the corresponding Q matrix to the identity
-        Qi_ref = Eigen::MatrixXcd::Identity(nrows, nrows);
+        Qi_ref = Matrix_dt::Identity(nrows, nrows);
         // ARows and AColumns contain the near field
         // so this creates the dense matrices and stores them in A
         for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
