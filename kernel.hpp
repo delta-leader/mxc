@@ -3,12 +3,13 @@
 #include <complex>
 #include <cmath>
 
+template <typename DT = std::complex<double>>
 class MatrixAccessor {
 public:
-  virtual std::complex<double> operator()(double d) const = 0;
+  virtual DT operator()(double d) const = 0;
 };
 
-class Laplace3D : public MatrixAccessor {
+class Laplace3D : public MatrixAccessor<std::complex<double>> {
 public:
   double singularity;
   Laplace3D (double s) : singularity(1. / s) {}
@@ -20,7 +21,7 @@ public:
   }
 };
 
-class Yukawa3D : public MatrixAccessor {
+class Yukawa3D : public MatrixAccessor<std::complex<double>> {
 public:
   double singularity, alpha;
   Yukawa3D (double s, double a) : singularity(1. / s), alpha(a) {}
@@ -32,7 +33,7 @@ public:
   }
 };
 
-class Gaussian : public MatrixAccessor {
+class Gaussian : public MatrixAccessor<std::complex<double>> {
 public:
   double alpha;
   Gaussian (double a) : alpha(1. / (a * a)) {}
@@ -41,7 +42,7 @@ public:
   }
 };
 
-class Helmholtz3D : public MatrixAccessor {
+class Helmholtz3D : public MatrixAccessor<std::complex<double>> {
 public:
   double k;
   double singularity;
@@ -65,7 +66,8 @@ In:
 Out:
   Aij: generated matrix
 */
-void gen_matrix(const MatrixAccessor& kernel, const long long M, const long long N, const double* const bi, const double* const bj, std::complex<double> Aij[]);
+template <typename DT>
+void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long long N, const double* const bi, const double* const bj, DT Aij[]);
 
 /*
 ACA
@@ -83,7 +85,8 @@ Out:
 Returns:
   iters: number of iterations (i.e. the real rank)
 */
-long long adaptive_cross_approximation(const MatrixAccessor& kernel, const double epsilon, const long long max_rank, const long long nrows, const long long ncols, const double row_bodies[], const double col_bodies[], long long row_piv[], long long col_piv[]);
+template <typename DT>
+long long adaptive_cross_approximation(const MatrixAccessor<DT>& kernel, const double epsilon, const long long max_rank, const long long nrows, const long long ncols, const double row_bodies[], const double col_bodies[], long long row_piv[], long long col_piv[]);
 
 /*
 reference matrix vector multiplication
@@ -98,4 +101,4 @@ Out:
   B: the result
 */
 template <typename DT>
-void mat_vec_reference(const MatrixAccessor& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]);
+void mat_vec_reference(const MatrixAccessor<DT>& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]);

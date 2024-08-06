@@ -3,6 +3,7 @@
 #include <data_container.hpp>
 #include <complex>
 
+template <typename DT>
 class MatrixAccessor;
 class CSR;
 class Cell;
@@ -18,6 +19,7 @@ accuracy is already satisfied), we can sample the far field.
 This sampling is done for each level seperately and lower level nodes
 can reuse the samples from higher levels if necessary.
 */
+template <typename DT = std::complex<double>>
 class WellSeparatedApproximation {
 private:
   // first index in the cell array for the current level
@@ -42,7 +44,7 @@ public:
     bodies: the points
     upper_level: the approximation from the upper level
   */
-  WellSeparatedApproximation(const MatrixAccessor& kernel, const double epsilon, const long long max_rank, const long long cell_begin, const long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level);
+  WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, const double epsilon, const long long max_rank, const long long cell_begin, const long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level);
 
 
   /*
@@ -124,7 +126,7 @@ public:
   lowerComm: communicator for this level
   use_near_bodies: not exactly sure what this does, default: false
   */
-  H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies = false);
+  H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies = false);
 
   /*
   multiplies the Q matrices for all cells on this level with a vector

@@ -8,9 +8,12 @@
 #include <Eigen/Dense>
 
 // explicit template instantiation
-template void mat_vec_reference<std::complex<double>> (const MatrixAccessor&, const long long, const long long, std::complex<double> B[], const std::complex<double> X[], const double[], const double[]);
+template void gen_matrix<std::complex<double>>(const MatrixAccessor<std::complex<double>>&, const long long, const long long, const double* const, const double* const, std::complex<double>[]);
+template long long adaptive_cross_approximation<std::complex<double>>(const MatrixAccessor<std::complex<double>>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
+template void mat_vec_reference<std::complex<double>> (const MatrixAccessor<std::complex<double>>&, const long long, const long long, std::complex<double> B[], const std::complex<double> X[], const double[], const double[]);
 
-void gen_matrix(const MatrixAccessor& kernel, const long long M, const long long N, const double* const bi, const double* const bj, std::complex<double> Aij[]) {
+template <typename DT>
+void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long long N, const double* const bi, const double* const bj, DT Aij[]) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
   const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * M]);
   const std::array<double, 3>* bj3 = reinterpret_cast<const std::array<double, 3>*>(bj);
@@ -30,7 +33,8 @@ void gen_matrix(const MatrixAccessor& kernel, const long long M, const long long
   });
 }
 
-long long adaptive_cross_approximation(const MatrixAccessor& kernel, const double epsilon, const long long max_rank, const long long nrows, const long long ncols, const double row_bodies[], const double col_bodies[], long long row_piv[], long long col_piv[]) {
+template <typename DT>
+long long adaptive_cross_approximation(const MatrixAccessor<DT>& kernel, const double epsilon, const long long max_rank, const long long nrows, const long long ncols, const double row_bodies[], const double col_bodies[], long long row_piv[], long long col_piv[]) {
   // low-rank matrices U & V
   Eigen::MatrixXcd U(nrows, max_rank), V(max_rank, ncols);
   // workspace for selected rows/columns of A
@@ -118,7 +122,7 @@ long long adaptive_cross_approximation(const MatrixAccessor& kernel, const doubl
 }
 
 template <typename DT>
-void mat_vec_reference(const MatrixAccessor& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]) {
+void mat_vec_reference(const MatrixAccessor<DT>& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]) {
   // calculate in blocks  (to prevent memory issues?)
   constexpr long long block_size = 256;
   typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;

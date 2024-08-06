@@ -15,7 +15,7 @@ H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), l
 }
 
 template <typename DT>
-H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, MPI_Comm world) : 
+H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, MPI_Comm world) : 
   levels(max_level), A(max_level + 1), comm(max_level + 1), allocedComm(), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
@@ -39,7 +39,7 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor& kernel, double epsilon,
     comm[i] = ColCommMPI(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
 
   // sample the far field for all cells in each level
-  std::vector<WellSeparatedApproximation> wsa(levels + 1);
+  std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++) {
     wsa[l] = WellSeparatedApproximation(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
   }

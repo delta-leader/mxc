@@ -12,9 +12,11 @@
 #include <iostream>
 
 // explicit template instantiation
+template class WellSeparatedApproximation<std::complex<double>>;
 template class H2Matrix<std::complex<double>>;
 
-WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& kernel, double epsilon, long long rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level) :
+template <typename DT>
+WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level) :
   lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
   // loop over the cells in the upper level
   for (long long i = upper_level.lbegin; i < upper_level.lend; i++)
@@ -51,11 +53,13 @@ WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& ker
   }
 }
 
-long long WellSeparatedApproximation::fbodies_size_at_i(const long long i) const {
+template <typename DT>
+long long WellSeparatedApproximation<DT>::fbodies_size_at_i(const long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].size() / 3 : 0;
 }
 
-const double* WellSeparatedApproximation::fbodies_at_i(const long long i) const {
+template <typename DT>
+const double* WellSeparatedApproximation<DT>::fbodies_at_i(const long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].data() : nullptr;
 }
 
@@ -76,7 +80,7 @@ Returns:
   rank: The rank corresponding to epsilon from the column pivoted QR
 */
 template <typename DT>
-long long compute_basis(const MatrixAccessor& kernel, const double epsilon, const long long nrows, const long long ncols, double row_bodies[], const double col_bodies[], DT Q[], DT R[]) {
+long long compute_basis(const MatrixAccessor<DT>& kernel, const double epsilon, const long long nrows, const long long ncols, double row_bodies[], const double col_bodies[], DT Q[], DT R[]) {
   typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
   const long long MIN_D = std::min(nrows, ncols);
   long long rank = 0;
@@ -172,7 +176,7 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
 }
 
 template <typename DT>
-H2Matrix<DT>::H2Matrix(const MatrixAccessor& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies) {
+H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies) {
   // number of cells on the same level
   long long xlen = comm.lenNeighbors();
   // index of the first cell for this process on this level (always 0 for a single process)
