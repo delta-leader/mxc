@@ -83,7 +83,7 @@ public:
   virtual DT operator()(double d) const = 0;
 };
 
-template <typename DT>
+template <typename DT = double>
 class Laplace3D : public MatrixAccessor<DT> {
 public:
   double singularity;
@@ -103,21 +103,35 @@ public:
   Laplace3D (double s) : singularity(1. / s) {}
   std::complex<DT> operator()(double d) const {
     if (d == 0.)
-      return std::complex<double>(singularity, 0.);
+      return std::complex<DT>(singularity, 0.);
     else
-      return std::complex<double>(1. / d, 0.);
+      return std::complex<DT>(1. / d, 0.);
   }
 };
 
-class Yukawa3D : public MatrixAccessor<std::complex<double>> {
+template <typename DT = double>
+class Yukawa3D : public MatrixAccessor<DT> {
 public:
   double singularity, alpha;
   Yukawa3D (double s, double a) : singularity(1. / s), alpha(a) {}
-  std::complex<double> operator()(double d) const override {
+  DT operator()(double d) const override {
     if (d == 0.)
-      return std::complex<double>(singularity, 0.);
+      return singularity;
     else
-      return std::complex<double>(std::exp(-alpha * d) / d, 0.);
+      return std::exp(-alpha * d) / d;
+  }
+};
+
+template <typename DT>
+class Yukawa3D<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
+public:
+  double singularity, alpha;
+  Yukawa3D (double s, double a) : singularity(1. / s), alpha(a) {}
+  std::complex<DT> operator()(double d) const override {
+    if (d == 0.)
+      return std::complex<DT>(singularity, 0.);
+    else
+      return std::complex<DT>(std::exp(-alpha * d) / d, 0.);
   }
 };
 

@@ -33,8 +33,8 @@ int main(int argc, char* argv[]) {
   // by setting the corresponding parameters
   // In this case the template argument deduction fails for the matvec (double)
   // I might need to specifiy them explicitly
-  Laplace3D<DT> eval(1.);
-  //Yukawa3D eval(1, 1.);
+  //Laplace3D<DT> eval(1.);
+  Yukawa3D<DT> eval(1, 1.);
   //Gaussian eval(8);
   //Helmholtz3D eval(1., 1.);
   
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
   cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
   ncells = Nleaf + 1;
   levels = 1;*/
-
+  
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
   // create the H2 matrix

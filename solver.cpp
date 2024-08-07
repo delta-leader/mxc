@@ -159,7 +159,8 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
 
   DT normr = R.adjoint() * R;
   comm[levels].level_sum(&normr, 1);
-  double normb = std::sqrt(normr.real());
+  double normb = std::sqrt(std::real(normr));
+  //double normb = std::sqrt(normr.real());
   if (normb == 0.)
     normb = 1.;
   resid = std::vector<double>(outer_iters + 1, 0.);
@@ -172,7 +173,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
 
     normr = R.adjoint() * R;
     comm[levels].level_sum(&normr, 1);
-    double beta = std::sqrt(normr.real());
+    double beta = std::sqrt(std::real(normr));
     resid[iters] = beta / normb;
     if (resid[iters] < tol)
       return;
@@ -195,7 +196,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
 
       DT normw = w.adjoint() * w;
       comm[levels].level_sum(&normw, 1);
-      H(i + 1, i) = std::sqrt(normw.real());
+      H(i + 1, i) = std::sqrt(std::real(normw));
       v.col(i + 1) = w * (1. / H(i + 1, i));
     }
 
@@ -213,7 +214,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
 
   normr = R.adjoint() * R;
   comm[levels].level_sum(&normr, 1);
-  double beta = std::sqrt(normr.real());
+  double beta = std::sqrt(std::real(normr));
   resid[outer_iters] = beta / normb;
 }
 
