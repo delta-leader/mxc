@@ -19,11 +19,6 @@ protected:
   MPI_Comm AllReduceComm;
   MPI_Comm DupComm;
 
-  template<class T> inline void level_merge(T* data, long long len) const;
-  template<class T> inline void level_sum(T* data, long long len) const;
-  template<class T> inline void neighbor_bcast(T* data) const;
-  template<class T> inline void neighbor_bcast(MatrixDataContainer<T>& dc) const;
-
 public:
   ColCommMPI() : Proc(-1), Boxes(), NeighborComm(), MergeComm(MPI_COMM_NULL), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL) {};
   /*
@@ -45,12 +40,15 @@ public:
   long long lenLocal() const;
   long long lenNeighbors() const;
 
-  void level_merge(std::complex<double>* data, long long len) const;
-  void level_sum(std::complex<double>* data, long long len) const;
+  template <typename DT>
+  void level_merge(DT* data, long long len) const;
+  template <typename DT>
+  void level_sum(DT* data, long long len) const;
 
-  void neighbor_bcast(long long* data) const;
-  void neighbor_bcast(MatrixDataContainer<double>& dc) const;
-  void neighbor_bcast(MatrixDataContainer<std::complex<double>>& dc) const;
+  template <typename DT>
+  void neighbor_bcast(DT* data) const;
+  template <typename DT>
+  void neighbor_bcast(MatrixDataContainer<DT>& dc) const;
 
   static double get_comm_time();
   static void record_mpi();
