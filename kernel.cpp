@@ -9,8 +9,11 @@
 
 // explicit template instantiation
 template void gen_matrix<std::complex<double>>(const MatrixAccessor<std::complex<double>>&, const long long, const long long, const double* const, const double* const, std::complex<double>[]);
+template void gen_matrix<double>(const MatrixAccessor<double>&, const long long, const long long, const double* const, const double* const, double[]);
 template long long adaptive_cross_approximation<std::complex<double>>(const MatrixAccessor<std::complex<double>>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
+template long long adaptive_cross_approximation<double>(const MatrixAccessor<double>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
 template void mat_vec_reference<std::complex<double>> (const MatrixAccessor<std::complex<double>>&, const long long, const long long, std::complex<double> B[], const std::complex<double> X[], const double[], const double[]);
+template void mat_vec_reference<double> (const MatrixAccessor<double>&, const long long, const long long, double B[], const double X[], const double[], const double[]);
 
 template <typename DT>
 void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long long N, const double* const bi, const double* const bj, DT Aij[]) {
@@ -35,10 +38,12 @@ void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long 
 
 template <typename DT>
 long long adaptive_cross_approximation(const MatrixAccessor<DT>& kernel, const double epsilon, const long long max_rank, const long long nrows, const long long ncols, const double row_bodies[], const double col_bodies[], long long row_piv[], long long col_piv[]) {
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
   // low-rank matrices U & V
-  Eigen::MatrixXcd U(nrows, max_rank), V(max_rank, ncols);
+  Matrix_dt U(nrows, max_rank), V(max_rank, ncols);
   // workspace for selected rows/columns of A
-  Eigen::VectorXcd Acol(nrows), Arow(ncols);
+  Vector_dt Acol(nrows), Arow(ncols);
   // row/column pivots
   Eigen::VectorXi Ipiv(max_rank), Jpiv(max_rank);
   long long x = 0, y = 0;
@@ -66,7 +71,7 @@ long long adaptive_cross_approximation(const MatrixAccessor<DT>& kernel, const d
   
   // set the maximum row element to zero
   // TODO does this affect V?
-  Arow(x) = std::complex<double>(0., 0.);
+  Arow(x) = DT{0};
   // find the column with the containing the new maximum absolute value
   Arow.cwiseAbs().maxCoeff(&x);
   // ||Z||
@@ -96,9 +101,9 @@ long long adaptive_cross_approximation(const MatrixAccessor<DT>& kernel, const d
     Ipiv(iters) = y;
     Jpiv(iters) = x;
 
-    Eigen::VectorXcd Unrm = U.leftCols(iters).adjoint() * Acol;
-    Eigen::VectorXcd Vnrm = V.topRows(iters).conjugate() * Arow;
-    std::complex<double> Z_k = Unrm.transpose() * Vnrm;
+    Vector_dt Unrm = U.leftCols(iters).adjoint() * Acol;
+    Vector_dt Vnrm = V.topRows(iters).conjugate() * Arow;
+    DT Z_k = Unrm.transpose() * Vnrm;
     nrm_k = Arow.norm() * Acol.norm();
     nrm_z = std::sqrt(nrm_z * nrm_z + 2 * std::abs(Z_k) + nrm_k * nrm_k);
     iters++;

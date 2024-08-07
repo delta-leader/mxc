@@ -2,6 +2,80 @@
 
 #include <complex>
 #include <cmath>
+#include <vector>
+#include <random>
+#include <algorithm>
+
+template <typename DT = std::complex<double>>
+class Vector_dt {
+  private:
+    std::vector<DT> data;
+  public:
+    Vector_dt(const long long len, DT value=0) {
+      data = std::vector<DT>(len, value);
+    }
+    auto operator& () {
+      return &data;
+    }
+    auto begin() {
+      return data.begin();
+    }
+    auto end() {
+      return data.end();
+    }
+    DT& operator[] (const long long index) {
+      return data[index];
+    }
+    const DT& operator[] (const long long index) const {
+      return data[index];
+    }
+    void generate_random(const long long seed=999) {
+      std::mt19937 gen(seed);
+      std::uniform_real_distribution uniform_dist(0., 1.);
+      std::generate(data.begin(), data.end(), 
+        [&]() { return (DT) uniform_dist(gen); }
+      );
+    }
+    void reset() {
+      std::fill(data.begin(), data.end(), DT{0});
+    }
+};
+
+template <typename T>
+class Vector_dt<std::complex<T>> {
+  typedef std::complex<T> DT;
+  private:
+    std::vector<DT> data;
+  public:
+    Vector_dt(const long long len, DT value=0) {
+      data = std::vector<DT>(len, value);
+    }
+    auto operator& () {
+      return &data;
+    }
+    auto begin() {
+      return data.begin();
+    }
+    auto end() {
+      return data.end();
+    }
+    DT& operator[] (const long long index) {
+      return data[index];
+    }
+    const DT& operator[] (const long long index) const {
+      return data[index];
+    }
+    void generate_random(const long long seed=999) {
+      std::mt19937 gen(seed);
+      std::uniform_real_distribution uniform_dist(0., 1.);
+      std::generate(data.begin(), data.end(), 
+        [&]() { return DT(uniform_dist(gen), 0.); }
+      );
+    }
+    void reset() {
+      std::fill(data.begin(), data.end(), DT{0});
+    }
+};
 
 template <typename DT = std::complex<double>>
 class MatrixAccessor {
@@ -9,11 +83,25 @@ public:
   virtual DT operator()(double d) const = 0;
 };
 
-class Laplace3D : public MatrixAccessor<std::complex<double>> {
+template <typename DT>
+class Laplace3D : public MatrixAccessor<DT> {
 public:
   double singularity;
   Laplace3D (double s) : singularity(1. / s) {}
-  std::complex<double> operator()(double d) const override {
+  DT operator()(double d) const override {
+    if (d == 0.)
+      return singularity;
+    else
+      return 1. / d;
+  }
+};
+
+template <typename DT>
+class Laplace3D<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
+public:
+  double singularity;
+  Laplace3D (double s) : singularity(1. / s) {}
+  std::complex<DT> operator()(double d) const {
     if (d == 0.)
       return std::complex<double>(singularity, 0.);
     else

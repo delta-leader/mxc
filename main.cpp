@@ -5,6 +5,7 @@
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
+  typedef std::complex<double> DT;
 
   // N
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
@@ -29,16 +30,19 @@ int main(int argc, char* argv[]) {
   
   // kernel functions, here we select the appropriate function
   // by setting the corresponding parameters
-  //Laplace3D eval(1.);
+  // In this case the template argument deduction fails for the matvec (double)
+  // I might need to specifiy them explicitly
+  Laplace3D<DT> eval(1.);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(8);
-  Helmholtz3D eval(1., 1.);
+  //Helmholtz3D eval(1., 1.);
   
   // body contains the points
   // 3 corresponds to the dimension
   std::vector<double> body(Nbody * 3);
   // contains the charges for each point?
-  std::vector<std::complex<double>> Xbody(Nbody);
+  //std::vector<std::complex<double>> Xbody(Nbody);
+  Vector_dt<DT> Xbody(Nbody);
   // array containing the nodes in the cluster tree
   std::vector<Cell> cell(ncells);
 
@@ -50,10 +54,11 @@ int main(int argc, char* argv[]) {
   buildBinaryTree(levels, Nbody, &body[0], &cell[0]);
 
   // generate a random vector Xbody (used in Matvec)
-  std::mt19937 gen(999);
-  std::uniform_real_distribution uniform_dist(0., 1.);
-  std::generate(Xbody.begin(), Xbody.end(), 
-    [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
+  Xbody.generate_random();
+  //std::mt19937 gen(999);
+  //std::uniform_real_distribution uniform_dist(0., 1.);
+  //std::generate(Xbody.begin(), Xbody.end(), 
+  //  [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
 
   /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
   cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
@@ -72,8 +77,10 @@ int main(int argc, char* argv[]) {
 
   // creates two vectors of zeroes with the same length as the number of local bodies
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
-  std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
-  std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
+  //std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
+  //std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
+  Vector_dt<DT> X1(lenX);
+  Vector_dt<DT> X2(lenX);
 
   // copy the random vector
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
@@ -110,7 +117,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   // new H2 matrix using a fixed rank
-  H2MatrixSolver matM;
+  H2MatrixSolver<DT> matM;
   if (mode.compare("h2") == 0)
     matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true);
   else if (mode.compare("hss") == 0)
@@ -140,7 +147,8 @@ int main(int argc, char* argv[]) {
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
   double serr = computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
-  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  X1.reset();
+  //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;

@@ -14,6 +14,8 @@
 // explicit template instantiation
 template class WellSeparatedApproximation<std::complex<double>>;
 template class H2Matrix<std::complex<double>>;
+//template class WellSeparatedApproximation<double>;
+//template class H2Matrix<double>;
 
 template <typename DT>
 WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level) :
