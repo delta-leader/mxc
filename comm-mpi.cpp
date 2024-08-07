@@ -9,6 +9,8 @@
 // explicit template instantiation
 template void ColCommMPI::level_merge<std::complex<double>>(std::complex<double>*, long long) const;
 template void ColCommMPI::level_sum<std::complex<double>>(std::complex<double>*, long long) const;
+template void ColCommMPI::level_merge<double>(double*, long long) const;
+template void ColCommMPI::level_sum<double>(double*, long long) const;
 template void ColCommMPI::neighbor_bcast<long long>(long long*) const;
 template void ColCommMPI::neighbor_bcast<std::complex<double>>(MatrixDataContainer<std::complex<double>>&) const;
 template void ColCommMPI::neighbor_bcast<double>(MatrixDataContainer<double>& dc) const;

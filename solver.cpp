@@ -9,7 +9,7 @@
 // explicit template instantiation
 template class H2MatrixSolver<std::complex<double>>;
 //template class H2MatrixSolver<std::complex<float>>;
-//template class H2MatrixSolver<double>;
+template class H2MatrixSolver<double>;
 //template class H2MatrixSolver<float>;
 template double computeRelErr<double>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 template double computeRelErr<double>(const long long, const double X[], const double ref[], MPI_Comm);

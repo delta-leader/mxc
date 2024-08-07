@@ -5,7 +5,8 @@
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
-  typedef std::complex<double> DT;
+  //typedef std::complex<double> DT;
+  typedef double DT;
 
   // N
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
