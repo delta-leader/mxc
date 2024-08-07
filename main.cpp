@@ -5,8 +5,8 @@
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
-  //typedef std::complex<double> DT;
-  typedef double DT;
+  typedef std::complex<double> DT;
+  //typedef double DT;
 
   // N
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
@@ -34,9 +34,9 @@ int main(int argc, char* argv[]) {
   // In this case the template argument deduction fails for the matvec (double)
   // I might need to specifiy them explicitly
   //Laplace3D<DT> eval(1.);
-  Yukawa3D<DT> eval(1, 1.);
-  //Gaussian eval(8);
-  //Helmholtz3D eval(1., 1.);
+  //Yukawa3D<DT> eval(1, 1.);
+  //Gaussian<DT> eval(8);
+  Helmholtz3D<DT> eval(1., 1.);
   
   // body contains the points
   // 3 corresponds to the dimension

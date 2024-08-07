@@ -5,6 +5,7 @@
 #include <vector>
 #include <random>
 #include <algorithm>
+#include <iostream>
 
 template <typename DT = std::complex<double>>
 class Vector_dt {
@@ -101,7 +102,7 @@ class Laplace3D<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
 public:
   double singularity;
   Laplace3D (double s) : singularity(1. / s) {}
-  std::complex<DT> operator()(double d) const {
+  std::complex<DT> operator()(double d) const override {
     if (d == 0.)
       return std::complex<DT>(singularity, 0.);
     else
@@ -135,25 +136,53 @@ public:
   }
 };
 
-class Gaussian : public MatrixAccessor<std::complex<double>> {
+template <typename DT = double>
+class Gaussian : public MatrixAccessor<DT> {
 public:
   double alpha;
   Gaussian (double a) : alpha(1. / (a * a)) {}
-  std::complex<double> operator()(double d) const override {
-    return std::complex<double>(std::exp(- alpha * d * d), 0.);
+  DT operator()(double d) const override {
+    return std::exp(- alpha * d * d);
   }
 };
 
-class Helmholtz3D : public MatrixAccessor<std::complex<double>> {
+template <typename DT>
+class Gaussian<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
+public:
+  double alpha;
+  Gaussian (double a) : alpha(1. / (a * a)) {}
+  std::complex<DT> operator()(double d) const override {
+    return std::complex<DT>(std::exp(- alpha * d * d), 0.);
+  }
+};
+
+template <typename DT = std::complex<double>>
+class Helmholtz3D : public MatrixAccessor<DT> {
+public:
+  double k;
+  double singularity;
+  Helmholtz3D(double wave_number, double s) : k(wave_number), singularity(1. / s) {
+    std::cout<<"Helmholtz kernel without complex numbers!"<<std::endl;
+  }
+  DT operator()(double d) const override {
+    if (d == 0.)
+      return singularity;
+    else
+      return std::real(std::exp(std::complex(0., -k * d)) / d);
+  }
+};
+
+template <typename DT>
+class Helmholtz3D<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
 public:
   double k;
   double singularity;
   Helmholtz3D(double wave_number, double s) : k(wave_number), singularity(1. / s) {}
-  std::complex<double> operator()(double d) const override {
+  std::complex<DT> operator()(double d) const override {
     if (d == 0.)
-      return std::complex<double>(singularity, 0.);
+      return std::complex<DT>(singularity, 0.);
     else
-      return std::exp(std::complex(0., -k * d)) / d;
+      return std::exp(std::complex<DT>(0., -k * d)) / d;
   }
 };
 
