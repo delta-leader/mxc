@@ -213,6 +213,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   DT normr = R.adjoint() * R;
   comm[levels].level_sum(&normr, 1);
   double normb = std::sqrt(std::real(normr));
+  std::cout<<"Normb "<<std::endl;
   //double normb = std::sqrt(normr.real());
   if (normb == 0.)
     normb = 1.;
@@ -258,6 +259,9 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
 
     Vector_dt y = H.colPivHouseholderQr().solve(s);
     X += v.leftCols(inner_iters) * y;
+    // only works for a single process
+    Vector_dt corr = v.leftCols(inner_iters) * y;
+    std::cout<<corr.norm()<<" vs "<<y.norm()<<" "<<std::real(y(inner_iters-1))<<std::endl;
   }
 
   R = -X;
@@ -269,6 +273,84 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   comm[levels].level_sum(&normr, 1);
   double beta = std::sqrt(std::real(normr));
   resid[outer_iters] = beta / normb;
+}
+
+template <typename DT>
+void H2MatrixSolver<DT>::solveMyGMRES(double tol, H2MatrixSolver& M, DT x[], const DT b[], long long inner_iters, long long outer_iters) {
+
+  long long lbegin = comm[levels].oLocal();
+  long long llen = comm[levels].lenLocal();
+  long long N = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
+  long long ld = inner_iters + 1;
+
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
+  Eigen::Map<const Vector_dt> B(b, N);
+  Eigen::Map<Vector_dt> X(x, N);
+  Vector_dt R = B;
+  M.solvePrecondition(R.data());
+  // store the first solution in X aka D0
+  X = R
+
+  DT normr = R.adjoint() * R;
+  comm[levels].level_sum(&normr, 1);
+  double normb = std::sqrt(std::real(normr));
+  if (normb < tol) {
+    // use LU-IR whenever possible
+    //X = R;
+    //return;
+    std::cout<<"GMRES Error"<<std::endl;
+  }
+  //resid = std::vector<double>(outer_iters + 1, 0.);
+
+  for (iters = 0; iters < outer_iters; iters++) {
+    R = -X;
+    matVecMul(R.data());
+    R += B;
+    M.solvePrecondition(R.data());
+
+    //normr = R.adjoint() * R;
+    //comm[levels].level_sum(&normr, 1);
+    //double beta = std::sqrt(std::real(normr));
+    //resid[iters] = beta / normb;
+    //if (resid[iters] < tol)
+    //  return;
+
+    Matrix_dt H = Matrix_dt::Zero(ld, inner_iters);
+    Matrix_dt v = Matrix_dt::Zero(N, ld);
+    v.col(0) = R * (1. / beta);
+    
+    for (long long i = 0; i < inner_iters; i++) {
+      Vector_dt w = v.col(i);
+      matVecMul(w.data());
+      M.solvePrecondition(w.data());
+
+      for (long long k = 0; k <= i; k++)
+        H(k, i) = v.col(k).adjoint() * w;
+      comm[levels].level_sum(H.col(i).data(), i + 1);
+
+      for (long long k = 0; k <= i; k++)
+        w -= H(k, i) * v.col(k);
+
+      DT normw = w.adjoint() * w;
+      comm[levels].level_sum(&normw, 1);
+      H(i + 1, i) = std::sqrt(std::real(normw));
+      v.col(i + 1) = w * ((DT)1. / H(i + 1, i));
+    }
+
+    Vector_dt s = Vector_dt::Zero(ld);
+    s(0) = beta;
+
+    Vector_dt y = H.colPivHouseholderQr().solve(s);
+    X += v.leftCols(inner_iters) * y;
+    // this is equal to ||di||
+    normr = y.squaredNorm();
+    comm[levels].level_sum(&normr, 1);
+    if (std::sqrt(std::real(normr)) / normb < tol) {
+      // in this case we have ||di|| / ||d0|| < tol and we are finished
+      break:
+    }
+  }
 }
 
 template <typename DT>
