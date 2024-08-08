@@ -1,9 +1,13 @@
 #pragma once
 
+#include <Eigen/Dense>
+
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
 #include <h2matrix.hpp>
 #include <kernel.hpp>
+
+#include <iostream>
 
 template <typename DT = std::complex<double>>
 class H2MatrixSolver {
@@ -66,6 +70,98 @@ public:
   void solveGMRES(double tol, H2MatrixSolver& M, DT X[], const DT B[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
+
+  template <typename OT>
+  long long solveIR(double tol, H2MatrixSolver<OT>& M, DT X[], const DT B[], long long max_iters) {
+    typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
+    typedef Eigen::Matrix<OT, Eigen::Dynamic, 1> Vector_ot;
+    
+    long long lbegin = comm[levels].oLocal();
+    long long llen = comm[levels].lenLocal();
+    long long N = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
+    resid = std::vector<double>(max_iters + 1, 0.);
+
+    Eigen::Map<const Vector_dt> b(B, N);
+    Eigen::Map<Vector_dt> x(X, N);
+    Vector_ot x_ot = b.template cast<OT>();
+    M.solvePrecondition(x_ot.data());
+    x = x_ot.template cast<DT>();
+    Vector_dt r;
+
+    DT norm_local = b.squaredNorm();
+    comm[levels].level_sum(&norm_local, 1);
+    double norm, normb = std::sqrt(std::real(norm_local));
+    if (normb == 0.)
+      normb = 1.;
+
+    for (long long iter = 0; iter<max_iters; ++iter) {
+      r = -x;
+      matVecMul(r.data());
+      r += b;
+      norm_local = r.squaredNorm();
+      comm[levels].level_sum(&norm_local, 1);
+      norm = std::sqrt(std::real(norm_local));
+      resid[iter] = norm / normb;
+      if (resid[iter]<tol) {
+        return iter;
+      }
+      x_ot = r.template cast<OT>();
+      M.solvePrecondition(x_ot.data());
+      x = x + x_ot.template cast<DT>();    
+    }
+    r = x;
+    matVecMul(r.data());
+    r -= b;
+    norm_local = r.squaredNorm();
+    comm[levels].level_sum(&norm_local, 1);
+    norm = std::sqrt(std::real(norm_local));
+    resid[max_iters] = norm / normb;
+    return max_iters;
+  }
+
+  long long solveIR(double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long max_iters) {
+    typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
+    
+    long long lbegin = comm[levels].oLocal();
+    long long llen = comm[levels].lenLocal();
+    long long N = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
+    resid = std::vector<double>(max_iters + 1, 0.);
+
+    Eigen::Map<const Vector_dt> b(B, N);
+    Eigen::Map<Vector_dt> x(X, N);
+    x = b;
+    M.solvePrecondition(x.data());
+    Vector_dt r;
+
+    DT norm_local = b.squaredNorm();
+    comm[levels].level_sum(&norm_local, 1);
+    double norm, normb = std::sqrt(std::real(norm_local));
+    if (normb == 0.)
+      normb = 1.;
+
+    for (long long iter = 0; iter<max_iters; ++iter) {
+      r = -x;
+      matVecMul(r.data());
+      r += b;
+      norm_local = r.squaredNorm();
+      comm[levels].level_sum(&norm_local, 1);
+      norm = std::sqrt(std::real(norm_local));
+      resid[iter] = norm / normb;
+      if (resid[iter]<tol) {
+        return iter;
+      }
+      M.solvePrecondition(r.data());
+      x += r;    
+    }
+    r = x;
+    matVecMul(r.data());
+    r -= b;
+    norm_local = r.squaredNorm();
+    comm[levels].level_sum(&norm_local, 1);
+    norm = std::sqrt(std::real(norm_local));
+    resid[max_iters] = norm / normb;
+    return max_iters;
+  }
 };
 
 /*

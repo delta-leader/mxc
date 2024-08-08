@@ -197,7 +197,6 @@ void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
 
 template <typename DT>
 void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const DT b[], long long inner_iters, long long outer_iters) {
-  using Eigen::VectorXcd, Eigen::MatrixXcd;
 
   long long lbegin = comm[levels].oLocal();
   long long llen = comm[levels].lenLocal();

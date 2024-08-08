@@ -139,7 +139,12 @@ int main(int argc, char* argv[]) {
   m_construct_comm_time = ColCommMPI::get_comm_time();
 
   H2MatrixSolver<DT_low> matM_low(matM);
+  MPI_Barrier(MPI_COMM_WORLD);
+  double h2_factor_time_low = MPI_Wtime(), h2_factor_comm_time_low;
   matM_low.factorizeM();
+  MPI_Barrier(MPI_COMM_WORLD);
+  h2_factor_time_low = MPI_Wtime() - h2_factor_time_low;
+  h2_factor_comm_time_low = ColCommMPI::get_comm_time();
   matM_low.solvePrecondition(&X1_low[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -169,6 +174,7 @@ int main(int argc, char* argv[]) {
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
     std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
+    std::cout << "H^2-Matrix Factorization Time (low): " << h2_factor_time_low << ", " << h2_factor_comm_time_low << std::endl;
     std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
     std::cout << "H^2-Matrix Substitution Err (low): " << serr_low << std::endl;
@@ -185,6 +191,32 @@ int main(int argc, char* argv[]) {
   if (mpi_rank == 0) {
     std::cout << "GMRES Residual: " << matA.resid[matA.iters] << ", Iters: " << matA.iters << std::endl;
     std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
+  }
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  double ir_time = MPI_Wtime(), ir_comm_time;
+  long long iters = matA.solveIR(epi, matM, &X1[0], &X2[0], 50);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  ir_time = MPI_Wtime() - ir_time;
+  ir_comm_time = ColCommMPI::get_comm_time();
+
+  if (mpi_rank == 0) {
+    std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
+    std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
+  }
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  double ir_time_low = MPI_Wtime(), ir_comm_time_low;
+  long long iters_low = matA.solveIR(epi, matM_low, &X1[0], &X2[0], 50);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  ir_time_low = MPI_Wtime() - ir_time_low;
+  ir_comm_time_low = ColCommMPI::get_comm_time();
+
+  if (mpi_rank == 0) {
+    std::cout << "IR Residual(low): " << matA.resid[iters_low] << ", Iters: " << iters_low << std::endl;
+    std::cout << "IR Time(low): " << ir_time_low << ", Comm: " << ir_comm_time_low << std::endl;
   }
 
   matA.free_all_comms();
