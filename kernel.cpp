@@ -15,6 +15,14 @@ template long long adaptive_cross_approximation<double>(const MatrixAccessor<dou
 template void mat_vec_reference<std::complex<double>> (const MatrixAccessor<std::complex<double>>&, const long long, const long long, std::complex<double> B[], const std::complex<double> X[], const double[], const double[]);
 template void mat_vec_reference<double> (const MatrixAccessor<double>&, const long long, const long long, double B[], const double X[], const double[], const double[]);
 
+template void gen_matrix<float>(const MatrixAccessor<float>&, const long long, const long long, const double* const, const double* const, float[]);
+template long long adaptive_cross_approximation<float>(const MatrixAccessor<float>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
+template void mat_vec_reference<float> (const MatrixAccessor<float>&, const long long, const long long, float B[], const float X[], const double[], const double[]);
+
+template void gen_matrix<std::complex<float>>(const MatrixAccessor<std::complex<float>>&, const long long, const long long, const double* const, const double* const, std::complex<float>[]);
+template long long adaptive_cross_approximation<std::complex<float>>(const MatrixAccessor<std::complex<float>>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
+template void mat_vec_reference<std::complex<float>> (const MatrixAccessor<std::complex<float>>&, const long long, const long long, std::complex<float> B[], const std::complex<float> X[], const double[], const double[]);
+
 template <typename DT>
 void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long long N, const double* const bi, const double* const bj, DT Aij[]) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
@@ -57,7 +65,7 @@ long long adaptive_cross_approximation(const MatrixAccessor<DT>& kernel, const d
   // store the index of the maximum absolute value in y
   Acol.cwiseAbs().maxCoeff(&y);
   // normalize the column by the maximum element
-  Acol *= 1. / Acol(y);
+  Acol *= (DT)1. / Acol(y);
   // generate the row containing the maximum absolute value
   gen_matrix(kernel, 1, ncols, &row_bodies[y * 3], col_bodies, Arow.data());
   
@@ -91,7 +99,7 @@ long long adaptive_cross_approximation(const MatrixAccessor<DT>& kernel, const d
     Acol -= U.leftCols(iters) * V.block(0, x, iters, 1);
     Acol(Ipiv.head(iters)).setZero();
     Acol.cwiseAbs().maxCoeff(&y);
-    Acol *= 1. / Acol(y);
+    Acol *= (DT)1. / Acol(y);
 
     gen_matrix(kernel, 1, ncols, &row_bodies[y * 3], col_bodies, Arow.data());
     Arow -= (U.block(y, 0, 1, iters) * V.topRows(iters)).transpose();

@@ -9,12 +9,16 @@
 
 template <typename DT = std::complex<double>>
 class Vector_dt {
-  private:
-    std::vector<DT> data;
   public:
+    std::vector<DT> data;
     Vector_dt(const long long len, DT value=0) {
       data = std::vector<DT>(len, value);
     }
+    template <typename OT>
+    Vector_dt(const Vector_dt<OT>& vector) {
+      data = std::vector<DT>(vector.data.size());
+      std::transform(vector.data.data(), vector.data.data() + data.size(), data.begin(), [](OT value) -> DT {return DT(value);});
+    } 
     auto operator& () {
       return &data;
     }
@@ -45,11 +49,15 @@ class Vector_dt {
 template <typename T>
 class Vector_dt<std::complex<T>> {
   typedef std::complex<T> DT;
-  private:
-    std::vector<DT> data;
   public:
+    std::vector<DT> data;
     Vector_dt(const long long len, DT value=0) {
       data = std::vector<DT>(len, value);
+    }
+    template <typename OT>
+    Vector_dt(const Vector_dt<std::complex<OT>>& vector) {
+      data = std::vector<DT>(vector.data.size());
+      std::transform(vector.data.data(), vector.data.data() + data.size(), data.begin(), [](std::complex<OT> value) -> DT {return DT(value);});
     }
     auto operator& () {
       return &data;

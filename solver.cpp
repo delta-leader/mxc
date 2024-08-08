@@ -1,4 +1,3 @@
-
 #include <solver.hpp>
 
 #include <Eigen/Dense>
@@ -8,11 +7,16 @@
 
 // explicit template instantiation
 template class H2MatrixSolver<std::complex<double>>;
-//template class H2MatrixSolver<std::complex<float>>;
+template class H2MatrixSolver<std::complex<float>>;
 template class H2MatrixSolver<double>;
-//template class H2MatrixSolver<float>;
+template class H2MatrixSolver<float>;
 template double computeRelErr<double>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 template double computeRelErr<double>(const long long, const double X[], const double ref[], MPI_Comm);
+
+template H2MatrixSolver<float>::H2MatrixSolver(const H2MatrixSolver<double>&);
+template double computeRelErr<float>(const long long, const float X[], const float ref[], MPI_Comm);
+template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
+template double computeRelErr<float>(const long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
 
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
@@ -59,6 +63,56 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
+}
+
+template <typename DT> template <typename OT>
+H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
+  levels(solver.levels), A(solver.levels + 1), local_bodies(solver.local_bodies) {
+  // could have a weaker admissibility
+  // could have a larger epsilon
+  // could have a different data type
+  // should use a fixed rank
+
+  // this should duplicate all the allocated communicators
+  for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
+    MPI_Comm mpi_comm = MPI_COMM_NULL;
+    MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
+    allocedComm.emplace_back(mpi_comm);
+  }
+  for (size_t i = 0; i < solver.comm.size(); ++i) {
+    comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
+  }
+  for (size_t i = 0; i < A.size(); ++i) {
+    A[i] = H2Matrix<DT>(solver.A[i]);
+  }
+  // set the pointers to the parent level
+  long long offset;
+  for (size_t level = 1; level < A.size(); ++level) {
+    // A matrix can be empty
+    if (solver.A[level - 1].A.size() > 0) {
+      auto parent_begin = solver.A[level - 1].A[0];
+      auto child_begin = A[level - 1].A[0];
+      for (size_t i = 0; i < A[level].C.size(); ++i) {
+        // need to make the ptr constant 
+        const OT* ptr = solver.A[level].C[i];
+        offset = std::distance(parent_begin, ptr);
+        A[level].C[i] = child_begin + offset;
+      }
+      for (size_t i = 0; i < A[level].NA.size(); ++i) {
+        const OT* ptr = solver.A[level].NA[i];
+        offset = std::distance(parent_begin, ptr);
+        A[level].NA[i] = child_begin + offset;
+      }
+    }
+    for (size_t i = 0; i < A[level].NX.size(); ++i) {
+      const OT* ptrx = solver.A[level].NX[i];
+      offset = std::distance(solver.A[level - 1].X[0], ptrx);
+      A[level].NX [i]= A[level - 1].X[0] + offset;
+      const OT* ptry = solver.A[level].NY[i];
+      offset = std::distance(solver.A[level - 1].Y[0], ptry);
+      A[level].NY[i] = A[level - 1].Y[0] + offset;
+    }
+  }
 }
 
 template <typename DT>
@@ -197,7 +251,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
       DT normw = w.adjoint() * w;
       comm[levels].level_sum(&normw, 1);
       H(i + 1, i) = std::sqrt(std::real(normw));
-      v.col(i + 1) = w * (1. / H(i + 1, i));
+      v.col(i + 1) = w * ((DT)1. / H(i + 1, i));
     }
 
     Vector_dt s = Vector_dt::Zero(ld);

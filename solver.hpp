@@ -18,6 +18,7 @@ private:
   std::vector<MPI_Comm> allocedComm;
 
 public:
+  template <typename OT> friend class H2MatrixSolver;
   // Contains the starting and ending index of the bodies
   // local for each process
   std::pair<long long, long long> local_bodies;
@@ -37,6 +38,13 @@ public:
   world: MPI communicator, default: all processes
   */
   H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank = false, MPI_Comm world = MPI_COMM_WORLD);
+
+  /* creates an exact copy in a different datatype
+  In:
+    solver: the solver to copy
+  */
+  template <typename OT>
+  H2MatrixSolver(const H2MatrixSolver<OT>& solver);
 
   /*
   Matrix vector multiplication

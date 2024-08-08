@@ -15,6 +15,14 @@ template void ColCommMPI::neighbor_bcast<long long>(long long*) const;
 template void ColCommMPI::neighbor_bcast<std::complex<double>>(MatrixDataContainer<std::complex<double>>&) const;
 template void ColCommMPI::neighbor_bcast<double>(MatrixDataContainer<double>& dc) const;
 
+template void ColCommMPI::level_merge<float>(float*, long long) const;
+template void ColCommMPI::level_sum<float>(float*, long long) const;
+template void ColCommMPI::neighbor_bcast<float>(MatrixDataContainer<float>& dc) const;
+
+template void ColCommMPI::level_merge<std::complex<float>>(std::complex<float>*, long long) const;
+template void ColCommMPI::level_sum<std::complex<float>>(std::complex<float>*, long long) const;
+template void ColCommMPI::neighbor_bcast<std::complex<float>>(MatrixDataContainer<std::complex<float>>&) const;
+
 MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
   MPI_Comm_split(world, color, mpi_rank, &comm);
@@ -30,6 +38,19 @@ MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, in
     }
   }
   return comm;
+}
+
+MPI_Comm find_same(const MPI_Comm& comm, const std::vector<MPI_Comm>& allocedComm) {
+  if (comm != MPI_COMM_NULL) {
+    auto iter = std::find_if(allocedComm.begin(), allocedComm.end(), [comm](MPI_Comm c) -> bool { 
+      int result; MPI_Comm_compare(comm, c, &result); return result == MPI_CONGRUENT; });
+    if (iter == allocedComm.end()) {
+      std::cerr<<"Could not find congruent communicator!"<<std::endl;
+      std::abort();
+    }
+  return *iter;
+  }
+  return MPI_COMM_NULL;
 }
 
 void getNextLevelMapping(std::pair<long long, long long> Mapping[], const std::pair<long long, long long> Tree[], long long mpi_size) {
@@ -113,6 +134,18 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
   DupComm = MPI_Comm_split_unique(allocedComm, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
 }
 
+ColCommMPI::ColCommMPI(const ColCommMPI& comm, const std::vector<MPI_Comm>& allocedComm) :
+  Proc(comm.Proc), Boxes(comm.Boxes) {
+
+  for (size_t i = 0; i< comm.NeighborComm.size(); ++i) {
+    std::pair<int, MPI_Comm> neighbor(comm.NeighborComm[i].first, find_same(comm.NeighborComm[i].second, allocedComm));
+    NeighborComm.emplace_back(neighbor);
+  }
+  MergeComm = find_same(comm.MergeComm, allocedComm);
+  AllReduceComm = find_same(comm.AllReduceComm, allocedComm);
+  DupComm = find_same(comm.DupComm, allocedComm);
+}
+
 long long ColCommMPI::iLocal(long long iglobal) const {
   std::vector<std::pair<long long, long long>>::const_iterator iter = std::find_if(Boxes.begin(), Boxes.end(), 
     [=](std::pair<long long, long long> i) { return i.first <= iglobal && iglobal < i.first + i.second; });
@@ -152,8 +185,12 @@ template<class T> inline MPI_Datatype get_mpi_datatype() {
     return MPI_LONG_LONG_INT;
   if (typeid(T) == typeid(double))
     return MPI_DOUBLE;
+  if (typeid(T) == typeid(float))
+    return MPI_FLOAT;
   if (typeid(T) == typeid(std::complex<double>))
     return MPI_C_DOUBLE_COMPLEX;
+  if (typeid(T) == typeid(std::complex<float>))
+    return MPI_C_FLOAT_COMPLEX;
   return MPI_DATATYPE_NULL;
 }
 
@@ -204,8 +241,9 @@ void ColCommMPI::neighbor_bcast(MatrixDataContainer<DT>& dc) const {
     DT* start = dc[offsets[p]], *end = dc[offsets[p + 1]];
     MPI_Bcast(start, std::distance(start, end), get_mpi_datatype<DT>(), NeighborComm[p].first, NeighborComm[p].second);
   }
-  if (DupComm != MPI_COMM_NULL)
+  if (DupComm != MPI_COMM_NULL) {
     MPI_Bcast(dc[0], dc.size(), get_mpi_datatype<DT>(), 0, DupComm);
+  }
   record_mpi();
 }
 

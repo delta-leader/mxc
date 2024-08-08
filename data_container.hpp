@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <numeric>
+#include <algorithm>
 
 /*
 Structure to store continuous blocks of data
@@ -25,6 +26,8 @@ private:
   std::vector<T> data;
 
 public:
+  template <typename U> friend class MatrixDataContainer;
+
   MatrixDataContainer() {}
 
   /*
@@ -38,6 +41,15 @@ public:
     std::inclusive_scan(data, &data[len], offsets.begin() + 1);
     offsets[0] = 0;
     this->data = std::vector<T>(offsets.back());
+  }
+
+  template <typename U>
+  MatrixDataContainer(const MatrixDataContainer<U>& container) : 
+    offsets(container.offsets) {
+    
+    long long size = offsets.back();
+    this->data = std::vector<T>(size);
+    std::transform(container.data.data(), container.data.data() + size, data.begin(), [](U value) -> T {return T(value);});
   }
 
   /*

@@ -104,6 +104,8 @@ private:
   std::vector<DT*> NY;
 
 public:
+  template <typename OT> friend class H2Matrix;
+  template <typename OT> friend class H2MatrixSolver;
   // the number of points contained in each cell for this level
   std::vector<long long> Dims;
   // Used for storing the input/output vector
@@ -127,6 +129,13 @@ public:
   use_near_bodies: not exactly sure what this does, default: false
   */
   H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies = false);
+
+
+  /*
+  Copy constructor to convert a H2matrix to a different datatype
+  */
+  template <typename OT>
+  H2Matrix(const H2Matrix<OT>& h2matrix);
 
   /*
   multiplies the Q matrices for all cells on this level with a vector

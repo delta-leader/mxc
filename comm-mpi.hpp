@@ -26,11 +26,18 @@ public:
   Mapping: contains a pair of (0,1) for each mpi process
   Rows: The RowIndex variable from the Neighbor CSR
   Columns: The ColumnIndex variable from the Neighbor CSR
-  allocComm: empty
+  allocedComm: empty
   world: MPI world communicator
   */
   ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world = MPI_COMM_WORLD);
   
+  /* Copy constructor
+  comm: the communicator to be copied
+  allocedComm: a list of already allocated communicators
+               used to populate this communicator
+  */
+  ColCommMPI(const ColCommMPI& comm, const std::vector<MPI_Comm>& allocedComm);
+
   long long iLocal(long long iglobal) const;
   long long iGlobal(long long ilocal) const;
   long long oLocal() const;

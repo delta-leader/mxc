@@ -17,6 +17,14 @@ template class H2Matrix<std::complex<double>>;
 template class WellSeparatedApproximation<double>;
 template class H2Matrix<double>;
 
+template class WellSeparatedApproximation<float>;
+template class H2Matrix<float>;
+template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
+
+template class WellSeparatedApproximation<std::complex<float>>;
+template class H2Matrix<std::complex<float>>;
+template H2Matrix<std::complex<float>>::H2Matrix(const H2Matrix<std::complex<double>>&);
+
 template <typename DT>
 WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level) :
   lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
@@ -459,6 +467,21 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
     comm.neighbor_bcast(Q);
     comm.neighbor_bcast(R);
   }
+}
+
+template <typename DT> template <typename OT>
+H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : DimsLr(h2matrix.DimsLr), 
+  UpperStride(h2matrix.UpperStride), Q(h2matrix.Q), R(h2matrix.R), S(h2matrix.S),
+  CRows(h2matrix.CRows), CCols(h2matrix.CCols), ARows(h2matrix.ARows), ACols(h2matrix.ACols),
+  A(h2matrix.A), Ipivots(h2matrix.Ipivots), Dims(h2matrix.Dims), X(h2matrix.X), Y(h2matrix.Y) {
+
+    // those pointer all point to the upper level, so we need to set them
+    // from outside
+    NX = std::vector<DT*>(Dims.size(), nullptr);
+    NY = std::vector<DT*>(Dims.size(), nullptr);
+    long long nodes = UpperStride.size();
+    NA = std::vector<DT*>(ARows[nodes], nullptr);
+    C = std::vector<DT*>(CRows[nodes], nullptr);
 }
 
 template <typename DT>

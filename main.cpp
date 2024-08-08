@@ -5,8 +5,8 @@
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
-  typedef std::complex<double> DT;
-  //typedef double DT;
+  typedef std::complex<double> DT; typedef std::complex<float> DT_low;
+  //typedef double DT; typedef float DT_low;
 
   // N
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
@@ -86,6 +86,8 @@ int main(int argc, char* argv[]) {
   // copy the random vector
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
 
+  Vector_dt<DT_low> X1_low(X1);
+
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
   // Sample matrix vector multiplication
@@ -104,10 +106,17 @@ int main(int argc, char* argv[]) {
   // calculate relative error between H-matvec and dense matvec
   double cerr = computeRelErr(lenX, &X1[0], &X2[0]);
 
+  H2MatrixSolver<DT_low> matA_low(matA);
+  Vector_dt<DT_low> Xbody_low(Xbody);
+  matA_low.matVecMul(&X1_low[0]);
+  Vector_dt<DT_low> X2_low(X2);
+  double cerr_low = computeRelErr(lenX, &X1_low[0], &X2_low[0]);
+
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
+    std::cout << "Construct Err (float): " << cerr_low << std::endl;
     std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
@@ -115,6 +124,7 @@ int main(int argc, char* argv[]) {
 
   // copy X2 into X1
   std::copy(X2.begin(), X2.end(), X1.begin());
+  std::copy(X2_low.begin(), X2_low.end(), X1_low.begin());
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   // new H2 matrix using a fixed rank
@@ -127,6 +137,10 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
+
+  H2MatrixSolver<DT_low> matM_low(matM);
+  matM_low.factorizeM();
+  matM_low.solvePrecondition(&X1_low[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
@@ -148,6 +162,7 @@ int main(int argc, char* argv[]) {
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
   double serr = computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
+  double serr_low = computeRelErr(lenX, &X1_low[0], &Xbody_low[matA.local_bodies.first]);
   X1.reset();
   //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
@@ -156,6 +171,7 @@ int main(int argc, char* argv[]) {
     std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
+    std::cout << "H^2-Matrix Substitution Err (low): " << serr_low << std::endl;
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -172,6 +188,7 @@ int main(int argc, char* argv[]) {
   }
 
   matA.free_all_comms();
+  matA_low.free_all_comms();
   matM.free_all_comms();
   MPI_Finalize();
   return 0;
