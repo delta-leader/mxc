@@ -213,7 +213,6 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   DT normr = R.adjoint() * R;
   comm[levels].level_sum(&normr, 1);
   double normb = std::sqrt(std::real(normr));
-  std::cout<<"Normb "<<std::endl;
   //double normb = std::sqrt(normr.real());
   if (normb == 0.)
     normb = 1.;
@@ -259,9 +258,6 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
 
     Vector_dt y = H.colPivHouseholderQr().solve(s);
     X += v.leftCols(inner_iters) * y;
-    // only works for a single process
-    Vector_dt corr = v.leftCols(inner_iters) * y;
-    std::cout<<corr.norm()<<" vs "<<y.norm()<<" "<<std::real(y(inner_iters-1))<<std::endl;
   }
 
   R = -X;
@@ -276,46 +272,46 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
 }
 
 template <typename DT>
-void H2MatrixSolver<DT>::solveMyGMRES(double tol, H2MatrixSolver& M, DT x[], const DT b[], long long inner_iters, long long outer_iters) {
+long long H2MatrixSolver<DT>::solveMyGMRES(double tol, H2MatrixSolver& M, DT x[], const DT b[], long long inner_iters, long long outer_iters) {
 
   long long lbegin = comm[levels].oLocal();
   long long llen = comm[levels].lenLocal();
   long long N = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
   long long ld = inner_iters + 1;
-
+ 
   typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
   typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
   Eigen::Map<const Vector_dt> B(b, N);
   Eigen::Map<Vector_dt> X(x, N);
-  Vector_dt R = B;
+  
+  // We assume we do not have an initial solution x0 yet (i.e. zero initialized)
+  // compute x0
+  X = B;
+  M.solvePrecondition(X.data());
+
+  // compute the residual
+  Vector_dt R = -X;
+  matVecMul(R.data());
+  R += B;
+
+  // compute the initial solution A d0 = res0 (stored in R)
   M.solvePrecondition(R.data());
-  // store the first solution in X aka D0
-  X = R
 
   DT normr = R.adjoint() * R;
   comm[levels].level_sum(&normr, 1);
-  double normb = std::sqrt(std::real(normr));
-  if (normb < tol) {
+  // ||d0||
+  double normd = std::sqrt(std::real(normr));
+  double beta = normd;
+  // we could use this as a switch beteen LU and GMRES IR
+  // but not tested yet
+  //if (normd < tol) {
     // use LU-IR whenever possible
-    //X = R;
-    //return;
-    std::cout<<"GMRES Error"<<std::endl;
-  }
-  //resid = std::vector<double>(outer_iters + 1, 0.);
+  //  X += R;
+  //  return;
+  //}
 
   for (iters = 0; iters < outer_iters; iters++) {
-    R = -X;
-    matVecMul(R.data());
-    R += B;
-    M.solvePrecondition(R.data());
-
-    //normr = R.adjoint() * R;
-    //comm[levels].level_sum(&normr, 1);
-    //double beta = std::sqrt(std::real(normr));
-    //resid[iters] = beta / normb;
-    //if (resid[iters] < tol)
-    //  return;
-
+    // restart GMRES with new d0
     Matrix_dt H = Matrix_dt::Zero(ld, inner_iters);
     Matrix_dt v = Matrix_dt::Zero(N, ld);
     v.col(0) = R * (1. / beta);
@@ -342,15 +338,38 @@ void H2MatrixSolver<DT>::solveMyGMRES(double tol, H2MatrixSolver& M, DT x[], con
     s(0) = beta;
 
     Vector_dt y = H.colPivHouseholderQr().solve(s);
+    //  d0 + di
     X += v.leftCols(inner_iters) * y;
-    // this is equal to ||di||
-    normr = y.squaredNorm();
+    // beta is equal to ||di||
+    // we could use this to check for early finish
+    /*normr = y.squaredNorm();
     comm[levels].level_sum(&normr, 1);
-    if (std::sqrt(std::real(normr)) / normb < tol) {
+    beta = std::sqrt(std::real(normr));
+    if (beta / normd < tol) {
       // in this case we have ||di|| / ||d0|| < tol and we are finished
-      break:
+      std::cout<<"FINISHED"<<std::endl;
+      return;
+    }*/
+    // but instead we calculate the next residual
+    R = -X;
+    matVecMul(R.data());
+    R += B;
+
+    // compute the new initial solution A d0 = resi (stored in R)
+    M.solvePrecondition(R.data());
+    //X += R;
+
+    DT normr = R.adjoint() * R;
+    comm[levels].level_sum(&normr, 1);
+    // ||d0||
+    beta = std::sqrt(std::real(normr));
+    if (beta / normd < tol) {
+      // in this case we have || new d0|| / ||d0|| < tol and we are finished
+      // X += R;
+      return iters * inner_iters;
     }
   }
+  return outer_iters * inner_iters;
 }
 
 template <typename DT>

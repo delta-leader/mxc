@@ -179,7 +179,7 @@ int main(int argc, char* argv[]) {
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
     std::cout << "H^2-Matrix Substitution Err (low): " << serr_low << std::endl;
   }
-  /*
+  
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
   matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
@@ -218,17 +218,17 @@ int main(int argc, char* argv[]) {
     std::cout << "IR Residual(low): " << matA.resid[iters_low] << ", Iters: " << iters_low << std::endl;
     std::cout << "IR Time(low): " << ir_time_low << ", Comm: " << ir_comm_time_low << std::endl;
   }
-  */
+  
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_ir_time = MPI_Wtime(), gmres_ir_comm_time;
-  long long gmres_iters = matA.solveGMRESIR(epi, matM, &X1[0], &X2[0], 5, 1, 20);
+  long long gmres_iters = matA.solveGMRESIR(epi, matM, &X1[0], &X2[0], 10, 50, 1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_ir_time = MPI_Wtime() - gmres_ir_time;
   gmres_ir_comm_time = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
-    //std::cout << "GMRES-IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
+    std::cout << "GMRES-IR Residual: " << matA.resid[gmres_iters] << ", Iters: " << gmres_iters << std::endl;
     std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
   }
 

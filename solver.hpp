@@ -67,7 +67,8 @@ public:
        (overwritten with x as the output)
   */
   void solvePrecondition(DT X[]);
-  void solveGMRES(double tol, H2MatrixSolver& M, DT X[], const DT B[], long long inner_iters, long long outer_iters);
+  void solveGMRES(double tol, H2MatrixSolver& M, DT X[], const DT B[], long long inner_iters, long long outer_iters=1);
+  long long solveMyGMRES(double tol, H2MatrixSolver& M, DT X[], const DT B[], long long inner_iters, long long outer_iters=1);
 
   void free_all_comms();
 
@@ -109,9 +110,9 @@ public:
       M.solvePrecondition(x_ot.data());
       x = x + x_ot.template cast<DT>();    
     }
-    r = x;
+    r = -x;
     matVecMul(r.data());
-    r -= b;
+    r += b;
     norm_local = r.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
     norm = std::sqrt(std::real(norm_local));
@@ -153,9 +154,9 @@ public:
       M.solvePrecondition(r.data());
       x += r;    
     }
-    r = x;
+    r = -x;
     matVecMul(r.data());
-    r -= b;
+    r += b;
     norm_local = r.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
     norm = std::sqrt(std::real(norm_local));
@@ -163,14 +164,13 @@ public:
     return max_iters;
   }
 
-  long long solveGMRESIR(double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long max_iters, long long inner_iters, long long outer_iters) {
+  long long solveGMRESIR(double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long max_iters, long long inner_iters, long long outer_iters=1) {
     typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
     
     long long lbegin = comm[levels].oLocal();
     long long llen = comm[levels].lenLocal();
     long long N = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
-    // TODO this doesn't feel right
-    resid = std::vector<double>(max_iters * (outer_iters + inner_iters) + 1, 0.);
+    resid = std::vector<double>(max_iters + 1, 0.);
 
     Eigen::Map<const Vector_dt> b(B, N);
     Eigen::Map<Vector_dt> x(X, N);
@@ -192,14 +192,14 @@ public:
       norm_local = r.squaredNorm();
       comm[levels].level_sum(&norm_local, 1);
       norm = std::sqrt(std::real(norm_local));
+      resid[iter] = norm / normb;
       std::cout<<"Residual "<<norm / normb<<std::endl;
-      /*resid[iter] = norm / normb;
       if (resid[iter]<tol) {
         return iter;
-      }*/
+      }
       // solve with gmres for x=d and r=b
-      solveGMRES(1e-6, M, d.data(), r.data(), inner_iters, outer_iters);
-      x += d;    
+      solveMyGMRES(1e-6, M, d.data(), r.data(), inner_iters, outer_iters);
+      x += d;
     }
     r = x;
     matVecMul(r.data());
@@ -207,7 +207,7 @@ public:
     norm_local = r.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
     norm = std::sqrt(std::real(norm_local));
-    //resid[max_iters] = norm / normb;
+    resid[max_iters] = norm / normb;
     return max_iters;
   }
 };
