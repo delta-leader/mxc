@@ -24,9 +24,10 @@ template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
 template class WellSeparatedApproximation<std::complex<float>>;
 template class H2Matrix<std::complex<float>>;
 template H2Matrix<std::complex<float>>::H2Matrix(const H2Matrix<std::complex<double>>&);
+template H2Matrix<std::complex<double>>::H2Matrix(const H2Matrix<std::complex<float>>&);
 
 template <typename DT>
-WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level) :
+WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long max_rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level, const bool fix_rank) :
   lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
   // loop over the cells in the upper level
   for (long long i = upper_level.lbegin; i < upper_level.lend; i++)
@@ -45,8 +46,9 @@ WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<
       const double* row_bodies = &bodies[3 * cells[c].Body[0]];
       long long ncols = cells[j].Body[1] - cells[j].Body[0];
       const double* col_bodies = &bodies[3 * cells[j].Body[0]];
+
+      max_rank = fix_rank ? std::min(max_rank, std::min(nrows, ncols)) : std::min(nrows, ncols);
       
-      long long max_rank = std::min(rank, std::min(nrows, ncols));
       // sample the bodies, note that we only sample the columns
       std::vector<long long> piv(max_rank);
       long long iters = adaptive_cross_approximation(kernel, epsilon, max_rank, nrows, ncols, row_bodies, col_bodies, nullptr, &piv[0]);

@@ -18,6 +18,9 @@ template double computeRelErr<float>(const long long, const float X[], const flo
 template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
 template double computeRelErr<float>(const long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
 
+// for converting the LU factors back (GMRESIR)
+template H2MatrixSolver<std::complex<double>>::H2MatrixSolver(const H2MatrixSolver<std::complex<float>>&);
+
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
 }
@@ -49,9 +52,10 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
   // sample the far field for all cells in each level
   std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++) {
-    wsa[l] = WellSeparatedApproximation(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
+    // edited so that WSA will always try to match epsilon, unless fix_rank is specified
+    wsa[l] = WellSeparatedApproximation(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
   }
-  // this is an ugly fix to pack the max_rank into epsilon
+  // this is an ugly fix to pack the max_rank into epsilon, and use fix_rank as use_near_bodies instead
   epsilon = fix_rank ? (double)max_rank : epsilon;
   // Create an H2 matrix for each level
   A[levels] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], fix_rank);

@@ -56,69 +56,72 @@ int main(int argc, char* argv[]) {
 
   // generate a random vector Xbody (used in Matvec)
   Xbody.generate_random();
-  
-  // HSS construction
-  MPI_Barrier(MPI_COMM_WORLD);
-  double hss_construct_time = MPI_Wtime(), hss_construct_comm_time;
-  H2MatrixSolver hss(eval, epi, rank, cell, 0, &body[0], levels);
-  MPI_Barrier(MPI_COMM_WORLD);
-  hss_construct_time = MPI_Wtime() - hss_construct_time;
-  hss_construct_comm_time = ColCommMPI::get_comm_time();
+  //std::mt19937 gen(999);
+  //std::uniform_real_distribution uniform_dist(0., 1.);
+  //std::generate(Xbody.begin(), Xbody.end(), 
+  //  [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
 
-  // H2 construction
+  /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
+  cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
+  ncells = Nleaf + 1;
+  levels = 1;*/
+  
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
   // create the H2 matrix
-  H2MatrixSolver h2(eval, epi, rank, cell, theta, &body[0], levels);
+  H2MatrixSolver matA(eval, epi, rank, cell, theta, &body[0], levels);
+
+  // timing of construction
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
   // creates two vectors of zeroes with the same length as the number of local bodies
-  long long lenX = hss.local_bodies.second - hss.local_bodies.first;
+  long long lenX = matA.local_bodies.second - matA.local_bodies.first;
+  //std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
+  //std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
   Vector_dt<DT> X1(lenX);
   Vector_dt<DT> X2(lenX);
-  Vector_dt<DT> X3(lenX);
+
   // copy the random vector
-  std::copy(&Xbody[hss.local_bodies.first], &Xbody[hss.local_bodies.second], &X1[0]);
-  std::copy(&Xbody[h2.local_bodies.first], &Xbody[h2.local_bodies.second], &X2[0]);
+  std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
+
+  Vector_dt<DT_low> X1_low(X1);
 
   MPI_Barrier(MPI_COMM_WORLD);
-  double hss_matvec_time = MPI_Wtime(), hss_matvec_comm_time;
+  double matvec_time = MPI_Wtime(), matvec_comm_time;
   // Sample matrix vector multiplication
-  hss.matVecMul(&X1[0]);
-  MPI_Barrier(MPI_COMM_WORLD);
-  hss_matvec_time = MPI_Wtime() - hss_matvec_time;
-  hss_matvec_comm_time = ColCommMPI::get_comm_time();
+  matA.matVecMul(&X1[0]);
 
+  // MatVec timing
   MPI_Barrier(MPI_COMM_WORLD);
-  double h2_matvec_time = MPI_Wtime(), h2_matvec_comm_time;
-  // Sample matrix vector multiplication
-  h2.matVecMul(&X2[0]);
-  MPI_Barrier(MPI_COMM_WORLD);
-  h2_matvec_time = MPI_Wtime() - h2_matvec_time;
-  h2_matvec_comm_time = ColCommMPI::get_comm_time();
+  matvec_time = MPI_Wtime() - matvec_time;
+  matvec_comm_time = ColCommMPI::get_comm_time();
 
   double refmatvec_time = MPI_Wtime();
+
   // Reference matrix vector multiplication
-  mat_vec_reference(eval, lenX, Nbody, &X3[0], &Xbody[0], &body[hss.local_bodies.first * 3], &body[0]);
+  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[matA.local_bodies.first * 3], &body[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   // calculate relative error between H-matvec and dense matvec
-  double hss_err = computeRelErr(lenX, &X1[0], &X3[0]);
-  double h2_err = computeRelErr(lenX, &X2[0], &X3[0]);
+  double cerr = computeRelErr(lenX, &X1[0], &X2[0]);
+
+  H2MatrixSolver<DT_low> matA_low(matA);
+  Vector_dt<DT_low> Xbody_low(Xbody);
+  matA_low.matVecMul(&X1_low[0]);
+  Vector_dt<DT_low> X2_low(X2);
+  double cerr_low = computeRelErr(lenX, &X1_low[0], &X2_low[0]);
 
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
-    std::cout << "Construct Err HSS: " << hss_err << std::endl;
-    std::cout << "Construct Time HSS: " << hss_construct_time << ", " << hss_construct_comm_time << std::endl;
-    std::cout << "Matvec Time HSS: " << hss_matvec_time << ", " << hss_matvec_comm_time << std::endl<<std::endl;
-    std::cout << "Construct Err H2: " << h2_err << std::endl;
-    std::cout << "Construct Time H2: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
-    std::cout << "Matvec Time H2: " << h2_matvec_time << ", " << h2_matvec_comm_time << std::endl<<std::endl;
+    std::cout << "Construct Err: " << cerr << std::endl;
+    std::cout << "Construct Err (float): " << cerr_low << std::endl;
+    std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
+    std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
   }
-  /*
+
   // copy X2 into X1
   std::copy(X2.begin(), X2.end(), X1.begin());
   std::copy(X2_low.begin(), X2_low.end(), X1_low.begin());
@@ -243,10 +246,10 @@ int main(int argc, char* argv[]) {
     std::cout << "GMRES-IR Residual: " << matA.resid[gmres_iters_low] << ", Iters: " << gmres_iters_low << std::endl;
     std::cout << "GMRES-IR Time: " << gmres_ir_time_low << ", Comm: " << gmres_ir_comm_time_low << std::endl;
   }
-  */
 
-  h2.free_all_comms();
-  hss.free_all_comms();
+  matA.free_all_comms();
+  matA_low.free_all_comms();
+  matM.free_all_comms();
   MPI_Finalize();
   return 0;
 }
