@@ -26,7 +26,7 @@ H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), l
 }
 
 template <typename DT>
-H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, MPI_Comm world) : 
+H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, const bool factorization_basis, MPI_Comm world) : 
   levels(max_level), A(max_level + 1), comm(max_level + 1), allocedComm(), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
@@ -55,10 +55,10 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
     // edited so that WSA will always try to match epsilon, unless fix_rank is specified
     wsa[l] = WellSeparatedApproximation(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
   }
-  // this is an ugly fix to pack the max_rank into epsilon, and use fix_rank as use_near_bodies instead
+  // this is an ugly fix to pack the max_rank into epsilon
   epsilon = fix_rank ? (double)max_rank : epsilon;
   // Create an H2 matrix for each level
-  A[levels] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], fix_rank);
+  A[levels] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis);
   for (long long l = levels - 1; l >= 0; l--){
     A[l] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], fix_rank);
   }
@@ -190,9 +190,13 @@ void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   X_leaf = X_in;
 
   // forward substitution for all levels
-  for (long long l = levels; l >= 0; l--)
+  std::cout<<"Forward"<<std::endl;
+  for (long long l = levels; l >= 0; l--) {
+    std::cout<<"Level "<<l<<std::endl;
     A[l].forwardSubstitute(comm[l]);
+  }
   // backward substitution for all levels
+  std::cout<<"Backward"<<std::endl;
   for (long long l = 0; l <= levels; l++)
     A[l].backwardSubstitute(comm[l]);
   // get the result from the leaf level and stor in X_in

@@ -704,6 +704,8 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
   comm.level_merge(X[0], X.size());
+  // The error occurs here
+  std::cout<<"First Loop"<<std::endl;
   // for all cells on this level
   for (long long i = 0; i < nodes; i++) {
     // index of the diagonal block
@@ -723,8 +725,11 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
     // get the pivots for the redudandant part
     Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
     
+    // The error must be in the GeMM here
     // Y = Q^-1 X
+    std::cout<<"GEMM "<<M<<std::endl;
     y.noalias() = q.adjoint() * x;
+    std::cout<<"GEMM end"<<std::endl;
     // privot Yr
     y.bottomRows(Mr).applyOnTheLeft(p);
     // solve Lrr y = Yr
@@ -738,6 +743,7 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
   // broadcast X
   comm.neighbor_bcast(X);
   // for all cells
+  std::cout<<"Second Loop"<<std::endl;
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
@@ -746,6 +752,7 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
 
     VectorMap_dt x(X[i + ibegin], M);
     if (0 < Ms) {
+      std::cout<<"PArt1"<<std::endl;
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
         long long N = Dims[j];
@@ -759,9 +766,10 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
       VectorMap_dt xo(NX[i + ibegin], Ms);
       xo = x.topRows(Ms);
     }
-
     VectorMap_dt y(Y[i + ibegin], M);
     y = x;
+    std::cout<<"PArt2"<<std::endl;
+    // and here
     for (long long ij = ARows[i]; ij < diag; ij++) {
       long long j = ACols[ij];
       long long N = Dims[j];

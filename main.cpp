@@ -116,67 +116,67 @@ int main(int argc, char* argv[]) {
     std::cout << "Construct Err H2: " << h2_err << std::endl;
     std::cout << "Construct Time H2: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "Matvec Time H2: " << h2_matvec_time << ", " << h2_matvec_comm_time << std::endl<<std::endl;
-    std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
+    std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl<<std::endl;
   }
-  /*
-  // copy X2 into X1
-  std::copy(X2.begin(), X2.end(), X1.begin());
-  std::copy(X2_low.begin(), X2_low.end(), X1_low.begin());
-  MPI_Barrier(MPI_COMM_WORLD);
-  double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  // new H2 matrix using a fixed rank
-  H2MatrixSolver<DT> matM;
-  if (mode.compare("h2") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true);
-  else if (mode.compare("hss") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, cell, 0., &body[0], levels, true);
+  
+  // copy X3 (aka B) into X1, X2
+  std::copy(X3.begin(), X3.end(), X1.begin());
+  std::copy(X3.begin(), X3.end(), X2.begin());
+  std::cout<<"Factorize"<<std::endl;
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  m_construct_time = MPI_Wtime() - m_construct_time;
-  m_construct_comm_time = ColCommMPI::get_comm_time();
-
-  H2MatrixSolver<DT_low> matM_low(matM);
-  MPI_Barrier(MPI_COMM_WORLD);
-  double h2_factor_time_low = MPI_Wtime(), h2_factor_comm_time_low;
-  matM_low.factorizeM();
-  MPI_Barrier(MPI_COMM_WORLD);
-  h2_factor_time_low = MPI_Wtime() - h2_factor_time_low;
-  h2_factor_comm_time_low = ColCommMPI::get_comm_time();
-  matM_low.solvePrecondition(&X1_low[0]);
-
+  // H2
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
-
-  // factorization
-  matM.factorizeM();
-
+  h2.factorizeM();
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
   h2_factor_comm_time = ColCommMPI::get_comm_time();
 
+  std::cout<<"Substitute"<<std::endl;
+
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
-
-  // solve the system using the factorized matrix
-  matM.solvePrecondition(&X1[0]);
-
+  h2.solvePrecondition(&X1[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  double serr = computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
-  double serr_low = computeRelErr(lenX, &X1_low[0], &Xbody_low[matA.local_bodies.first]);
-  X1.reset();
-  //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  std::cout<<"Error"<<std::endl;
+  h2_err = computeRelErr(lenX, &X1[0], &Xbody[hss.local_bodies.first]);
+  Vector_dt<DT> R(lenX);
+  std::cout<<"REference"<<std::endl;
+  mat_vec_reference(eval, lenX, Nbody, &R[0], &X1[0], &body[hss.local_bodies.first * 3], &body[0]);
+  std::cout<<"Error"<<std::endl;
+  double h2_res = computeRelErr(lenX, &R[0], &X3[0]);
+
+  // HSS
+  /*MPI_Barrier(MPI_COMM_WORLD);
+  double hss_factor_time = MPI_Wtime(), hss_factor_comm_time;
+  hss.factorizeM();
+  MPI_Barrier(MPI_COMM_WORLD);
+  hss_factor_time = MPI_Wtime() - hss_factor_time;
+  hss_factor_comm_time = ColCommMPI::get_comm_time();
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  double hss_sub_time = MPI_Wtime(), hss_sub_comm_time;
+  hss.solvePrecondition(&X2[0]);
+  MPI_Barrier(MPI_COMM_WORLD);
+  hss_sub_time = MPI_Wtime() - hss_sub_time;
+  hss_sub_comm_time = ColCommMPI::get_comm_time();
+  hss_err = computeRelErr(lenX, &X2[0], &Xbody[hss.local_bodies.first]);
+  mat_vec_reference(eval, lenX, Nbody, &R[0], &X2[0], &body[hss.local_bodies.first * 3], &body[0]);
+  double hss_res = computeRelErr(lenX, &R[0], &X3[0]);
 
   if (mpi_rank == 0) {
-    std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
-    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
-    std::cout << "H^2-Matrix Factorization Time (low): " << h2_factor_time_low << ", " << h2_factor_comm_time_low << std::endl;
-    std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
-    std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
-    std::cout << "H^2-Matrix Substitution Err (low): " << serr_low << std::endl;
-  }
-  
+    std::cout << "Factorization Time HSS: " << hss_factor_time << ", " << hss_factor_comm_time << std::endl;
+    std::cout << "Substitution Time HSS: " << hss_sub_time << ", " << hss_sub_comm_time << std::endl;
+    std::cout << "Substitution Err HSS: " << hss_err << std::endl;
+    std::cout << "Residual HSS: " << hss_res << std::endl<<std::endl;
+    std::cout << "Factorization Time H2: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
+    std::cout << "Substitution Time H2: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
+    std::cout << "Substitution Err H2: " << h2_err << std::endl;
+    std::cout << "Residual H2: " << h2_res << std::endl;
+  }*/
+  /*
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
   matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
