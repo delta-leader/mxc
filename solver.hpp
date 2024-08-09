@@ -193,7 +193,6 @@ public:
       comm[levels].level_sum(&norm_local, 1);
       norm = std::sqrt(std::real(norm_local));
       resid[iter] = norm / normb;
-      std::cout<<"Residual "<<norm / normb<<std::endl;
       if (resid[iter]<tol) {
         return iter;
       }
