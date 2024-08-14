@@ -2,6 +2,7 @@
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
 #include <kernel.hpp>
+#include <utils.hpp>
 
 #include <Eigen/Dense>
 #include <Eigen/QR>
@@ -11,20 +12,34 @@
 
 #include <iostream>
 
-// explicit template instantiation
+/* explicit template instantiation */
+// complex double
 template class WellSeparatedApproximation<std::complex<double>>;
 template class H2Matrix<std::complex<double>>;
-template class WellSeparatedApproximation<double>;
-template class H2Matrix<double>;
-
-template class WellSeparatedApproximation<float>;
-template class H2Matrix<float>;
-template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
-
+// complex float
 template class WellSeparatedApproximation<std::complex<float>>;
 template class H2Matrix<std::complex<float>>;
+// double
+template class WellSeparatedApproximation<double>;
+template class H2Matrix<double>;
+// float
+template class WellSeparatedApproximation<float>;
+template class H2Matrix<float>;
+// half
+template class WellSeparatedApproximation<Eigen::half>;
+template class H2Matrix<Eigen::half>;
+
+/* supported type conversions */
+// (complex) double to float
+template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
 template H2Matrix<std::complex<float>>::H2Matrix(const H2Matrix<std::complex<double>>&);
+// (complex) float to double
 template H2Matrix<std::complex<double>>::H2Matrix(const H2Matrix<std::complex<float>>&);
+template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
+// double to half
+template H2Matrix<Eigen::half>::H2Matrix(const H2Matrix<double>&);
+// half to double
+template H2Matrix<double>::H2Matrix(const H2Matrix<Eigen::half>&);
 
 template <typename DT>
 WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long max_rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level, const bool fix_rank) :
@@ -126,7 +141,9 @@ long long compute_basis(const MatrixAccessor<DT>& kernel, const double epsilon, 
     if (epsilon < 1.) {
       // set the accuracy threshold and
       // get the corresponding rank
-      rrqr.setThreshold(epsilon);
+      // TODO ugly fix to convert epsilon to Eigen::half
+      DT eps{epsilon};
+      rrqr.setThreshold(get_real(eps));
       rank = rrqr.rank();
     }
 
@@ -704,8 +721,6 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
   comm.level_merge(X[0], X.size());
-  // The error occurs here
-  std::cout<<"First Loop"<<std::endl;
   // for all cells on this level
   for (long long i = 0; i < nodes; i++) {
     // index of the diagonal block
@@ -716,69 +731,69 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
     long long Ms = DimsLr[i + ibegin];
     // redundant dimension
     long long Mr = M - Ms;
-
-    VectorMap_dt x(X[i + ibegin], M);
-    VectorMap_dt y(Y[i + ibegin], M);
-    MatrixMap_dt q(Q[i + ibegin], M, M);
-    // the diagonal block
-    MatrixMap_dt Aii(A[diag], M, M);
-    // get the pivots for the redudandant part
-    Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
     
-    // The error must be in the GeMM here
-    // Y = Q^-1 X
-    std::cout<<"GEMM "<<M<<std::endl;
-    y.noalias() = q.adjoint() * x;
-    std::cout<<"GEMM end"<<std::endl;
-    // privot Yr
-    y.bottomRows(Mr).applyOnTheLeft(p);
-    // solve Lrr y = Yr
-    Aii.bottomRightCorner(Mr, Mr).template triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
-    // solve Urr y = y
-    Aii.bottomRightCorner(Mr, Mr).template triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
-    // store result in x
-    x = y;
+    // added a guard agains empty Dims
+    if (M > 0) {
+      VectorMap_dt x(X[i + ibegin], M);
+      VectorMap_dt y(Y[i + ibegin], M);
+      MatrixMap_dt q(Q[i + ibegin], M, M);
+      // the diagonal block
+      MatrixMap_dt Aii(A[diag], M, M);
+      // get the pivots for the redudandant part
+      Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
+    
+      // Y = Q^-1 X
+      y.noalias() = q.adjoint() * x;
+      // privot Yr
+      y.bottomRows(Mr).applyOnTheLeft(p);
+      // solve Lrr y = Yr
+      Aii.bottomRightCorner(Mr, Mr).template triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
+      // solve Urr y = y
+      Aii.bottomRightCorner(Mr, Mr).template triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
+      // store result in x
+      x = y;
+    }
   }
 
   // broadcast X
   comm.neighbor_bcast(X);
   // for all cells
-  std::cout<<"Second Loop"<<std::endl;
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
 
-    VectorMap_dt x(X[i + ibegin], M);
-    if (0 < Ms) {
-      std::cout<<"PArt1"<<std::endl;
-      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+    // added a guard against empty blocks
+    if (M > 0) {
+      VectorMap_dt x(X[i + ibegin], M);
+      if (0 < Ms) {
+        for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+          long long j = ACols[ij];
+          long long N = Dims[j];
+          long long Ns = DimsLr[j];
+          long long Nr = N - Ns;
+
+          VectorMap_dt xj(X[j], N);
+          MatrixMap_dt Aij(A[ij], M, N);
+          x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
+        }
+        VectorMap_dt xo(NX[i + ibegin], Ms);
+        xo = x.topRows(Ms);
+      }
+      VectorMap_dt y(Y[i + ibegin], M);
+      y = x;
+      for (long long ij = ARows[i]; ij < diag; ij++) {
         long long j = ACols[ij];
+        // TODO is it possible for just N to be empty?
         long long N = Dims[j];
         long long Ns = DimsLr[j];
         long long Nr = N - Ns;
 
         VectorMap_dt xj(X[j], N);
         MatrixMap_dt Aij(A[ij], M, N);
-        x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
+        y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
       }
-      VectorMap_dt xo(NX[i + ibegin], Ms);
-      xo = x.topRows(Ms);
-    }
-    VectorMap_dt y(Y[i + ibegin], M);
-    y = x;
-    std::cout<<"PArt2"<<std::endl;
-    // and here
-    for (long long ij = ARows[i]; ij < diag; ij++) {
-      long long j = ACols[ij];
-      long long N = Dims[j];
-      long long Ns = DimsLr[j];
-      long long Nr = N - Ns;
-
-      VectorMap_dt xj(X[j], N);
-      MatrixMap_dt Aij(A[ij], M, N);
-      y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
     }
   }
 
@@ -805,45 +820,50 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
 
-    VectorMap_dt x(X[i + ibegin], M);
-    VectorMap_dt y(Y[i + ibegin], M);
+    // added guard
+    if (M > 0) {
+      VectorMap_dt x(X[i + ibegin], M);
+      VectorMap_dt y(Y[i + ibegin], M);
 
-    y.bottomRows(Mr) = x.bottomRows(Mr);
-    if (0 < Ms) {
-      VectorMap_dt xo(NX[i + ibegin], Ms);
-      y.topRows(Ms) = xo;
-    }
+      y.bottomRows(Mr) = x.bottomRows(Mr);
+      if (0 < Ms) {
+        VectorMap_dt xo(NX[i + ibegin], Ms);
+        y.topRows(Ms) = xo;
+      }
+      for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
 
-    for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
-      long long j = ACols[ij];
-      long long N = Dims[j];
-      long long Ns = DimsLr[j];
-      long long Nr = N - Ns;
-
-      VectorMap_dt xj(X[j], N);
-      MatrixMap_dt Aij(A[ij], M, N);
-      y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
-    }
-
-    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-      long long j = ACols[ij];
-      long long N = Dims[j];
-      long long Ns = DimsLr[j];
-
-      if (0 < Ns) {
-        VectorMap_dt xo(NX[j], Ns);
+        VectorMap_dt xj(X[j], N);
         MatrixMap_dt Aij(A[ij], M, N);
-        y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xo;
+        y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+      }
+
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+
+        if (0 < Ns) {
+          VectorMap_dt xo(NX[j], Ns);
+          MatrixMap_dt Aij(A[ij], M, N);
+          y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xo;
+        }
       }
     }
   }
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
-    VectorMap_dt x(X[i + ibegin], M);
-    VectorMap_dt y(Y[i + ibegin], M);
-    MatrixMap_dt q(Q[i + ibegin], M, M);
-    x.noalias() = q.conjugate() * y;
+    // added guard
+    if (M > 0) {
+      VectorMap_dt x(X[i + ibegin], M);
+      VectorMap_dt y(Y[i + ibegin], M);
+      MatrixMap_dt q(Q[i + ibegin], M, M);
+      x.noalias() = q.conjugate() * y;
+    }
   }
 
   comm.neighbor_bcast(X);

@@ -6,6 +6,7 @@
 #include <comm-mpi.hpp>
 #include <h2matrix.hpp>
 #include <kernel.hpp>
+#include <utils.hpp>
 
 #include <iostream>
 
@@ -91,7 +92,7 @@ public:
 
     DT norm_local = b.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
-    double norm, normb = std::sqrt(std::real(norm_local));
+    double norm, normb = std::sqrt(get_real(norm_local));
     if (normb == 0.)
       normb = 1.;
 
@@ -101,7 +102,7 @@ public:
       r += b;
       norm_local = r.squaredNorm();
       comm[levels].level_sum(&norm_local, 1);
-      norm = std::sqrt(std::real(norm_local));
+      norm = std::sqrt(get_real(norm_local));
       resid[iter] = norm / normb;
       if (resid[iter]<tol) {
         return iter;
@@ -115,7 +116,7 @@ public:
     r += b;
     norm_local = r.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
-    norm = std::sqrt(std::real(norm_local));
+    norm = std::sqrt(get_real(norm_local));
     resid[max_iters] = norm / normb;
     return max_iters;
   }
@@ -136,7 +137,7 @@ public:
 
     DT norm_local = b.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
-    double norm, normb = std::sqrt(std::real(norm_local));
+    double norm, normb = std::sqrt(get_real(norm_local));
     if (normb == 0.)
       normb = 1.;
 
@@ -146,7 +147,7 @@ public:
       r += b;
       norm_local = r.squaredNorm();
       comm[levels].level_sum(&norm_local, 1);
-      norm = std::sqrt(std::real(norm_local));
+      norm = std::sqrt(get_real(norm_local));
       resid[iter] = norm / normb;
       if (resid[iter]<tol) {
         return iter;
@@ -159,7 +160,7 @@ public:
     r += b;
     norm_local = r.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
-    norm = std::sqrt(std::real(norm_local));
+    norm = std::sqrt(get_real(norm_local));
     resid[max_iters] = norm / normb;
     return max_iters;
   }
@@ -181,7 +182,7 @@ public:
 
     DT norm_local = b.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
-    double norm, normb = std::sqrt(std::real(norm_local));
+    double norm, normb = std::sqrt(get_real(norm_local));
     if (normb == 0.)
       normb = 1.;
 
@@ -191,7 +192,7 @@ public:
       r += b;
       norm_local = r.squaredNorm();
       comm[levels].level_sum(&norm_local, 1);
-      norm = std::sqrt(std::real(norm_local));
+      norm = std::sqrt(get_real(norm_local));
       resid[iter] = norm / normb;
       if (resid[iter]<tol) {
         return iter;
@@ -205,7 +206,7 @@ public:
     r -= b;
     norm_local = r.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
-    norm = std::sqrt(std::real(norm_local));
+    norm = std::sqrt(get_real(norm_local));
     resid[max_iters] = norm / normb;
     return max_iters;
   }

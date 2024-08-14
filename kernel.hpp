@@ -148,6 +148,7 @@ template <typename DT = double>
 class Gaussian : public MatrixAccessor<DT> {
 public:
   double alpha;
+  // TODO doesn't this make the matrices extremely ill-conditoned?
   Gaussian (double a) : alpha(1. / (a * a)) {}
   DT operator()(double d) const override {
     return std::exp(- alpha * d * d);
@@ -191,6 +192,80 @@ public:
       return std::complex<DT>(singularity, 0.);
     else
       return std::exp(std::complex<DT>(0., -k * d)) / d;
+  }
+};
+
+template <typename DT = double>
+class IMQ : public MatrixAccessor<DT> {
+public:
+  double alpha;
+  IMQ (double a) : alpha(a) {}
+  DT operator()(double d) const override {
+    return 1 / std::sqrt(1 + alpha * d * d);
+  }
+};
+
+template <typename DT>
+class IMQ<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
+public:
+  double alpha;
+  IMQ (double a) : alpha(a) {}
+  std::complex<DT> operator()(double d) const override {
+    return std::complex<DT>(1 / std::sqrt(1 + alpha * d * d), 0.);
+  }
+};
+
+template <typename DT = double>
+class Matern3 : public MatrixAccessor<DT> {
+public:
+  double alpha;
+  double s = std::sqrt(3);
+  Matern3 (double a) : alpha(a) {}
+  DT operator()(double d) const override {
+    return (1 + s * alpha * d) * std::exp(-s * alpha * d);
+  }
+};
+
+template <typename DT>
+class Matern3<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
+public:
+  double alpha;
+  double s = std::sqrt(3);
+  Matern3 (double a) : alpha(a) {}
+  std::complex<DT> operator()(double d) const override {
+    return std::complex<DT>((1 + s * alpha * d) * std::exp(-s * alpha * d), 0.);
+  }
+};
+
+template <typename DT = double>
+class Matern : public MatrixAccessor<DT> {
+public:
+  double alpha, s;
+  double s_pow, s_sqrt;
+  Matern (double s, double a) : alpha(a), s(s) {
+    s_pow = std::pow(2, 1-s);
+    s_sqrt = std::sqrt(2 * s);
+  }
+  DT operator()(double d) const override {
+    if (d)
+      return (s_pow / std::tgamma(s)) * std::pow(s_sqrt * d / alpha, s) * std::cyl_bessel_k(s, s_sqrt * d / alpha);
+    return 1;
+  }
+};
+
+template <typename DT>
+class Matern<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
+public:
+  double alpha, s;
+  double s_pow, s_sqrt;
+  Matern (double s, double a) : alpha(a), s(s) {
+    s_pow = std::pow(2, 1-s);
+    s_sqrt = std::sqrt(2 * s);
+  }
+  std::complex<DT> operator()(double d) const override {
+    if (d)
+      return std::complex<DT>((s_pow / std::tgamma(s)) * std::pow(s_sqrt * d / alpha, s) * std::cyl_bessel_k(s, s_sqrt * d / alpha), 0.);
+    return std::complex<DT>(1, 0);
   }
 };
 

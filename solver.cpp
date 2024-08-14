@@ -5,21 +5,34 @@
 #include <cmath>
 #include <iostream>
 
-// explicit template instantiation
+/* explicit template instantiation */
+// complex double
 template class H2MatrixSolver<std::complex<double>>;
-template class H2MatrixSolver<std::complex<float>>;
-template class H2MatrixSolver<double>;
-template class H2MatrixSolver<float>;
 template double computeRelErr<double>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
-template double computeRelErr<double>(const long long, const double X[], const double ref[], MPI_Comm);
-
-template H2MatrixSolver<float>::H2MatrixSolver(const H2MatrixSolver<double>&);
-template double computeRelErr<float>(const long long, const float X[], const float ref[], MPI_Comm);
-template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
+// complex float
+template class H2MatrixSolver<std::complex<float>>;
 template double computeRelErr<float>(const long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
+// double
+template class H2MatrixSolver<double>;
+template double computeRelErr<double>(const long long, const double X[], const double ref[], MPI_Comm);
+// float
+template class H2MatrixSolver<float>;
+template double computeRelErr<float>(const long long, const float X[], const float ref[], MPI_Comm);
+// half
+template class H2MatrixSolver<Eigen::half>;
+template double computeRelErr<Eigen::half>(const long long, const Eigen::half X[], const Eigen::half ref[], MPI_Comm);
 
-// for converting the LU factors back (GMRESIR)
+/* supported type conversions */
+// (complex) double to float
+template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
+template H2MatrixSolver<float>::H2MatrixSolver(const H2MatrixSolver<double>&);
+// (complex) float to double
 template H2MatrixSolver<std::complex<double>>::H2MatrixSolver(const H2MatrixSolver<std::complex<float>>&);
+template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<float>&);
+// double to half
+template H2MatrixSolver<Eigen::half>::H2MatrixSolver(const H2MatrixSolver<double>&);
+// half to double
+template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<Eigen::half>&);
 
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
@@ -58,9 +71,10 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
   // this is an ugly fix to pack the max_rank into epsilon
   epsilon = fix_rank ? (double)max_rank : epsilon;
   // Create an H2 matrix for each level
+  // note that fix_rank is now packed into epsilon (if specified) and we pass factorization basis for use_near bodies
   A[levels] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis);
   for (long long l = levels - 1; l >= 0; l--){
-    A[l] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], fix_rank);
+    A[l] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis);
   }
   // the bodies local to each process
   // TODO confirm if this only references the S or the bodies array
@@ -188,15 +202,11 @@ void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
     A[l].resetX();
   // store X_in in X of the leaf levels
   X_leaf = X_in;
-
   // forward substitution for all levels
-  std::cout<<"Forward"<<std::endl;
   for (long long l = levels; l >= 0; l--) {
-    std::cout<<"Level "<<l<<std::endl;
     A[l].forwardSubstitute(comm[l]);
   }
   // backward substitution for all levels
-  std::cout<<"Backward"<<std::endl;
   for (long long l = 0; l <= levels; l++)
     A[l].backwardSubstitute(comm[l]);
   // get the result from the leaf level and stor in X_in
@@ -277,6 +287,11 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   comm[levels].level_sum(&normr, 1);
   double beta = std::sqrt(std::real(normr));
   resid[outer_iters] = beta / normb;
+}
+
+template <>
+void H2MatrixSolver<Eigen::half>::solveGMRES(double, H2MatrixSolver&, Eigen::half[], const Eigen::half[], long long, long long) {
+  std::cerr<<"Gmres solver does not support half precision"<<std::endl;
 }
 
 template <typename DT>
@@ -379,6 +394,13 @@ long long H2MatrixSolver<DT>::solveMyGMRES(double tol, H2MatrixSolver& M, DT x[]
   }
   return outer_iters * inner_iters;
 }
+
+template <>
+long long H2MatrixSolver<Eigen::half>::solveMyGMRES(double, H2MatrixSolver&, Eigen::half[], const Eigen::half[], long long, long long) {
+  std::cerr<<"Gmres solver does not support half precision"<<std::endl;
+  return 0;
+}
+
 
 template <typename DT>
 void H2MatrixSolver<DT>::free_all_comms() {

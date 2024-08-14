@@ -11,6 +11,23 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+void mesh_unit_sphere(double* bodies, int64_t nbodies) {
+  const double phi = M_PI * (3. - std::sqrt(5.));  // golden angle in radians
+  for (int64_t i = 0; i < nbodies; i++) {
+    const double y = 1. - ((double)i / ((double)nbodies - 1)) * 2.;  // y goes from 1 to -1
+
+    // Note: setting constant radius = 1 will produce a cylindrical shape
+    const double radius = std::sqrt(1. - y * y);  // radius at y
+    const double theta = (double)i * phi;
+
+    const double x = radius * std::cos(theta);
+    const double z = radius * std::sin(theta);
+    bodies[i * 3] = x * std::sqrt(nbodies);
+    bodies[i * 3 + 1] = y * std::sqrt(nbodies);
+    bodies[i * 3 + 2] = z * std::sqrt(nbodies);
+  }
+}
+
 void uniform_unit_cube(double* bodies, long long nbodies, double diameter, long long dim) {
   long long side = std::ceil(std::pow(nbodies, 1. / dim));
   long long lens[3] = { dim > 0 ? side : 1, dim > 1 ? side : 1, dim > 2 ? side : 1 };
