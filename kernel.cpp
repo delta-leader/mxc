@@ -12,28 +12,28 @@
 // TODO move the matvec into the vector class?
 /* explicit template instantiation */
 // complex double
-template void gen_matrix<std::complex<double>>(const MatrixAccessor<std::complex<double>>&, const long long, const long long, const double* const, const double* const, std::complex<double>[]);
+template void gen_matrix<std::complex<double>>(const MatrixAccessor<std::complex<double>>&, const long long, const long long, const double* const, const double* const, std::complex<double>[], double);
 template long long adaptive_cross_approximation<std::complex<double>>(const MatrixAccessor<std::complex<double>>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
 template void mat_vec_reference<std::complex<double>> (const MatrixAccessor<std::complex<double>>&, const long long, const long long, std::complex<double> B[], const std::complex<double> X[], const double[], const double[]);
 // complex float
-template void gen_matrix<std::complex<float>>(const MatrixAccessor<std::complex<float>>&, const long long, const long long, const double* const, const double* const, std::complex<float>[]);
+template void gen_matrix<std::complex<float>>(const MatrixAccessor<std::complex<float>>&, const long long, const long long, const double* const, const double* const, std::complex<float>[], double);
 template long long adaptive_cross_approximation<std::complex<float>>(const MatrixAccessor<std::complex<float>>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
 template void mat_vec_reference<std::complex<float>> (const MatrixAccessor<std::complex<float>>&, const long long, const long long, std::complex<float> B[], const std::complex<float> X[], const double[], const double[]);
 // double
-template void gen_matrix<double>(const MatrixAccessor<double>&, const long long, const long long, const double* const, const double* const, double[]);
+template void gen_matrix<double>(const MatrixAccessor<double>&, const long long, const long long, const double* const, const double* const, double[], double);
 template long long adaptive_cross_approximation<double>(const MatrixAccessor<double>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
 template void mat_vec_reference<double> (const MatrixAccessor<double>&, const long long, const long long, double B[], const double X[], const double[], const double[]);
 // float
-template void gen_matrix<float>(const MatrixAccessor<float>&, const long long, const long long, const double* const, const double* const, float[]);
+template void gen_matrix<float>(const MatrixAccessor<float>&, const long long, const long long, const double* const, const double* const, float[], double);
 template long long adaptive_cross_approximation<float>(const MatrixAccessor<float>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
 template void mat_vec_reference<float> (const MatrixAccessor<float>&, const long long, const long long, float B[], const float X[], const double[], const double[]);
 // half
-template void gen_matrix<Eigen::half>(const MatrixAccessor<Eigen::half>&, const long long, const long long, const double* const, const double* const, Eigen::half[]);
+template void gen_matrix<Eigen::half>(const MatrixAccessor<Eigen::half>&, const long long, const long long, const double* const, const double* const, Eigen::half[], double);
 template long long adaptive_cross_approximation<Eigen::half>(const MatrixAccessor<Eigen::half>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
 template void mat_vec_reference<Eigen::half> (const MatrixAccessor<Eigen::half>&, const long long, const long long, Eigen::half B[], const Eigen::half X[], const double[], const double[]);
 
 template <typename DT>
-void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long long N, const double* const bi, const double* const bj, DT Aij[]) {
+void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long long N, const double* const bi, const double* const bj, DT Aij[], double scale) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
   const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * M]);
   const std::array<double, 3>* bj3 = reinterpret_cast<const std::array<double, 3>*>(bj);
@@ -48,7 +48,10 @@ void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long 
       // square root of the sum of squares (i.e. distance)
       double d = std::hypot(i[0] - j[0], i[1] - j[1], i[2] - j[2]);
       // TODO confirm that this is row major
-      Aij[iy + ix * M] = kernel(d);
+      if (scale != 1) {
+        Aij[iy + ix * M] = kernel(d, scale);
+      } else
+        Aij[iy + ix * M] = kernel(d);
     });
   });
 }

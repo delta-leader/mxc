@@ -110,7 +110,7 @@ Returns:
   rank: The rank corresponding to epsilon from the column pivoted QR
 */
 template <typename DT>
-long long compute_basis(const MatrixAccessor<DT>& kernel, const double epsilon, const long long nrows, const long long ncols, double row_bodies[], const double col_bodies[], DT Q[], DT R[]) {
+long long compute_basis(const MatrixAccessor<DT>& kernel, const double epsilon, const long long nrows, const long long ncols, double row_bodies[], const double col_bodies[], DT Q[], DT R[], double scale) {
   typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
   const long long MIN_D = std::min(nrows, ncols);
   long long rank = 0;
@@ -126,13 +126,13 @@ long long compute_basis(const MatrixAccessor<DT>& kernel, const double epsilon, 
       // Note that in this case, the following rank revealing QR
       // wouldn't actually do anything if it were not for the column pivoting
       Matrix_dt XF(ncols, nrows);
-      gen_matrix(kernel, ncols, nrows, col_bodies, row_bodies, XF.data());
+      gen_matrix(kernel, ncols, nrows, col_bodies, row_bodies, XF.data(), scale);
       Eigen::HouseholderQR<Matrix_dt> qr(XF);
       RX = qr.matrixQR().topRows(MIN_D).template triangularView<Eigen::Upper>();
     }
     else {
       // M is the largest dimension, so RX is N X M
-      gen_matrix(kernel, ncols, nrows, col_bodies, row_bodies, RX.data());
+      gen_matrix(kernel, ncols, nrows, col_bodies, row_bodies, RX.data(), scale);
     }
     
     // Rank revealing QR of the far field
@@ -208,7 +208,7 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
 }
 
 template <typename DT>
-H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies) {
+H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies, double scale) {
   // number of cells on the same level
   long long xlen = comm.lenNeighbors();
   // index of the first cell for this process on this level (always 0 for a single process)
@@ -405,7 +405,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
                 MatrixMap_dt A_ref(A_ptr, ni, nj, Stride_t(nrows, 1));
                 // generate the rank1 x rank2 matrix corresponding to i x y
                 Matrix_dt Aij(ni, nj);
-                gen_matrix(kernel, ni, nj, h2_lower.S[ci], h2_lower.S[childj], Aij.data());
+                gen_matrix(kernel, ni, nj, h2_lower.S[ci], h2_lower.S[childj], Aij.data(), scale);
                 // compute the skeleton matrix R A(rows, cols) R^T
                 A_ref.noalias() = Ri.template triangularView<Eigen::Upper>() * Aij * Rj.transpose().template triangularView<Eigen::Lower>();
               }
@@ -430,7 +430,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
           //.TODO maybe this accounts for overall non-square dimensions
           const long long ncols = Dims[ACols[ij]];
           const long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-          gen_matrix(kernel, nrows, ncols, &bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[cj].Body[0]], A[ij]);
+          gen_matrix(kernel, nrows, ncols, &bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[cj].Body[0]], A[ij], scale);
         }
       }
     } // loop over nodes finished
@@ -479,7 +479,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
       const long long fsize = cbodies[i].size() / 3;
       const double* fbodies = cbodies[i].data();
       // compute the far field basis for each cell
-      const long long rank = compute_basis(kernel, epsilon, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, Q[i + ibegin], R[i + ibegin]);
+      const long long rank = compute_basis(kernel, epsilon, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, Q[i + ibegin], R[i + ibegin], scale);
       // set the low-rank dimensions
       DimsLr[i + ibegin] = rank;
     }

@@ -36,8 +36,8 @@ int main(int argc, char* argv[]) {
   // by setting the corresponding parameters
   // In this case the template argument deduction fails for the matvec (double)
   // I might need to specifiy them explicitly
-  Laplace3D<DT> eval(0.05);
-  //Yukawa3D<DT> eval(0.1, 1.);
+  //Laplace3D<DT> eval(0.05);
+  Yukawa3D<DT> eval(0.1, 1.);
   //Gaussian<DT> eval(0.5);
   //Helmholtz3D<DT> eval(1., 1.);
   
@@ -90,6 +90,7 @@ int main(int argc, char* argv[]) {
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
 
   Vector_dt<DT_low> X1_low(X1);
+  Vector_dt<DT_low> X1_low2(X1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
@@ -133,7 +134,7 @@ int main(int argc, char* argv[]) {
   // new H2 matrix using a fixed rank
   H2MatrixSolver<DT> matM;
   if (mode.compare("h2") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true);
+    matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true, true);
   else if (mode.compare("hss") == 0)
     matM = H2MatrixSolver(eval, epi, rank, cell, 0., &body[0], levels, true);
 
@@ -183,7 +184,7 @@ int main(int argc, char* argv[]) {
     std::cout << "H^2-Matrix Substitution Err (low): " << serr_low << std::endl;
   }
   
-  MPI_Barrier(MPI_COMM_WORLD);
+  /*MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
   matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
 
@@ -195,8 +196,8 @@ int main(int argc, char* argv[]) {
     std::cout << "GMRES Residual: " << matA.resid[matA.iters] << ", Iters: " << matA.iters << std::endl;
     std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
   }
-
-  MPI_Barrier(MPI_COMM_WORLD);
+  */
+  /*MPI_Barrier(MPI_COMM_WORLD);
   double ir_time = MPI_Wtime(), ir_comm_time;
   long long iters = matA.solveIR(epi, matM, &X1[0], &X2[0], 50);
 
@@ -221,7 +222,42 @@ int main(int argc, char* argv[]) {
     std::cout << "IR Residual(low): " << matA.resid[iters_low] << ", Iters: " << iters_low << std::endl;
     std::cout << "IR Time(low): " << ir_time_low << ", Comm: " << ir_comm_time_low << std::endl;
   }
+  */
+  double scale = 0.8 * 1e4 / 15;
+  std::cout<<"Scale "<<scale<<std::endl;
+  H2MatrixSolver<DT_low> matM2_low;
+  if (mode.compare("h2") == 0)
+    matM2_low = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true, true, MPI_COMM_WORLD, scale);
+  else if (mode.compare("hss") == 0)
+    matM2_low = H2MatrixSolver(eval, epi, rank, cell, 0., &body[0], levels, true, true, MPI_COMM_WORLD, scale);
+
+  matM2_low.matVecMul(&X1_low2[0]);
+  Vector_dt<DT> test(X1_low2);
+  test.scale(1/scale);
+  double terr_low = computeRelErr(lenX, &X1_low2[0], &X2_low[0]);
+  double terr = computeRelErr(lenX, &test[0], &X2[0]);
+
   
+  std::copy(X2_low.begin(), X2_low.end(), X1_low.begin());
+  std::copy(X2.begin(), X2.end(), X1.begin());
+  //X1.scale(scale);
+  Vector_dt<DT_low> b(X1);
+
+  matM2_low.factorizeM();
+  matM2_low.solvePrecondition(&b[0]);
+  double serr_low2 = computeRelErr(lenX, &b[0], &Xbody_low[matA.local_bodies.first]);
+  Vector_dt<DT> test2(b);
+  test2.scale(scale);
+  double serr2 = computeRelErr(lenX, &test2[0], &Xbody[matA.local_bodies.first]);
+  long long iters_low2 = matA.solveIR(epi, matM2_low, &X1[0], &X2[0], 50, scale);
+  if (mpi_rank == 0) {
+    std::cout << "Const Err (low scaled): " << terr_low << std::endl;
+    std::cout << "Const Err (scaled): " << terr << std::endl;
+    std::cout << "H^2-Matrix Substitution Err (low scaled): " << serr_low2 << std::endl;
+    std::cout << "H^2-Matrix Substitution Err (scaled): " << serr2 << std::endl;
+    std::cout << "IR Residual(low construct): " << matA.resid[iters_low2] << ", Iters: " << iters_low2 << std::endl;
+  }
+  /*
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_ir_time = MPI_Wtime(), gmres_ir_comm_time;
   long long gmres_iters = matA.solveGMRESIR(epi, matM, &X1[0], &X2[0], 10, 50, 1);
@@ -249,7 +285,7 @@ int main(int argc, char* argv[]) {
     std::cout << "GMRES-IR Residual: " << matA.resid[gmres_iters_low] << ", Iters: " << gmres_iters_low << std::endl;
     std::cout << "GMRES-IR Time: " << gmres_ir_time_low << ", Comm: " << gmres_ir_comm_time_low << std::endl;
   }
-
+  */
   matA.free_all_comms();
   matA_low.free_all_comms();
   matM.free_all_comms();

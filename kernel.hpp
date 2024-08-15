@@ -18,7 +18,10 @@ class Vector_dt {
     Vector_dt(const Vector_dt<OT>& vector) {
       data = std::vector<DT>(vector.data.size());
       std::transform(vector.data.data(), vector.data.data() + data.size(), data.begin(), [](OT value) -> DT {return DT(value);});
-    } 
+    }
+    void scale (DT scale) {
+      std::transform(data.data(), data.data() + data.size(), data.begin(), [&scale](DT value) -> DT {return value * scale;});
+    }
     auto operator& () {
       return &data;
     }
@@ -90,6 +93,7 @@ template <typename DT = std::complex<double>>
 class MatrixAccessor {
 public:
   virtual DT operator()(double d) const = 0;
+  virtual DT operator()(double d, double scale) const = 0;
 };
 
 template <typename DT = double>
@@ -102,6 +106,12 @@ public:
       return singularity;
     else
       return 1. / d;
+  }
+  DT operator()(double d, double scale) const override {
+    if (d == 0.)
+      return singularity * scale;
+    else
+      return (1. / d) * scale;
   }
 };
 
@@ -116,6 +126,12 @@ public:
     else
       return std::complex<DT>(1. / d, 0.);
   }
+  std::complex<DT> operator()(double d, double scale) const override {
+    if (d == 0.)
+      return std::complex<DT>(singularity, 0.) * scale;
+    else
+      return std::complex<DT>(1. / d, 0.) * scale;
+  }
 };
 
 template <typename DT = double>
@@ -128,6 +144,12 @@ public:
       return singularity;
     else
       return std::exp(-alpha * d) / d;
+  }
+  DT operator()(double d, double scale) const override {
+    if (d == 0.)
+      return singularity * scale;
+    else
+      return (std::exp(-alpha * d) / d) * scale;
   }
 };
 
@@ -142,6 +164,12 @@ public:
     else
       return std::complex<DT>(std::exp(-alpha * d) / d, 0.);
   }
+  std::complex<DT> operator()(double d, double scale) const override {
+    if (d == 0.)
+      return std::complex<DT>(singularity, 0.) * scale;
+    else
+      return std::complex<DT>(std::exp(-alpha * d) / d, 0.) * scale;
+  }
 };
 
 template <typename DT = double>
@@ -153,6 +181,9 @@ public:
   DT operator()(double d) const override {
     return std::exp(- alpha * d * d);
   }
+  DT operator()(double d, double scale) const override {
+    return std::exp(- alpha * d * d) * scale;
+  }
 };
 
 template <typename DT>
@@ -162,6 +193,9 @@ public:
   Gaussian (double a) : alpha(1. / (a * a)) {}
   std::complex<DT> operator()(double d) const override {
     return std::complex<DT>(std::exp(- alpha * d * d), 0.);
+  }
+  std::complex<DT> operator()(double d, double scale) const override {
+    return std::complex<DT>(std::exp(- alpha * d * d), 0.) * scale;
   }
 };
 
@@ -179,6 +213,12 @@ public:
     else
       return std::real(std::exp(std::complex(0., -k * d)) / d);
   }
+  DT operator()(double d, double scale) const override {
+    if (d == 0.)
+      return singularity * scale;
+    else
+      return std::real(std::exp(std::complex(0., -k * d)) / d) * scale;
+  }
 };
 
 template <typename DT>
@@ -193,6 +233,12 @@ public:
     else
       return std::exp(std::complex<DT>(0., -k * d)) / d;
   }
+  std::complex<DT> operator()(double d, double scale) const override {
+    if (d == 0.)
+      return std::complex<DT>(singularity, 0.) * scale;
+    else
+      return std::exp(std::complex<DT>(0., -k * d)) / d * scale;
+  }
 };
 
 template <typename DT = double>
@@ -203,6 +249,9 @@ public:
   DT operator()(double d) const override {
     return 1 / std::sqrt(1 + alpha * d * d);
   }
+  DT operator()(double d, double scale) const override {
+    return 1 / std::sqrt(1 + alpha * d * d) * scale;
+  }
 };
 
 template <typename DT>
@@ -212,6 +261,9 @@ public:
   IMQ (double a) : alpha(a) {}
   std::complex<DT> operator()(double d) const override {
     return std::complex<DT>(1 / std::sqrt(1 + alpha * d * d), 0.);
+  }
+  std::complex<DT> operator()(double d, double scale) const override {
+    return std::complex<DT>(1 / std::sqrt(1 + alpha * d * d), 0.) * scale;
   }
 };
 
@@ -224,6 +276,9 @@ public:
   DT operator()(double d) const override {
     return (1 + s * alpha * d) * std::exp(-s * alpha * d);
   }
+  DT operator()(double d, double scale) const override {
+    return (1 + s * alpha * d) * std::exp(-s * alpha * d) * scale;
+  }
 };
 
 template <typename DT>
@@ -234,6 +289,9 @@ public:
   Matern3 (double a) : alpha(a) {}
   std::complex<DT> operator()(double d) const override {
     return std::complex<DT>((1 + s * alpha * d) * std::exp(-s * alpha * d), 0.);
+  }
+  std::complex<DT> operator()(double d, double scale) const override {
+    return std::complex<DT>((1 + s * alpha * d) * std::exp(-s * alpha * d), 0.) * scale;
   }
 };
 
@@ -251,6 +309,11 @@ public:
       return (s_pow / std::tgamma(s)) * std::pow(s_sqrt * d / alpha, s) * std::cyl_bessel_k(s, s_sqrt * d / alpha);
     return 1;
   }
+  DT operator()(double d, double scale) const override {
+    if (d)
+      return (s_pow / std::tgamma(s)) * std::pow(s_sqrt * d / alpha, s) * std::cyl_bessel_k(s, s_sqrt * d / alpha) * scale;
+    return 1 * scale;
+  }
 };
 
 template <typename DT>
@@ -267,6 +330,11 @@ public:
       return std::complex<DT>((s_pow / std::tgamma(s)) * std::pow(s_sqrt * d / alpha, s) * std::cyl_bessel_k(s, s_sqrt * d / alpha), 0.);
     return std::complex<DT>(1, 0);
   }
+  std::complex<DT> operator()(double d, double scale) const override {
+    if (d)
+      return std::complex<DT>((s_pow / std::tgamma(s)) * std::pow(s_sqrt * d / alpha, s) * std::cyl_bessel_k(s, s_sqrt * d / alpha), 0.) * scale;
+    return std::complex<DT>(1, 0) * scale;
+  }
 };
 
 /*
@@ -281,7 +349,7 @@ Out:
   Aij: generated matrix
 */
 template <typename DT>
-void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long long N, const double* const bi, const double* const bj, DT Aij[]);
+void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long long N, const double* const bi, const double* const bj, DT Aij[], double scale = 1);
 
 /*
 ACA
