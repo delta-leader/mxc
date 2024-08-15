@@ -19,6 +19,9 @@ template class H2Matrix<std::complex<double>>;
 // complex float
 template class WellSeparatedApproximation<std::complex<float>>;
 template class H2Matrix<std::complex<float>>;
+// complex half
+//template class WellSeparatedApproximation<std::complex<Eigen::half>>;
+//template class H2Matrix<std::complex<Eigen::half>>;
 // double
 template class WellSeparatedApproximation<double>;
 template class H2Matrix<double>;

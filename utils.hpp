@@ -22,3 +22,7 @@ inline float get_real(std::complex<float> value) {
 inline Eigen::half get_real(Eigen::half value) {
   return value;
 }
+
+inline Eigen::half get_real(std::complex<Eigen::half> value) {
+  return std::real(value);
+}

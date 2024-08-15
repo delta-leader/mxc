@@ -5,7 +5,9 @@
 #include <numeric>
 #include <vector>
 #include <array>
+#include <iostream>
 #include <Eigen/Dense>
+#include <utils.hpp>
 
 // TODO move the matvec into the vector class?
 /* explicit template instantiation */
@@ -148,6 +150,9 @@ void mat_vec_reference(const MatrixAccessor<DT>& kernel, const long long nrows, 
   typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
   Eigen::Map<const Vector_dt> X_ref(X, ncols);
   Eigen::Map<Vector_dt> B_ref(B, nrows);
+  double min, max;
+  bool min_init, max_init;
+  min_init = max_init = true;
   
   for (long long i = 0; i < nrows; i += block_size) {
     const long long brows = std::min(nrows - i, block_size);
@@ -158,8 +163,24 @@ void mat_vec_reference(const MatrixAccessor<DT>& kernel, const long long nrows, 
       const double* const bj_bodies = &col_bodies[j * 3];
       const long long bcols = std::min(ncols - j, block_size);
       gen_matrix(kernel, brows, bcols, bi_bodies, bj_bodies, A_block.data());
+      double block_max = A_block.cwiseAbs().maxCoeff();
+      if (max_init) {
+        max = block_max;
+        max_init = false;
+      }
+      if (block_max > max)
+        max = block_max;
+      double block_min = A_block.cwiseAbs().minCoeff();
+      if (min_init) {
+        min = block_min;
+        min_init = false;
+      }
+      if (block_min < min)
+        min = block_min;
       B_ref.segment(i, brows) += A_block.leftCols(bcols) * X_ref.segment(j, bcols);
     }
   }
+  std::cout<<"Max: "<<max<<std::endl;
+  std::cout<<"Min: "<<min<<std::endl;
 }
 

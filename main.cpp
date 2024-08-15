@@ -36,9 +36,9 @@ int main(int argc, char* argv[]) {
   // by setting the corresponding parameters
   // In this case the template argument deduction fails for the matvec (double)
   // I might need to specifiy them explicitly
-  Laplace3D<DT> eval(0.01);
-  //Yukawa3D<DT> eval(1, 1.);
-  //Gaussian<DT> eval(8);
+  Laplace3D<DT> eval(0.05);
+  //Yukawa3D<DT> eval(0.1, 1.);
+  //Gaussian<DT> eval(0.5);
   //Helmholtz3D<DT> eval(1., 1.);
   
   // body contains the points
@@ -119,7 +119,7 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "Construct Err (float): " << cerr_low << std::endl;
+    std::cout << "Construct Err (low): " << cerr_low << std::endl;
     std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
