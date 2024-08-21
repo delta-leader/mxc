@@ -36,9 +36,15 @@ int main(int argc, char* argv[]) {
   // by setting the corresponding parameters
   // In this case the template argument deduction fails for the matvec (double)
   // I might need to specifiy them explicitly
-  //Laplace3D<DT> eval(0.05);
-  Yukawa3D<DT> eval(0.1, 1.);
-  //Gaussian<DT> eval(0.5);
+  double alpha = 0.05;
+  std::vector<double> params = {0.1, 0.5, 1, 2, 5, 10, 50, 100};
+  for (size_t i=0; i < params.size(); ++i) {
+    for (size_t j=0; j < params.size(); ++j) {
+  //Laplace3D<DT> eval(params[i]);
+  Yukawa3D<DT> eval(params[i], params[j]);
+  //Gaussian<DT> eval(params[i]);
+  //IMQ<DT> eval(params[i]);
+  //Matern3<DT> eval(params[i]);
   //Helmholtz3D<DT> eval(1., 1.);
   
   // body contains the points
@@ -51,8 +57,8 @@ int main(int argc, char* argv[]) {
   std::vector<Cell> cell(ncells);
 
   // create the points (i.e. bodies)
-  //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
-  uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
+  mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
+  //uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   //build the tree (i.e. set the values in the cell array)
   buildBinaryTree(levels, Nbody, &body[0], &cell[0]);
@@ -68,6 +74,13 @@ int main(int argc, char* argv[]) {
   cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
   ncells = Nleaf + 1;
   levels = 1;*/
+
+  // single process only
+  std::vector<DT> A(Nbody * Nbody);
+  gen_matrix(eval, Nbody, Nbody, &body[0], &body[0], A.data());
+  Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Amap(&A[0], Nbody, Nbody);
+  Eigen::JacobiSVD<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> svd(Amap);
+  double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
   
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
@@ -110,185 +123,128 @@ int main(int argc, char* argv[]) {
   // calculate relative error between H-matvec and dense matvec
   double cerr = computeRelErr(lenX, &X1[0], &X2[0]);
 
-  H2MatrixSolver<DT_low> matA_low(matA);
-  Vector_dt<DT_low> Xbody_low(Xbody);
-  matA_low.matVecMul(&X1_low[0]);
-  Vector_dt<DT_low> X2_low(X2);
-  double cerr_low = computeRelErr(lenX, &X1_low[0], &X2_low[0]);
-
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
-    std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "Construct Err (low): " << cerr_low << std::endl;
-    std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
-    std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
-    std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
+    std::cout << params[i] << std::endl;
+    std::cout << params[j] << std::endl;
+    std::cout << cond << std::endl;
+    std::cout << cerr << std::endl;
+    //std::cout << "Construct Err (low): " << cerr_low << std::endl;
+    //std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
+    //std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
+    //std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
   }
 
-  // copy X2 into X1
-  std::copy(X2.begin(), X2.end(), X1.begin());
-  std::copy(X2_low.begin(), X2_low.end(), X1_low.begin());
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
+  
   // new H2 matrix using a fixed rank
-  H2MatrixSolver<DT> matM;
-  if (mode.compare("h2") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true, true);
-  else if (mode.compare("hss") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, cell, 0., &body[0], levels, true);
+  H2MatrixSolver<DT> h2(eval, epi, rank, cell, theta, &body[0], levels, true, true);
+  H2MatrixSolver<DT> hss(eval, epi, rank, cell, 0., &body[0], levels, true);
 
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
 
-  H2MatrixSolver<DT_low> matM_low(matM);
-  MPI_Barrier(MPI_COMM_WORLD);
-  double h2_factor_time_low = MPI_Wtime(), h2_factor_comm_time_low;
-  matM_low.factorizeM();
-  MPI_Barrier(MPI_COMM_WORLD);
-  h2_factor_time_low = MPI_Wtime() - h2_factor_time_low;
-  h2_factor_comm_time_low = ColCommMPI::get_comm_time();
-  matM_low.solvePrecondition(&X1_low[0]);
+  H2MatrixSolver<DT_low> hss_low(hss);
+  H2MatrixSolver<DT_low> h2_low(h2);
+
+  hss_low.matVecMul(&X1_low[0]);
+  Vector_dt<DT> result(X1_low);
+  double hss_cerr = computeRelErr(lenX, &result[0], &X2[0]);
   
-  MPI_Barrier(MPI_COMM_WORLD);
-  double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
+  h2_low.matVecMul(&X1_low2[0]);
+  result = Vector_dt<DT>(X1_low2);
+  double h2_cerr = computeRelErr(lenX, &result[0], &X2[0]);
 
-  // factorization
-  matM.factorizeM();
+  // copy X2 into X1
+  Vector_dt<DT_low> X2_low(X2);
+  std::copy(X2_low.begin(), X2_low.end(), X1_low.begin());
+  std::copy(X2_low.begin(), X2_low.end(), X1_low2.begin());
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  h2_factor_time = MPI_Wtime() - h2_factor_time;
-  h2_factor_comm_time = ColCommMPI::get_comm_time();
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
-
-  // solve the system using the factorized matrix
-  matM.solvePrecondition(&X1[0]);
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  h2_sub_time = MPI_Wtime() - h2_sub_time;
-  h2_sub_comm_time = ColCommMPI::get_comm_time();
-  double serr = computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
-  double serr_low = computeRelErr(lenX, &X1_low[0], &Xbody_low[matA.local_bodies.first]);
-  X1.reset();
-  //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
-
+  h2_low.factorizeM();
+  hss_low.factorizeM();
+  hss_low.solvePrecondition(&X1_low[0]);
+  result = Vector_dt<DT>(X1_low);
+  double hss_serr = computeRelErr(lenX, &result[0], &Xbody[matA.local_bodies.first]);
+  h2_low.solvePrecondition(&X1_low2[0]);
+  result = Vector_dt<DT>(X1_low2);
+  double h2_serr = computeRelErr(lenX, &result[0], &Xbody[matA.local_bodies.first]);
+  
   if (mpi_rank == 0) {
-    std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
-    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
-    std::cout << "H^2-Matrix Factorization Time (low): " << h2_factor_time_low << ", " << h2_factor_comm_time_low << std::endl;
-    std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
-    std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
-    std::cout << "H^2-Matrix Substitution Err (low): " << serr_low << std::endl;
+    std::cout << hss_cerr << std::endl;
+    std::cout << hss_serr << std::endl;
+    std::cout << h2_cerr << std::endl;
+    std::cout << h2_serr << std::endl;
   }
   
-  /*MPI_Barrier(MPI_COMM_WORLD);
-  double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
-
   MPI_Barrier(MPI_COMM_WORLD);
-  gmres_time = MPI_Wtime() - gmres_time;
-  gmres_comm_time = ColCommMPI::get_comm_time();
-
-  if (mpi_rank == 0) {
-    std::cout << "GMRES Residual: " << matA.resid[matA.iters] << ", Iters: " << matA.iters << std::endl;
-    std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
-  }
-  */
-  /*MPI_Barrier(MPI_COMM_WORLD);
   double ir_time = MPI_Wtime(), ir_comm_time;
-  long long iters = matA.solveIR(epi, matM, &X1[0], &X2[0], 50);
+  long long iters = matA.solveIR(epi, hss_low, &X1[0], &X2[0], 100);
 
   MPI_Barrier(MPI_COMM_WORLD);
   ir_time = MPI_Wtime() - ir_time;
   ir_comm_time = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
-    std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
-    std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
+    std::cout << matA.resid[iters] << std::endl;
+    std::cout << iters << std::endl;
+    //std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
   double ir_time_low = MPI_Wtime(), ir_comm_time_low;
-  long long iters_low = matA.solveIR(epi, matM_low, &X1[0], &X2[0], 50);
+  iters = matA.solveIR(epi, h2_low, &X1[0], &X2[0], 100);
 
   MPI_Barrier(MPI_COMM_WORLD);
   ir_time_low = MPI_Wtime() - ir_time_low;
   ir_comm_time_low = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
-    std::cout << "IR Residual(low): " << matA.resid[iters_low] << ", Iters: " << iters_low << std::endl;
-    std::cout << "IR Time(low): " << ir_time_low << ", Comm: " << ir_comm_time_low << std::endl;
+    std::cout << matA.resid[iters] << std::endl;
+    std::cout << iters << std::endl;
+    //std::cout << "IR Time(low): " << ir_time_low << ", Comm: " << ir_comm_time_low << std::endl;
   }
-  */
-  double scale = 0.8 * 1e4 / 15;
-  std::cout<<"Scale "<<scale<<std::endl;
-  H2MatrixSolver<DT_low> matM2_low;
-  if (mode.compare("h2") == 0)
-    matM2_low = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true, true, MPI_COMM_WORLD, scale);
-  else if (mode.compare("hss") == 0)
-    matM2_low = H2MatrixSolver(eval, epi, rank, cell, 0., &body[0], levels, true, true, MPI_COMM_WORLD, scale);
 
-  matM2_low.matVecMul(&X1_low2[0]);
-  Vector_dt<DT> test(X1_low2);
-  test.scale(1/scale);
-  double terr_low = computeRelErr(lenX, &X1_low2[0], &X2_low[0]);
-  double terr = computeRelErr(lenX, &test[0], &X2[0]);
-
-  
-  std::copy(X2_low.begin(), X2_low.end(), X1_low.begin());
-  std::copy(X2.begin(), X2.end(), X1.begin());
-  //X1.scale(scale);
-  Vector_dt<DT_low> b(X1);
-
-  matM2_low.factorizeM();
-  matM2_low.solvePrecondition(&b[0]);
-  double serr_low2 = computeRelErr(lenX, &b[0], &Xbody_low[matA.local_bodies.first]);
-  Vector_dt<DT> test2(b);
-  test2.scale(scale);
-  double serr2 = computeRelErr(lenX, &test2[0], &Xbody[matA.local_bodies.first]);
-  long long iters_low2 = matA.solveIR(epi, matM2_low, &X1[0], &X2[0], 50, scale);
-  if (mpi_rank == 0) {
-    std::cout << "Const Err (low scaled): " << terr_low << std::endl;
-    std::cout << "Const Err (scaled): " << terr << std::endl;
-    std::cout << "H^2-Matrix Substitution Err (low scaled): " << serr_low2 << std::endl;
-    std::cout << "H^2-Matrix Substitution Err (scaled): " << serr2 << std::endl;
-    std::cout << "IR Residual(low construct): " << matA.resid[iters_low2] << ", Iters: " << iters_low2 << std::endl;
-  }
-  /*
+  H2MatrixSolver<DT> hss_fact(hss_low);
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_ir_time = MPI_Wtime(), gmres_ir_comm_time;
-  long long gmres_iters = matA.solveGMRESIR(epi, matM, &X1[0], &X2[0], 10, 50, 1);
+  iters = matA.solveGMRESIR(epi, hss_fact, &X1[0], &X2[0], 5, 50, 1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_ir_time = MPI_Wtime() - gmres_ir_time;
   gmres_ir_comm_time = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
-    std::cout << "GMRES-IR Residual: " << matA.resid[gmres_iters] << ", Iters: " << gmres_iters << std::endl;
-    std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
+    std::cout << matA.resid[iters] << std::endl;
+    std::cout << iters << std::endl;
+    //std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
   }
 
-  H2MatrixSolver<DT> matM_low_high(matM_low);
-
+  H2MatrixSolver<DT> h2_fact(h2_low);
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_ir_time_low = MPI_Wtime(), gmres_ir_comm_time_low;
-  long long gmres_iters_low = matA.solveGMRESIR(epi, matM_low_high, &X1[0], &X2[0], 10, 50, 1);
+  iters = matA.solveGMRESIR(epi, h2_fact, &X1[0], &X2[0], 5, 50, 1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_ir_time_low = MPI_Wtime() - gmres_ir_time_low;
   gmres_ir_comm_time_low = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
-    std::cout << "GMRES-IR Residual: " << matA.resid[gmres_iters_low] << ", Iters: " << gmres_iters_low << std::endl;
-    std::cout << "GMRES-IR Time: " << gmres_ir_time_low << ", Comm: " << gmres_ir_comm_time_low << std::endl;
+    std::cout << matA.resid[iters] << std::endl;
+    std::cout << iters << std::endl << std::endl;
+    //std::cout << "GMRES-IR Time: " << gmres_ir_time_low << ", Comm: " << gmres_ir_comm_time_low << std::endl;
   }
-  */
+  
   matA.free_all_comms();
-  matA_low.free_all_comms();
-  matM.free_all_comms();
+  hss.free_all_comms();
+  hss_low.free_all_comms();
+  hss_fact.free_all_comms();
+  h2.free_all_comms();
+  h2_low.free_all_comms();
+  h2_fact.free_all_comms();
+  }}
   MPI_Finalize();
   return 0;
 }

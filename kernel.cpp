@@ -49,6 +49,9 @@ void gen_matrix(const MatrixAccessor<DT>& kernel, const long long M, const long 
       double d = std::hypot(i[0] - j[0], i[1] - j[1], i[2] - j[2]);
       // TODO confirm that this is row major
       if (scale != 1) {
+        DT test = kernel(d);
+        if (!std::isfinite(std::abs(test)))
+          std::cout<<"Infinite number"<<std::endl;
         Aij[iy + ix * M] = kernel(d, scale);
       } else
         Aij[iy + ix * M] = kernel(d);
@@ -183,7 +186,7 @@ void mat_vec_reference(const MatrixAccessor<DT>& kernel, const long long nrows, 
       B_ref.segment(i, brows) += A_block.leftCols(bcols) * X_ref.segment(j, bcols);
     }
   }
-  std::cout<<"Max: "<<max<<std::endl;
-  std::cout<<"Min: "<<min<<std::endl;
+  //std::cout<<"Max: "<<max<<std::endl;
+  //std::cout<<"Min: "<<min<<std::endl;
 }
 

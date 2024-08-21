@@ -105,6 +105,9 @@ public:
       comm[levels].level_sum(&norm_local, 1);
       norm = std::sqrt(get_real(norm_local));
       resid[iter] = norm / normb;
+      if (iter && resid[iter] > resid[iter-1]) {
+        return iter-1;
+      }
       if (resid[iter]<tol) {
         return iter;
       }
