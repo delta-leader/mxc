@@ -3,6 +3,7 @@
 #include <comm-mpi.hpp>
 #include <kernel.hpp>
 
+#include <mkl.h>
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/LU>
@@ -205,7 +206,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
               std::complex<double>* dp = A[ij] + offset_y + offset_x * M;
               if (0 <= lowN)
                 lowerA.NA[lowN] = dp;
-              if (0 <= lowC) {
+              else if (0 <= lowC) {
                 lowerA.C[lowC] = dp;
                 Matrix_t Rx(lowerA.R[x], nx, nx, Stride_t(lowerA.Dims[x], 1));
                 Matrix_t Cyx(dp, ny, nx, Stride_t(M, 1));
@@ -350,17 +351,27 @@ void H2Matrix::resetX() {
   std::fill(X[0], X[0] + X.size(), std::complex<double>(0., 0.));
   std::fill(Y[0], Y[0] + Y.size(), std::complex<double>(0., 0.));
 }
+#include <factorize.cuh>
+#include <cuda_runtime_api.h>
 
 void H2Matrix::factorize(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
 
-  typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+
+  H2Factorize fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
+  fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
+  fac.compute();
+  fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
+  cudaStreamDestroy(stream);
+
+  /*typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
   std::vector<long long> ipiv_offsets(nodes);
   std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
 
-  comm.level_merge(A[0], A.size());
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
@@ -382,9 +393,8 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     V.bottomRows(Mr) = plu.solve(Ui.rightCols(Mr).adjoint());
 
     if (0 < Ms) {
-      Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
       Aii.bottomLeftCorner(Mr, Ms) = plu.solve(Aii.bottomLeftCorner(Mr, Ms));
-      An.noalias() = Aii.topLeftCorner(Ms, Ms) - Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
+      Aii.topLeftCorner(Ms, Ms) -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
       V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
     }
 
@@ -392,20 +402,36 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
       if (ij != diag) {
         long long j = ACols[ij];
         long long N = Dims[j];
-        long long Ns = DimsLr[j];
 
         Matrix_t Uj(Q[j], N, N);
         Matrix_t Aij(A[ij], M, N);
 
         b.topRows(N) = Uj.adjoint() * Aij.transpose();
         Aij.noalias() = V * b.topRows(N).transpose();
-
-        if (0 < Ms && 0 < Ns) {
-          Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
-          An = Aij.topLeftCorner(Ms, Ns);
-        }
       }
-  }
+  }*/
+}
+
+void H2Matrix::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm) {
+  long long ibegin = lowerComm.oLocal();
+  long long nodes = lowerComm.lenLocal();
+  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+
+  for (long long i = 0; i < nodes; i++)
+    for (long long ij = lowerA.ARows[i]; ij < lowerA.ARows[i + 1]; ij++) {
+      long long j = lowerA.ACols[ij];
+      long long M = lowerA.Dims[i + ibegin];
+      long long N = lowerA.Dims[j];
+      long long Ms = lowerA.DimsLr[i + ibegin];
+      long long Ns = lowerA.DimsLr[j];
+
+      Matrix_t Aij(lowerA.A[ij], M, N);
+      if (0 < Ms && 0 < Ns) {
+        Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(lowerA.NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.UpperStride[i], 1));
+        An = Aij.topLeftCorner(Ms, Ns);
+      }
+    }
+  comm.level_merge(A[0], A.size());
 }
 
 void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {

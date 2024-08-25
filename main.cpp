@@ -2,6 +2,8 @@
 #include <solver.hpp>
 #include <test_funcs.hpp>
 #include <string>
+
+#include <mkl.h>
 #include <Eigen/Dense>
 
 int main(int argc, char* argv[]) {

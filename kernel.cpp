@@ -5,6 +5,8 @@
 #include <numeric>
 #include <vector>
 #include <array>
+
+#include <mkl.h>
 #include <Eigen/Dense>
 
 void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]) {

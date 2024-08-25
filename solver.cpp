@@ -1,6 +1,7 @@
 
 #include <solver.hpp>
 
+#include <mkl.h>
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
@@ -64,8 +65,11 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
 }
 
 void H2MatrixSolver::factorizeM() {
-  for (long long l = levels; l >= 0; l--)
+  for (long long l = levels; l >= 0; l--) {
     A[l].factorize(comm[l]);
+    if (0 < l)
+      A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+  }
 }
 
 void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
