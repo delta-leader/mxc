@@ -11,7 +11,7 @@
 template class H2MatrixSolver<std::complex<double>>;
 template double computeRelErr<double>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 // complex float
-//template class H2MatrixSolver<std::complex<float>>;
+template class H2MatrixSolver<std::complex<float>>;
 template double computeRelErr<float>(const long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
 // double
 //template class H2MatrixSolver<double>;
@@ -25,10 +25,10 @@ template double computeRelErr<Eigen::half>(const long long, const Eigen::half X[
 
 /* supported type conversions */
 // (complex) double to float
-//template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
+template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
 //template H2MatrixSolver<float>::H2MatrixSolver(const H2MatrixSolver<double>&);
 // (complex) float to double
-//template H2MatrixSolver<std::complex<double>>::H2MatrixSolver(const H2MatrixSolver<std::complex<float>>&);
+template H2MatrixSolver<std::complex<double>>::H2MatrixSolver(const H2MatrixSolver<std::complex<float>>&);
 //template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<float>&);
 // double to half
 //template H2MatrixSolver<Eigen::half>::H2MatrixSolver(const H2MatrixSolver<double>&);
@@ -242,15 +242,10 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   resid = std::vector<double>(outer_iters + 1, 0.);
 
   for (iters = 0; iters < outer_iters; iters++) {
-    std::pair<std::complex<double>, std::complex<double>> normr_sum;
     R = -X;
     matVecMul(R.data());
     R += B;
-    normr_sum.first = R.adjoint() * R;
-
     M.solvePrecondition(R.data());
-    normr_sum.second = R.adjoint() * R;
-    comm[levels].level_sum(reinterpret_cast<std::complex<double>*>(&normr_sum), 2);
 
     normr = R.adjoint() * R;
     comm[levels].level_sum(&normr, 1);
