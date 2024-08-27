@@ -5,15 +5,26 @@
 #include <tuple>
 #include <mkl.h>
 
+/* helper functions for different datatypes */
+// complex double
 inline void fill_zero(cuDoubleComplex* start, cuDoubleComplex* end) {
   std::fill(start, end, make_cuDoubleComplex(0., 0.));
 }
-
 void omatcopy(char ordering, char trans, size_t rows, size_t cols, const std::complex<double> *SRC, size_t src_stride, cuDoubleComplex *DST, size_t dst_stride) {
   MKL_Zomatcopy(ordering, trans, rows, cols, std::complex<double>(1., 0.), SRC, src_stride, reinterpret_cast<std::complex<double>*>(DST), dst_stride);
 }
 void omatcopy(char ordering, char trans, size_t rows, size_t cols, cuDoubleComplex *SRC, size_t src_stride, std::complex<double> *DST, size_t dst_stride) {
   MKL_Zomatcopy(ordering, trans, rows, cols, std::complex<double>(1., 0.), reinterpret_cast<std::complex<double>*>(SRC), src_stride, DST, dst_stride);
+}
+// complex float
+inline void fill_zero(cuComplex* start, cuComplex* end) {
+  std::fill(start, end, make_cuComplex(0., 0.));
+}
+void omatcopy(char ordering, char trans, size_t rows, size_t cols, const std::complex<float> *SRC, size_t src_stride, cuComplex *DST, size_t dst_stride) {
+  MKL_Comatcopy(ordering, trans, rows, cols, std::complex<float>(1., 0.), SRC, src_stride, reinterpret_cast<std::complex<float>*>(DST), dst_stride);
+}
+void omatcopy(char ordering, char trans, size_t rows, size_t cols, cuComplex *SRC, size_t src_stride, std::complex<float> *DST, size_t dst_stride) {
+  MKL_Comatcopy(ordering, trans, rows, cols, std::complex<float>(1., 0.), reinterpret_cast<std::complex<float>*>(SRC), src_stride, DST, dst_stride);
 }
 
 template <typename DT>
@@ -69,8 +80,8 @@ H2Factorize<DT>::~H2Factorize() {
   cudaFree(info);
 }
 
-template <typename DT>
-void H2Factorize<DT>::setData(long long rank, long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], const MatrixDataContainer<std::complex<double>>& A, const MatrixDataContainer<std::complex<double>>& Q) {
+template <typename DT> template <typename OT>
+void H2Factorize<DT>::setData(long long rank, long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], const MatrixDataContainer<OT>& A, const MatrixDataContainer<OT>& Q) {
   long long block = bdim * bdim;
   lenD = M;
   lenA = std::min(maxA, A.nblocks());
@@ -147,31 +158,6 @@ void H2Factorize<DT>::setData(long long rank, long long D, long long M, const lo
   cudaFreeHost(hostVptrs);
 }
 
-template <typename DT>
-void H2Factorize<DT>::compute() {
-  long long N = bdim, S = rank, R = N - S;
-  long long D = lenD;
-  DT one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.), minus_one = make_cuDoubleComplex(-1., 0.);
-  int info_host = 0;
-
-  cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, A_SS, N, &zero, B, N, D);
-  cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, B, N, &zero, A_SS, N, D);
-
-  cublasZgetrfBatched(cublasH, R, A_RR, N, ipiv, info, D);
-  cublasZgetrsBatched(cublasH, CUBLAS_OP_N, R, S, A_RR, N, ipiv, A_RS, N, &info_host, D);
-  cublasZgetrsBatched(cublasH, CUBLAS_OP_N, R, N, A_RR, N, ipiv, V_R, N, &info_host, D);
-
-  cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, S, S, R, &minus_one, A_SR, N, A_RS, N, &one, A_SS, N, D);
-
-  for (int64_t i = D; i < lenA; i += maxQ) {
-    int64_t len = std::min(lenA - i, maxQ);
-    cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &U[i], N, &A_SS[i], N, &zero, B, N, len);
-    cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &V[i], N, B, N, &zero, &A_SS[i], N, len);
-  }
-
-  cudaStreamSynchronize(stream);
-}
-
 // needs explicit specialization due to cuBLAS calls
 template <>
 void H2Factorize<cuDoubleComplex>::compute() {
@@ -198,8 +184,33 @@ void H2Factorize<cuDoubleComplex>::compute() {
   cudaStreamSynchronize(stream);
 }
 
-template <typename DT>
-void H2Factorize<DT>::getResults(long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], MatrixDataContainer<std::complex<double>>& A, int* ipvts) {
+template <>
+void H2Factorize<cuComplex>::compute() {
+  long long N = bdim, S = rank, R = N - S;
+  long long D = lenD;
+  cuComplex one = make_cuComplex(1., 0.), zero = make_cuComplex(0., 0.), minus_one = make_cuComplex(-1., 0.);
+  int info_host = 0;
+
+  cublasCgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, A_SS, N, &zero, B, N, D);
+  cublasCgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, B, N, &zero, A_SS, N, D);
+
+  cublasCgetrfBatched(cublasH, R, A_RR, N, ipiv, info, D);
+  cublasCgetrsBatched(cublasH, CUBLAS_OP_N, R, S, A_RR, N, ipiv, A_RS, N, &info_host, D);
+  cublasCgetrsBatched(cublasH, CUBLAS_OP_N, R, N, A_RR, N, ipiv, V_R, N, &info_host, D);
+
+  cublasCgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, S, S, R, &minus_one, A_SR, N, A_RS, N, &one, A_SS, N, D);
+
+  for (int64_t i = D; i < lenA; i += maxQ) {
+    int64_t len = std::min(lenA - i, maxQ);
+    cublasCgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &U[i], N, &A_SS[i], N, &zero, B, N, len);
+    cublasCgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &V[i], N, B, N, &zero, &A_SS[i], N, len);
+  }
+
+  cudaStreamSynchronize(stream);
+}
+
+template <typename DT> template <typename OT>
+void H2Factorize<DT>::getResults(long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], MatrixDataContainer<OT>& A, int* ipvts) {
   long long block = bdim * bdim;
   long long lenR = bdim - rank;
 
@@ -231,7 +242,7 @@ void H2Factorize<DT>::getResults(long long D, long long M, const long long ARows
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
       long long j = ACols[ij];
       long long n = Dims[j];
-      MKL_Zomatcopy('C', 'N', m, n, std::complex<double>(1., 0.), reinterpret_cast<std::complex<double>*>(&hostA[ij * block]), bdim, A[ij], m);
+      //MKL_Zomatcopy('C', 'N', m, n, std::complex<double>(1., 0.), reinterpret_cast<std::complex<double>*>(&hostA[ij * block]), bdim, A[ij], m);
       omatcopy('C', 'N', m, n, &hostA[ij * block], bdim, A[ij], m);
     }
   }
@@ -243,3 +254,9 @@ void H2Factorize<DT>::getResults(long long D, long long M, const long long ARows
 /* explicit template instantiation */
 // complex double
 template class H2Factorize<cuDoubleComplex>;
+template void H2Factorize<cuDoubleComplex>::setData(long long, long long, long long, const long long[], const long long [], const long long[], const MatrixDataContainer<std::complex<double>>&, const MatrixDataContainer<std::complex<double>>&);
+template void H2Factorize<cuDoubleComplex>::getResults(long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], MatrixDataContainer<std::complex<double>>& A, int* ipvts);
+// complex float
+template class H2Factorize<cuComplex>;
+template void H2Factorize<cuComplex>::setData(long long, long long, long long, const long long[], const long long [], const long long[], const MatrixDataContainer<std::complex<float>>&, const MatrixDataContainer<std::complex<float>>&);
+template void H2Factorize<cuComplex>::getResults(long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], MatrixDataContainer<std::complex<float>>& A, int* ipvts);
