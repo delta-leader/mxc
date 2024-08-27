@@ -3,7 +3,7 @@
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project ("shimo" LANGUAGES CXX)
+project ("shimo" LANGUAGES CXX CUDA)
 
 set(MKL_ARCH intel64)
 set(MKL_LINK dynamic)
@@ -15,14 +15,16 @@ find_package(MPI REQUIRED)
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 message(STATUS "Imported oneMKL targets: ${MKL_IMPORTED_TARGETS}")
 
-file(GLOB sources "*.cpp")
-file(GLOB headers "*.hpp")
+file(GLOB sources "*.cpp" "*.cu")
+file(GLOB headers "*.hpp" "*.cuh")
 
 add_executable(main.app ${sources} ${headers})
-target_link_libraries(main.app Eigen3::Eigen $<LINK_ONLY:MKL::MKL> MPI::MPI_CXX)
+target_link_libraries(main.app $<LINK_ONLY:MKL::MKL> Eigen3::Eigen MPI::MPI_CXX cudart cublas cusparse)
+
+target_compile_definitions(main.app PRIVATE MKL_Complex16=std::complex<double> EIGEN_USE_MKL_ALL)
+target_compile_options(main.app PRIVATE $<TARGET_PROPERTY:MKL::MKL,INTERFACE_COMPILE_OPTIONS>)
 target_include_directories(main.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} $<TARGET_PROPERTY:MKL::MKL,INTERFACE_INCLUDE_DIRECTORIES>)
-target_compile_definitions(main.app PRIVATE EIGEN_USE_MKL_ALL)
-target_compile_options(main.app PRIVATE $<TARGET_PROPERTY:MKL::MKL,INTERFACE_COMPILE_OPTIONS> -include "mkl.h")
+
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(main.app PRIVATE "-Wall" "-Wpedantic" "-Wextra" "-fexceptions" "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>")
+    target_compile_options(main.app PRIVATE "-Wall" "-Wextra" "-fexceptions" "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>")
 endif()

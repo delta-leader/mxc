@@ -4,6 +4,9 @@
 #include <string>
 #include <float.h>
 
+#include <mkl.h>
+#include <Eigen/Dense>
+
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
   typedef std::complex<double> DT; typedef std::complex<float> DT_low;
@@ -22,6 +25,7 @@ int main(int argc, char* argv[]) {
   double epi = argc > 5 ? std::atof(argv[5]) : 1e-10;
   // hmatrix mode
   std::string mode = argc > 6 ? std::string(argv[6]) : "h2";
+  const char* csv = argc > 7 ? argv[7] : nullptr;
 
   // if N <= leaf_size, we basically have a dense matrix
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -54,7 +58,7 @@ int main(int argc, char* argv[]) {
 
   // create the points (i.e. bodies)
   //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
-  uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
+  uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   //build the tree (i.e. set the values in the cell array)
   buildBinaryTree(levels, Nbody, &body[0], &cell[0]);
@@ -126,6 +130,10 @@ int main(int argc, char* argv[]) {
     std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
+    /*Eigen::MatrixXcd A(Nbody, Nbody);
+    gen_matrix(eval, Nbody, Nbody, body.data(), body.data(), A.data());
+    double cond = 1. / A.lu().rcond();
+    std::cout << "Condition #: " << cond << std::endl;*/
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -188,6 +196,14 @@ int main(int argc, char* argv[]) {
     std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
     for (long long i = 0; i <= matA.iters; i++)
       std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
+
+    int mpi_size = 0;
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    if (csv != nullptr)
+      write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
+        h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
+        m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
+        matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());
   }
 
   matA.free_all_comms();

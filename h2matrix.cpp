@@ -4,6 +4,7 @@
 #include <kernel.hpp>
 #include <utils.hpp>
 
+#include <mkl.h>
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/LU>
@@ -18,31 +19,31 @@ template class WellSeparatedApproximation<std::complex<double>>;
 template class H2Matrix<std::complex<double>>;
 // complex float
 template class WellSeparatedApproximation<std::complex<float>>;
-template class H2Matrix<std::complex<float>>;
+//template class H2Matrix<std::complex<float>>;
 // complex half
 //template class WellSeparatedApproximation<std::complex<Eigen::half>>;
 //template class H2Matrix<std::complex<Eigen::half>>;
 // double
 template class WellSeparatedApproximation<double>;
-template class H2Matrix<double>;
+//template class H2Matrix<double>;
 // float
 template class WellSeparatedApproximation<float>;
-template class H2Matrix<float>;
+//template class H2Matrix<float>;
 // half
 template class WellSeparatedApproximation<Eigen::half>;
-template class H2Matrix<Eigen::half>;
+//template class H2Matrix<Eigen::half>;
 
 /* supported type conversions */
 // (complex) double to float
-template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
-template H2Matrix<std::complex<float>>::H2Matrix(const H2Matrix<std::complex<double>>&);
+//template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
+//template H2Matrix<std::complex<float>>::H2Matrix(const H2Matrix<std::complex<double>>&);
 // (complex) float to double
-template H2Matrix<std::complex<double>>::H2Matrix(const H2Matrix<std::complex<float>>&);
-template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
+//template H2Matrix<std::complex<double>>::H2Matrix(const H2Matrix<std::complex<float>>&);
+//template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
 // double to half
-template H2Matrix<Eigen::half>::H2Matrix(const H2Matrix<double>&);
+//template H2Matrix<Eigen::half>::H2Matrix(const H2Matrix<double>&);
 // half to double
-template H2Matrix<double>::H2Matrix(const H2Matrix<Eigen::half>&);
+//template H2Matrix<double>::H2Matrix(const H2Matrix<Eigen::half>&);
 
 template <typename DT>
 WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long max_rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level, const bool fix_rank) :
@@ -397,7 +398,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
               if (0 <= low_near_idx)
                 // TODO is this ever used? It just points to zeroes I think
                 h2_lower.NA[low_near_idx] = A_ptr;
-              if (0 <= low_far_idx) {
+              else if (0 <= low_far_idx) {
                 h2_lower.C[low_far_idx] = A_ptr;
                 // construct R from the child
                 MatrixMap_dt Rj(h2_lower.R[childj], nj, nj, Stride_t(h2_lower.Dims[childj], 1));
@@ -612,6 +613,8 @@ void H2Matrix<DT>::resetX() {
   std::fill(X[0], X[0] + X.size(), DT{});
   std::fill(Y[0], Y[0] + Y.size(), DT{});
 }
+#include <factorize.cuh>
+#include <cuda_runtime_api.h>
 
 template <typename DT>
 void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
@@ -622,15 +625,19 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   // the maximum dimension on this level
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
 
-  typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
-  typedef Eigen::Map<Matrix_dt> MatrixMap_dt;
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+
+  H2Factorize fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
+  fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
+  fac.compute();
+  fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
+  cudaStreamDestroy(stream);
+
+  /*typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
   std::vector<long long> ipiv_offsets(nodes);
   // prefix sum over the dimensions on this process
   std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
- 
-  // supposedly, this merges the A matrices from all processes?
-  comm.level_merge(A[0], A.size());
-  // for all cells (we should be able to process each cell in parallel)
   for (long long i = 0; i < nodes; i++) {
     // index of the diagonal block
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
@@ -671,14 +678,8 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
     // if there is a skeleton part
     // TODO should always trigger, unless all blocks are dense
     if (0 < Ms) {
-      // update the skeleton part
-      Eigen::Map<Matrix_dt, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[diag], Ms, Ms, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
-      // Srs = Srr^-1 Srs = Urr^-1 Lrr^-1 Srs 
       Aii.bottomLeftCorner(Mr, Ms) = plu.solve(Aii.bottomLeftCorner(Mr, Ms));
-      // Schur complement update (only on the upper level)
-      // Srr = Srr - Ssr Urr^-1 Lrr^-1 Srs
-      An.noalias() = Aii.topLeftCorner(Ms, Ms) - Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
-      // write the rest of Qr^-1 into V to finish the overwrite
+      Aii.topLeftCorner(Ms, Ms) -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
       V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
     }
 
@@ -687,7 +688,6 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
       if (ij != diag) {
         long long j = ACols[ij];
         long long N = Dims[j];
-        long long Ns = DimsLr[j];
 
         MatrixMap_dt Uj(Q[j], N, N);
         MatrixMap_dt Aij(A[ij], M, N);
@@ -697,15 +697,31 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
         // TODO not sure, confirm this
         b.topRows(N) = Uj.adjoint() * Aij.transpose();
         Aij.noalias() = V * b.topRows(N).transpose();
+      }
+  }*/
+}
 
-        if (0 < Ms && 0 < Ns) {
-          // update the skeleton matrix on the upper level
-          Eigen::Map<Matrix_dt, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(UpperStride[i], 1));
-          An = Aij.topLeftCorner(Ms, Ns);
-        }
+template <typename DT>
+void H2Matrix<DT>::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm) {
+  long long ibegin = lowerComm.oLocal();
+  long long nodes = lowerComm.lenLocal();
+  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+
+  for (long long i = 0; i < nodes; i++)
+    for (long long ij = lowerA.ARows[i]; ij < lowerA.ARows[i + 1]; ij++) {
+      long long j = lowerA.ACols[ij];
+      long long M = lowerA.Dims[i + ibegin];
+      long long N = lowerA.Dims[j];
+      long long Ms = lowerA.DimsLr[i + ibegin];
+      long long Ns = lowerA.DimsLr[j];
+
+      Matrix_t Aij(lowerA.A[ij], M, N);
+      if (0 < Ms && 0 < Ns) {
+        Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(lowerA.NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.UpperStride[i], 1));
+        An = Aij.topLeftCorner(Ms, Ns);
       }
     }
-  }
+  comm.level_merge(A[0], A.size());
 }
 
 // This part is not the same as the paper, only the basic ideas
@@ -736,7 +752,7 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
     long long Mr = M - Ms;
     
     // added a guard agains empty Dims
-    if (M > 0) {
+    if (0 < Mr) {
       VectorMap_dt x(X[i + ibegin], M);
       VectorMap_dt y(Y[i + ibegin], M);
       MatrixMap_dt q(Q[i + ibegin], M, M);
@@ -767,23 +783,25 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
 
-    // added a guard against empty blocks
-    if (M > 0) {
-      VectorMap_dt x(X[i + ibegin], M);
-      if (0 < Ms) {
-        for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-          long long j = ACols[ij];
-          long long N = Dims[j];
-          long long Ns = DimsLr[j];
-          long long Nr = N - Ns;
-
+    VectorMap_dt x(X[i + ibegin], M);
+    if (0 < Ms) {
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
+        
+        if (0 < Nr) {
           VectorMap_dt xj(X[j], N);
           MatrixMap_dt Aij(A[ij], M, N);
           x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
         }
-        VectorMap_dt xo(NX[i + ibegin], Ms);
-        xo = x.topRows(Ms);
       }
+      VectorMap_dt xo(NX[i + ibegin], Ms);
+      xo = x.topRows(Ms);
+    }
+    
+    if (0 < Mr) {
       VectorMap_dt y(Y[i + ibegin], M);
       y = x;
       for (long long ij = ARows[i]; ij < diag; ij++) {
@@ -793,18 +811,22 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
         long long Ns = DimsLr[j];
         long long Nr = N - Ns;
 
-        VectorMap_dt xj(X[j], N);
-        MatrixMap_dt Aij(A[ij], M, N);
-        y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        if (0 < Nr) {
+          VectorMap_dt xj(X[j], N);
+          MatrixMap_dt Aij(A[ij], M, N);
+          y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        }
       }
     }
   }
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
-    VectorMap_dt x(X[i + ibegin], M);
-    VectorMap_dt y(Y[i + ibegin], M);
-    x = y;
+    if (0 < M) {
+      VectorMap_dt x(X[i + ibegin], M);
+      VectorMap_dt y(Y[i + ibegin], M);
+      x = y;
+    }
   }
 }
 
@@ -823,25 +845,22 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
 
-    // added guard
-    if (M > 0) {
-      VectorMap_dt x(X[i + ibegin], M);
-      VectorMap_dt y(Y[i + ibegin], M);
+    VectorMap_dt x(X[i + ibegin], M);
+    VectorMap_dt y(Y[i + ibegin], M);
 
+    if (0 < Mr) {
       y.bottomRows(Mr) = x.bottomRows(Mr);
-      if (0 < Ms) {
-        VectorMap_dt xo(NX[i + ibegin], Ms);
-        y.topRows(Ms) = xo;
-      }
       for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
         long long N = Dims[j];
         long long Ns = DimsLr[j];
         long long Nr = N - Ns;
 
-        VectorMap_dt xj(X[j], N);
-        MatrixMap_dt Aij(A[ij], M, N);
-        y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        if (0 < Nr) {
+          VectorMap_dt xj(X[j], N);
+          MatrixMap_dt Aij(A[ij], M, N);
+          y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        }
       }
 
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
@@ -855,6 +874,11 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
           y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xo;
         }
       }
+    }
+
+    if (0 < Ms) {
+      VectorMap_dt xo(NX[i + ibegin], Ms);
+      y.topRows(Ms) = xo;
     }
   }
 

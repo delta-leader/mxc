@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <set>
 #include <iostream>
+#include <mkl.h>
 #include <Eigen/Dense>
 
 /* explicit template instantiation */

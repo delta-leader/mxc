@@ -5,7 +5,8 @@
 #include <numeric>
 #include <vector>
 #include <array>
-#include <iostream>
+
+#include <mkl.h>
 #include <Eigen/Dense>
 #include <utils.hpp>
 

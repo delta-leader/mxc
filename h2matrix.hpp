@@ -166,6 +166,7 @@ public:
   comm: the communicator for this level
   */
   void factorize(const ColCommMPI& comm);
+  void factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm);
   /*
   forward substitution for this level
   comm: the communicator for this level

@@ -71,4 +71,8 @@ public:
     return offsets.back();
   }
 
+  inline long long nblocks() const {
+    return offsets.size() - 1;
+  }
+
 };

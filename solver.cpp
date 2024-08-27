@@ -1,5 +1,6 @@
 #include <solver.hpp>
 
+#include <mkl.h>
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
@@ -10,29 +11,29 @@
 template class H2MatrixSolver<std::complex<double>>;
 template double computeRelErr<double>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 // complex float
-template class H2MatrixSolver<std::complex<float>>;
+//template class H2MatrixSolver<std::complex<float>>;
 template double computeRelErr<float>(const long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
 // double
-template class H2MatrixSolver<double>;
+//template class H2MatrixSolver<double>;
 template double computeRelErr<double>(const long long, const double X[], const double ref[], MPI_Comm);
 // float
-template class H2MatrixSolver<float>;
+//template class H2MatrixSolver<float>;
 template double computeRelErr<float>(const long long, const float X[], const float ref[], MPI_Comm);
 // half
-template class H2MatrixSolver<Eigen::half>;
+//template class H2MatrixSolver<Eigen::half>;
 template double computeRelErr<Eigen::half>(const long long, const Eigen::half X[], const Eigen::half ref[], MPI_Comm);
 
 /* supported type conversions */
 // (complex) double to float
-template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
-template H2MatrixSolver<float>::H2MatrixSolver(const H2MatrixSolver<double>&);
+//template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
+//template H2MatrixSolver<float>::H2MatrixSolver(const H2MatrixSolver<double>&);
 // (complex) float to double
-template H2MatrixSolver<std::complex<double>>::H2MatrixSolver(const H2MatrixSolver<std::complex<float>>&);
-template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<float>&);
+//template H2MatrixSolver<std::complex<double>>::H2MatrixSolver(const H2MatrixSolver<std::complex<float>>&);
+//template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<float>&);
 // double to half
-template H2MatrixSolver<Eigen::half>::H2MatrixSolver(const H2MatrixSolver<double>&);
+//template H2MatrixSolver<Eigen::half>::H2MatrixSolver(const H2MatrixSolver<double>&);
 // half to double
-template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<Eigen::half>&);
+//template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<Eigen::half>&);
 
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
@@ -180,8 +181,11 @@ void H2MatrixSolver<DT>::factorizeM() {
   // factorize all levels, bottom  up
   // TODO how does this precompute the fill-ins?
   // I thought that would require 2 loops?
-  for (long long l = levels; l >= 0; l--)
+  for (long long l = levels; l >= 0; l--) {
     A[l].factorize(comm[l]);
+    if (0 < l)
+      A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+  }
 }
 
 template <typename DT>
@@ -234,13 +238,19 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   //double normb = std::sqrt(normr.real());
   if (normb == 0.)
     normb = 1.;
+
   resid = std::vector<double>(outer_iters + 1, 0.);
 
   for (iters = 0; iters < outer_iters; iters++) {
+    std::pair<std::complex<double>, std::complex<double>> normr_sum;
     R = -X;
     matVecMul(R.data());
     R += B;
+    normr_sum.first = R.adjoint() * R;
+
     M.solvePrecondition(R.data());
+    normr_sum.second = R.adjoint() * R;
+    comm[levels].level_sum(reinterpret_cast<std::complex<double>*>(&normr_sum), 2);
 
     normr = R.adjoint() * R;
     comm[levels].level_sum(&normr, 1);
@@ -281,7 +291,6 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   R = -X;
   matVecMul(R.data());
   R += B;
-  M.solvePrecondition(R.data());
 
   normr = R.adjoint() * R;
   comm[levels].level_sum(&normr, 1);
