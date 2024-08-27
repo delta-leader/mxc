@@ -25,21 +25,21 @@ template class H2Matrix<std::complex<float>>;
 //template class H2Matrix<std::complex<Eigen::half>>;
 // double
 template class WellSeparatedApproximation<double>;
-//template class H2Matrix<double>;
+template class H2Matrix<double>;
 // float
 template class WellSeparatedApproximation<float>;
-//template class H2Matrix<float>;
+template class H2Matrix<float>;
 // half
 template class WellSeparatedApproximation<Eigen::half>;
 //template class H2Matrix<Eigen::half>;
 
 /* supported type conversions */
 // (complex) double to float
-//template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
 template H2Matrix<std::complex<float>>::H2Matrix(const H2Matrix<std::complex<double>>&);
+template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
 // (complex) float to double
 template H2Matrix<std::complex<double>>::H2Matrix(const H2Matrix<std::complex<float>>&);
-//template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
+template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
 // double to half
 //template H2Matrix<Eigen::half>::H2Matrix(const H2Matrix<double>&);
 // half to double
@@ -628,7 +628,7 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   cudaStream_t stream;
   cudaStreamCreate(&stream);
 
-  H2Factorize fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
+  H2Factorize<DT> fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
   fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
   fac.compute();
   fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());

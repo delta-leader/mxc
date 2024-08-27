@@ -6,7 +6,14 @@
 #include <mkl.h>
 
 /* helper functions for different datatypes */
+template <typename DT>
 // complex double
+inline void fill_zero(DT* start, DT* end) {
+  std::fill(start, end, (DT) 0);
+}
+
+// complex double
+template <>
 inline void fill_zero(cuDoubleComplex* start, cuDoubleComplex* end) {
   std::fill(start, end, make_cuDoubleComplex(0., 0.));
 }
@@ -17,6 +24,7 @@ void omatcopy(char ordering, char trans, size_t rows, size_t cols, cuDoubleCompl
   MKL_Zomatcopy(ordering, trans, rows, cols, std::complex<double>(1., 0.), reinterpret_cast<std::complex<double>*>(SRC), src_stride, DST, dst_stride);
 }
 // complex float
+template <>
 inline void fill_zero(cuComplex* start, cuComplex* end) {
   std::fill(start, end, make_cuComplex(0., 0.));
 }
@@ -25,6 +33,20 @@ void omatcopy(char ordering, char trans, size_t rows, size_t cols, const std::co
 }
 void omatcopy(char ordering, char trans, size_t rows, size_t cols, cuComplex *SRC, size_t src_stride, std::complex<float> *DST, size_t dst_stride) {
   MKL_Comatcopy(ordering, trans, rows, cols, std::complex<float>(1., 0.), reinterpret_cast<std::complex<float>*>(SRC), src_stride, DST, dst_stride);
+}
+// double
+void omatcopy(char ordering, char trans, size_t rows, size_t cols, const double *SRC, size_t src_stride, double *DST, size_t dst_stride) {
+  MKL_Domatcopy(ordering, trans, rows, cols, 1, SRC, src_stride, DST, dst_stride);
+}
+void omatcopy(char ordering, char trans, size_t rows, size_t cols, double *SRC, size_t src_stride, double *DST, size_t dst_stride) {
+  MKL_Domatcopy(ordering, trans, rows, cols, 1, SRC, src_stride, DST, dst_stride);
+}
+// float
+void omatcopy(char ordering, char trans, size_t rows, size_t cols, const float *SRC, size_t src_stride, float *DST, size_t dst_stride) {
+  MKL_Somatcopy(ordering, trans, rows, cols, 1, SRC, src_stride, DST, dst_stride);
+}
+void omatcopy(char ordering, char trans, size_t rows, size_t cols, float *SRC, size_t src_stride, float *DST, size_t dst_stride) {
+  MKL_Somatcopy(ordering, trans, rows, cols, 1, SRC, src_stride, DST, dst_stride);
 }
 
 template <typename DT>
@@ -209,6 +231,56 @@ void H2Factorize<cuComplex>::compute() {
   cudaStreamSynchronize(stream);
 }
 
+template <>
+void H2Factorize<double>::compute() {
+  long long N = bdim, S = rank, R = N - S;
+  long long D = lenD;
+  double one = 1, zero = 0, minus_one = -1;
+  int info_host = 0;
+
+  cublasDgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, A_SS, N, &zero, B, N, D);
+  cublasDgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, B, N, &zero, A_SS, N, D);
+
+  cublasDgetrfBatched(cublasH, R, A_RR, N, ipiv, info, D);
+  cublasDgetrsBatched(cublasH, CUBLAS_OP_N, R, S, A_RR, N, ipiv, A_RS, N, &info_host, D);
+  cublasDgetrsBatched(cublasH, CUBLAS_OP_N, R, N, A_RR, N, ipiv, V_R, N, &info_host, D);
+
+  cublasDgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, S, S, R, &minus_one, A_SR, N, A_RS, N, &one, A_SS, N, D);
+
+  for (int64_t i = D; i < lenA; i += maxQ) {
+    int64_t len = std::min(lenA - i, maxQ);
+    cublasDgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &U[i], N, &A_SS[i], N, &zero, B, N, len);
+    cublasDgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &V[i], N, B, N, &zero, &A_SS[i], N, len);
+  }
+
+  cudaStreamSynchronize(stream);
+}
+
+template <>
+void H2Factorize<float>::compute() {
+  long long N = bdim, S = rank, R = N - S;
+  long long D = lenD;
+  float one = 1, zero = 0, minus_one = -1;
+  int info_host = 0;
+
+  cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, A_SS, N, &zero, B, N, D);
+  cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, B, N, &zero, A_SS, N, D);
+
+  cublasSgetrfBatched(cublasH, R, A_RR, N, ipiv, info, D);
+  cublasSgetrsBatched(cublasH, CUBLAS_OP_N, R, S, A_RR, N, ipiv, A_RS, N, &info_host, D);
+  cublasSgetrsBatched(cublasH, CUBLAS_OP_N, R, N, A_RR, N, ipiv, V_R, N, &info_host, D);
+
+  cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, S, S, R, &minus_one, A_SR, N, A_RS, N, &one, A_SS, N, D);
+
+  for (int64_t i = D; i < lenA; i += maxQ) {
+    int64_t len = std::min(lenA - i, maxQ);
+    cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &U[i], N, &A_SS[i], N, &zero, B, N, len);
+    cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &V[i], N, B, N, &zero, &A_SS[i], N, len);
+  }
+
+  cudaStreamSynchronize(stream);
+}
+
 template <typename DT> template <typename OT>
 void H2Factorize<DT>::getResults(long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], MatrixDataContainer<OT>& A, int* ipvts) {
   long long block = bdim * bdim;
@@ -260,3 +332,11 @@ template void H2Factorize<cuDoubleComplex>::getResults(long long D, long long M,
 template class H2Factorize<cuComplex>;
 template void H2Factorize<cuComplex>::setData(long long, long long, long long, const long long[], const long long [], const long long[], const MatrixDataContainer<std::complex<float>>&, const MatrixDataContainer<std::complex<float>>&);
 template void H2Factorize<cuComplex>::getResults(long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], MatrixDataContainer<std::complex<float>>& A, int* ipvts);
+// double
+template class H2Factorize<double>;
+template void H2Factorize<double>::setData(long long, long long, long long, const long long[], const long long [], const long long[], const MatrixDataContainer<double>&, const MatrixDataContainer<double>&);
+template void H2Factorize<double>::getResults(long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], MatrixDataContainer<double>& A, int* ipvts);
+// float
+template class H2Factorize<float>;
+template void H2Factorize<float>::setData(long long, long long, long long, const long long[], const long long [], const long long[], const MatrixDataContainer<float>&, const MatrixDataContainer<float>&);
+template void H2Factorize<float>::getResults(long long D, long long M, const long long ARows[], const long long ACols[], const long long Dims[], MatrixDataContainer<float>& A, int* ipvts);

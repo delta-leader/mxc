@@ -14,10 +14,10 @@ template double computeRelErr<double>(const long long, const std::complex<double
 template class H2MatrixSolver<std::complex<float>>;
 template double computeRelErr<float>(const long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
 // double
-//template class H2MatrixSolver<double>;
+template class H2MatrixSolver<double>;
 template double computeRelErr<double>(const long long, const double X[], const double ref[], MPI_Comm);
 // float
-//template class H2MatrixSolver<float>;
+template class H2MatrixSolver<float>;
 template double computeRelErr<float>(const long long, const float X[], const float ref[], MPI_Comm);
 // half
 //template class H2MatrixSolver<Eigen::half>;
@@ -26,10 +26,10 @@ template double computeRelErr<Eigen::half>(const long long, const Eigen::half X[
 /* supported type conversions */
 // (complex) double to float
 template H2MatrixSolver<std::complex<float>>::H2MatrixSolver(const H2MatrixSolver<std::complex<double>>&);
-//template H2MatrixSolver<float>::H2MatrixSolver(const H2MatrixSolver<double>&);
+template H2MatrixSolver<float>::H2MatrixSolver(const H2MatrixSolver<double>&);
 // (complex) float to double
 template H2MatrixSolver<std::complex<double>>::H2MatrixSolver(const H2MatrixSolver<std::complex<float>>&);
-//template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<float>&);
+template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<float>&);
 // double to half
 //template H2MatrixSolver<Eigen::half>::H2MatrixSolver(const H2MatrixSolver<double>&);
 // half to double

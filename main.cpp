@@ -9,9 +9,9 @@
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
-  typedef std::complex<double> DT; typedef std::complex<float> DT_low;
+  //typedef std::complex<double> DT; typedef std::complex<float> DT_low;
   //typedef std::complex<double> DT; typedef std::complex<Eigen::half> DT_low;
-  //typedef double DT; typedef float DT_low;
+  typedef double DT; typedef float DT_low;
   //typedef double DT; typedef Eigen::half DT_low;
 
   // N
@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
   // copy the random vector
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
 
-  //Vector_dt<DT_low> X1_low(X1);
+  Vector_dt<DT_low> X1_low(X1);
   //Vector_dt<DT_low> X1_low2(X1);
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -135,12 +135,12 @@ int main(int argc, char* argv[]) {
     double cond = 1. / A.lu().rcond();
     std::cout << "Condition #: " << cond << std::endl;*/
   }
-
+  
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   
   // new H2 matrix using a fixed rank
-  H2MatrixSolver<DT> matM;
+  H2MatrixSolver<DT_low> matM;
   if (mode.compare("h2") == 0)
     matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true, true);
   else if (mode.compare("hss") == 0)
@@ -151,8 +151,9 @@ int main(int argc, char* argv[]) {
   m_construct_comm_time = ColCommMPI::get_comm_time();
 
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
-  matM.matVecMul(&X1[0]);
-  double cerr_m = computeRelErr(lenX, &X1[0], &X2[0]);
+  matM.matVecMul(&X1_low[0]);
+  Vector_dt<DT> result(X1_low);
+  double cerr_m = computeRelErr(lenX, &result[0], &X2[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
@@ -163,17 +164,19 @@ int main(int argc, char* argv[]) {
   h2_factor_time = MPI_Wtime() - h2_factor_time;
   h2_factor_comm_time = ColCommMPI::get_comm_time();
   std::copy(X2.begin(), X2.end(), X1.begin());
+  X1_low = Vector_dt<DT_low>(X1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  matM.solvePrecondition(&X1[0]);
+  matM.solvePrecondition(&X1_low[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  double serr = computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
-  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  result = Vector_dt<DT>(X1_low);
+  double serr = computeRelErr(lenX, &result[0], &Xbody[matA.local_bodies.first]);
+  //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
@@ -184,28 +187,43 @@ int main(int argc, char* argv[]) {
   }
   
   MPI_Barrier(MPI_COMM_WORLD);
-  double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 20, 50);
+  double ir_time = MPI_Wtime(), ir_comm_time;
+  long long iters = matA.solveIR(epi, matM, &X1[0], &X2[0], 200);
 
   MPI_Barrier(MPI_COMM_WORLD);
-  gmres_time = MPI_Wtime() - gmres_time;
-  gmres_comm_time = ColCommMPI::get_comm_time();
+  ir_time = MPI_Wtime() - ir_time;
+  ir_comm_time = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
-    std::cout << "GMRES Residual: " << matA.resid[matA.iters] << ", Iters: " << matA.iters << std::endl;
-    std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
-    for (long long i = 0; i <= matA.iters; i++)
-      std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
+    std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
+    std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
+    //for (long long i = 0; i <= matA.iters; i++)
+      //std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
 
-    int mpi_size = 0;
+    /*int mpi_size = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     if (csv != nullptr)
       write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
         h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
         m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
         matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());
+    */
   }
 
+  H2MatrixSolver<DT> matM_high(matM);
+  MPI_Barrier(MPI_COMM_WORLD);
+  double gmres_ir_time = MPI_Wtime(), gmres_ir_comm_time;
+  iters = matA.solveGMRESIR(epi, matM_high, &X1[0], &X2[0], 5, 50, 1);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  gmres_ir_time = MPI_Wtime() - gmres_ir_time;
+  gmres_ir_comm_time = ColCommMPI::get_comm_time();
+
+  if (mpi_rank == 0) {
+    std::cout << "GMRES-IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
+    std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
+  }
+  
   matA.free_all_comms();
   matM.free_all_comms();
   MPI_Finalize();
