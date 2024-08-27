@@ -701,11 +701,32 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   }*/
 }
 
+// explicit template specializationf or complex<double>
+// needed to set the corresponding CUDA type (cuDoubleComplex)
+template <>
+void H2Matrix<std::complex<double>>::factorize(const ColCommMPI& comm) {
+  // the first cell for this process on this level
+  long long ibegin = comm.oLocal();
+  // the number of cells for this process on this level
+  long long nodes = comm.lenLocal();
+  // the maximum dimension on this level
+  long long dims_max = *std::max_element(Dims.begin(), Dims.end());
+
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+
+  H2Factorize<cuDoubleComplex> fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
+  fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
+  fac.compute();
+  fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
+  cudaStreamDestroy(stream);
+}
+
 template <typename DT>
 void H2Matrix<DT>::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm) {
   long long ibegin = lowerComm.oLocal();
   long long nodes = lowerComm.lenLocal();
-  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Matrix_dt;
 
   for (long long i = 0; i < nodes; i++)
     for (long long ij = lowerA.ARows[i]; ij < lowerA.ARows[i + 1]; ij++) {
@@ -715,9 +736,9 @@ void H2Matrix<DT>::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& low
       long long Ms = lowerA.DimsLr[i + ibegin];
       long long Ns = lowerA.DimsLr[j];
 
-      Matrix_t Aij(lowerA.A[ij], M, N);
+      Matrix_dt Aij(lowerA.A[ij], M, N);
       if (0 < Ms && 0 < Ns) {
-        Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(lowerA.NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.UpperStride[i], 1));
+        Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(lowerA.NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.UpperStride[i], 1));
         An = Aij.topLeftCorner(Ms, Ns);
       }
     }

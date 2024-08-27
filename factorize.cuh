@@ -6,6 +6,7 @@
 #include <cuda.h>
 #include <cublas_v2.h>
 
+template <typename DT = cuDoubleComplex>
 class H2Factorize {
 private:
   cudaStream_t stream;
@@ -13,9 +14,9 @@ private:
 
   long long maxA, maxQ, bdim;
   long long lenD, lenA, rank;
-  cuDoubleComplex* Adata, *Bdata, *Udata, *Vdata;
-  cuDoubleComplex** A_SS, **A_SR, **A_RS, **A_RR;
-  cuDoubleComplex** B, **U, **V, **V_R;
+  DT* Adata, *Bdata, *Udata, *Vdata;
+  DT** A_SS, **A_SR, **A_RS, **A_RR;
+  DT** B, **U, **V, **V_R;
   int* ipiv, *info;
   
 public:
