@@ -263,6 +263,7 @@ void H2Factorize<float>::compute() {
   float one = 1, zero = 0, minus_one = -1;
   int info_host = 0;
 
+  //const auto COMP = CUBLAS_COMPUTE_32F_FAST_16F;
   const auto COMP = CUBLAS_COMPUTE_32F;
   const auto ALGO = CUBLAS_GEMM_DEFAULT;
 
