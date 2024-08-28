@@ -10,9 +10,7 @@
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
   //typedef std::complex<double> DT; typedef std::complex<float> DT_low;
-  //typedef std::complex<double> DT; typedef std::complex<Eigen::half> DT_low;
   typedef double DT; typedef float DT_low;
-  //typedef double DT; typedef Eigen::half DT_low;
 
   // N
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
@@ -25,7 +23,6 @@ int main(int argc, char* argv[]) {
   double epi = argc > 5 ? std::atof(argv[5]) : 1e-10;
   // hmatrix mode
   std::string mode = argc > 6 ? std::string(argv[6]) : "h2";
-  const char* csv = argc > 7 ? argv[7] : nullptr;
 
   // if N <= leaf_size, we basically have a dense matrix
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -50,9 +47,9 @@ int main(int argc, char* argv[]) {
   // body contains the points
   // 3 corresponds to the dimension
   std::vector<double> body(Nbody * 3);
-  // contains the charges for each point?
-  //std::vector<std::complex<double>> Xbody(Nbody);
   Vector_dt<DT> Xbody(Nbody);
+  Vector_dt<DT> Ones(Nbody);
+  Ones.ones();
   // array containing the nodes in the cluster tree
   std::vector<Cell> cell(ncells);
 
@@ -65,22 +62,13 @@ int main(int argc, char* argv[]) {
 
   // generate a random vector Xbody (used in Matvec)
   Xbody.generate_random();
-  //std::mt19937 gen(999);
-  //std::uniform_real_distribution uniform_dist(0., 1.);
-  //std::generate(Xbody.begin(), Xbody.end(), 
-  //  [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
 
-  /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
-  cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
-  ncells = Nleaf + 1;
-  levels = 1;*/
-
-  // single process only
-  //std::vector<DT> A(Nbody * Nbody);
-  //gen_matrix(eval, Nbody, Nbody, &body[0], &body[0], A.data());
-  //Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Amap(&A[0], Nbody, Nbody);
-  //Eigen::JacobiSVD<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> svd(Amap);
-  //double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
+  // get condition number (single process only)
+  std::vector<DT> A(Nbody * Nbody);
+  gen_matrix(eval, Nbody, Nbody, &body[0], &body[0], A.data());
+  Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Amap(&A[0], Nbody, Nbody);
+  Eigen::JacobiSVD<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> svd(Amap);
+  double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
   
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
@@ -94,16 +82,15 @@ int main(int argc, char* argv[]) {
 
   // creates two vectors of zeroes with the same length as the number of local bodies
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
-  //std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
-  //std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
   Vector_dt<DT> X1(lenX);
   Vector_dt<DT> X2(lenX);
+  Vector_dt<DT> B(Ones);
+  Vector_dt<DT> B_ref(lenX);
 
   // copy the random vector
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
 
   Vector_dt<DT_low> X1_low(X1);
-  //Vector_dt<DT_low> X1_low2(X1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
@@ -123,13 +110,19 @@ int main(int argc, char* argv[]) {
   // calculate relative error between H-matvec and dense matvec
   double cerr = computeRelErr(lenX, &X1[0], &X2[0]);
 
+  matA.matVecMul(&B[0]);
+  mat_vec_reference(eval, lenX, Nbody, &B_ref[0], &Ones[0], &body[matA.local_bodies.first * 3], &body[0]);
+  double approx_err = computeRelErr(lenX, &B[0], &B_ref[0]);
+
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
+    std::cout << "Condition #: " << cond <<std::endl;
     std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
-    std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
-    std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
+    std::cout << "Approximation Err: " << approx_err << std::endl;
+    //std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
+    //std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
+    //std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
     /*Eigen::MatrixXcd A(Nbody, Nbody);
     gen_matrix(eval, Nbody, Nbody, body.data(), body.data(), A.data());
     double cond = 1. / A.lu().rcond();
@@ -152,8 +145,10 @@ int main(int argc, char* argv[]) {
 
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
   matM.matVecMul(&X1_low[0]);
-  Vector_dt<DT> result(X1_low);
-  double cerr_m = computeRelErr(lenX, &result[0], &X2[0]);
+  double cerr_m = computeRelErr(lenX, &Vector_dt<DT>(X1_low)[0], &X2[0]);
+  Vector_dt<DT_low> B_low(Ones);
+  matM.matVecMul(&B_low[0]);
+  approx_err = computeRelErr(lenX, &Vector_dt<DT>(B_low)[0], &B_ref[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
@@ -174,21 +169,29 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  result = Vector_dt<DT>(X1_low);
-  double serr = computeRelErr(lenX, &result[0], &Xbody[matA.local_bodies.first]);
+  double serr = computeRelErr(lenX, &Vector_dt<DT>(X1_low)[0], &Xbody[matA.local_bodies.first]);
   //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+
+  // testing application of the preconditioner in high precision
+  H2MatrixSolver<DT> matM_test(matM);
+  matM_test.solvePrecondition(&X1[0]);
+  double serr_test = computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
 
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
-    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
-    std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
+    std::cout << "H^2-Preconditi Approximation Err: " << approx_err << std::endl;
+    //std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
+    //std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
+    std::cout << "H^2-Matrix Substitution Err: " << serr_test << std::endl;
   }
   
+  B.reset();
   MPI_Barrier(MPI_COMM_WORLD);
   double ir_time = MPI_Wtime(), ir_comm_time;
-  long long iters = matA.solveIR(epi, matM, &X1[0], &X2[0], 200);
+ // long long iters = matA.solveIR(epi, matM, &X1[0], &X2[0], 200);
+ long long iters = matA.solveIR(epi, matM, &B[0], &B_ref[0], 200);
 
   MPI_Barrier(MPI_COMM_WORLD);
   ir_time = MPI_Wtime() - ir_time;
@@ -196,24 +199,18 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
-    std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
+    std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
+    //std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
     //for (long long i = 0; i <= matA.iters; i++)
       //std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
-
-    /*int mpi_size = 0;
-    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-    if (csv != nullptr)
-      write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
-        h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
-        m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
-        matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());
-    */
   }
 
+  B.reset();
   H2MatrixSolver<DT> matM_high(matM);
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_ir_time = MPI_Wtime(), gmres_ir_comm_time;
-  iters = matA.solveGMRESIR(epi, matM_high, &X1[0], &X2[0], 5, 50, 1);
+  //iters = matA.solveGMRESIR(epi, matM_high, &X1[0], &X2[0], 5, 50, 1);
+  iters = matA.solveGMRESIR(epi, matM_high, &B[0], &B_ref[0], 5, 50, 1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_ir_time = MPI_Wtime() - gmres_ir_time;
@@ -221,11 +218,14 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     std::cout << "GMRES-IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
-    std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
+    std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
+    //std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
   }
   
   matA.free_all_comms();
   matM.free_all_comms();
+  matM_high.free_all_comms();
+  matM_test.free_all_comms();
   MPI_Finalize();
   return 0;
 }
