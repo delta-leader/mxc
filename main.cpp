@@ -32,6 +32,7 @@ int main(int argc, char* argv[]) {
   long long Nleaf = (long long)1 << levels;
   // the number of cells (i.e. nodes) in the cluster tree
   long long ncells = Nleaf + Nleaf - 1;
+  //std::vector<double> params = {0.5, 1, 2, 5, 10, 50, 100};
   
   // kernel functions, here we select the appropriate function
   // by setting the corresponding parameters
@@ -40,7 +41,7 @@ int main(int argc, char* argv[]) {
   //Laplace3D<DT> eval(params[i]);
   //Yukawa3D<DT> eval(params[i], params[j]);
   //Gaussian<DT> eval(params[i]);
-  //IMQ<DT> eval(params[i]);
+  //IMQ<DT> eval(params[0]);
   //Matern3<DT> eval(params[i]);
   Helmholtz3D<DT> eval(1., 4.);
   
@@ -158,24 +159,24 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
   h2_factor_comm_time = ColCommMPI::get_comm_time();
-  std::copy(X2.begin(), X2.end(), X1.begin());
-  X1_low = Vector_dt<DT_low>(X1);
+  std::copy(B.begin(), B.end(), B_ref.begin());
+  B_low = Vector_dt<DT_low>(B);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  matM.solvePrecondition(&X1_low[0]);
+  matM.solvePrecondition(&B_low[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  double serr = computeRelErr(lenX, &Vector_dt<DT>(X1_low)[0], &Xbody[matA.local_bodies.first]);
+  double serr = computeRelErr(lenX, &Vector_dt<DT>(B_low)[0], &Ones[0]);
   //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   // testing application of the preconditioner in high precision
   H2MatrixSolver<DT> matM_test(matM);
-  matM_test.solvePrecondition(&X1[0]);
-  double serr_test = computeRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
+  matM_test.solvePrecondition(&B[0]);
+  double serr_test = computeRelErr(lenX, &B[0], &Ones[0]);
 
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;

@@ -108,6 +108,7 @@ public:
       norm = std::sqrt(get_real(norm_local));
       resid[iter] = norm / normb;
       if (iter && resid[iter] > resid[iter-1]) {
+        std::cout << "Divergence detected (" << resid[iter-1] << " followed by " << resid[iter] << ")" << std::endl;
         return iter-1;
       }
       if (resid[iter]<tol) {
