@@ -47,6 +47,9 @@ class Vector_dt {
     void reset() {
       std::fill(data.begin(), data.end(), DT{0});
     }
+    void ones() {
+      std::fill(data.begin(), data.end(), DT{1});
+    }
 };
 
 template <typename T>
@@ -86,6 +89,9 @@ class Vector_dt<std::complex<T>> {
     }
     void reset() {
       std::fill(data.begin(), data.end(), DT{0});
+    }
+    void ones() {
+      std::fill(data.begin(), data.end(), DT{1});
     }
 };
 
