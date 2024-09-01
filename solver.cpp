@@ -189,6 +189,18 @@ void H2MatrixSolver<DT>::factorizeM() {
 }
 
 template <typename DT>
+void H2MatrixSolver<DT>::factorizeM(const cublasComputeType_t COMP) {
+  // factorize all levels, bottom  up
+  // TODO how does this precompute the fill-ins?
+  // I thought that would require 2 loops?
+  for (long long l = levels; l >= 0; l--) {
+    A[l].factorize(comm[l], COMP);
+    if (0 < l)
+      A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+  }
+}
+
+template <typename DT>
 void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   if (levels < 0)
     return;

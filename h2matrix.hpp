@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cublas_v2.h>
+
 #include <data_container.hpp>
 #include <complex>
 
@@ -166,6 +168,7 @@ public:
   comm: the communicator for this level
   */
   void factorize(const ColCommMPI& comm);
+  void factorize(const ColCommMPI& comm, const cublasComputeType_t COMP);
   void factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm);
   /*
   forward substitution for this level

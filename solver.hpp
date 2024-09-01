@@ -3,6 +3,7 @@
 #include <complex>
 #include <mkl.h>
 #include <Eigen/Dense>
+#include <cublas_v2.h>
 
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
@@ -62,6 +63,7 @@ public:
   void matVecMul(DT X[]);
   // factorize the matrix
   void factorizeM();
+  void factorizeM(const cublasComputeType_t COMP);
   /*
   solve the system LUx = b
   after the matrix has been factorized
@@ -108,7 +110,7 @@ public:
       norm = std::sqrt(get_real(norm_local));
       resid[iter] = norm / normb;
       if (iter && resid[iter] > resid[iter-1]) {
-        std::cout << "Divergence detected (" << resid[iter-1] << " followed by " << resid[iter] << ")" << std::endl;
+        //std::cout << "Divergence detected (" << resid[iter-1] << " followed by " << resid[iter] << ")" << std::endl;
         return iter-1;
       }
       if (resid[iter]<tol) {

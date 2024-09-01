@@ -10,6 +10,7 @@
 #include <Eigen/LU>
 #include <algorithm>
 #include <cmath>
+#include <cuda_fp16.h>
 
 #include <iostream>
 
@@ -701,6 +702,31 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   }*/
 }
 
+template <typename DT>
+void H2Matrix<DT>::factorize(const ColCommMPI& comm, const cublasComputeType_t COMP) {
+  factorize(comm);
+}
+
+// explicit specialization for experimenting
+template <>
+void H2Matrix<float>::factorize(const ColCommMPI& comm, const cublasComputeType_t COMP) {
+  // the first cell for this process on this level
+  long long ibegin = comm.oLocal();
+  // the number of cells for this process on this level
+  long long nodes = comm.lenLocal();
+  // the maximum dimension on this level
+  long long dims_max = *std::max_element(Dims.begin(), Dims.end());
+
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+
+  H2Factorize<float> fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
+  fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
+  fac.compute(COMP);
+  fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
+  cudaStreamDestroy(stream);
+}
+
 // explicit template specializationf or complex<double>
 // needed to set the corresponding CUDA type (cuDoubleComplex)
 template <>
@@ -723,6 +749,11 @@ void H2Matrix<std::complex<double>>::factorize(const ColCommMPI& comm) {
 }
 
 template <>
+void H2Matrix<std::complex<double>>::factorize(const ColCommMPI& comm, const cublasComputeType_t COMP) {
+  factorize(comm);
+}
+
+template <>
 void H2Matrix<std::complex<float>>::factorize(const ColCommMPI& comm) {
   // the first cell for this process on this level
   long long ibegin = comm.oLocal();
@@ -737,6 +768,25 @@ void H2Matrix<std::complex<float>>::factorize(const ColCommMPI& comm) {
   H2Factorize<cuComplex> fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
   fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
   fac.compute();
+  fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
+  cudaStreamDestroy(stream);
+}
+
+template <>
+void H2Matrix<std::complex<float>>::factorize(const ColCommMPI& comm, const cublasComputeType_t COMP) {
+  // the first cell for this process on this level
+  long long ibegin = comm.oLocal();
+  // the number of cells for this process on this level
+  long long nodes = comm.lenLocal();
+  // the maximum dimension on this level
+  long long dims_max = *std::max_element(Dims.begin(), Dims.end());
+
+  cudaStream_t stream;
+  cudaStreamCreate(&stream);
+
+  H2Factorize<cuComplex> fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
+  fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
+  fac.compute(COMP);
   fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
   cudaStreamDestroy(stream);
 }
