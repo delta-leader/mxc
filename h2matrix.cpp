@@ -720,7 +720,7 @@ void H2Matrix<float>::factorize(const ColCommMPI& comm, const cublasComputeType_
   cudaStream_t stream;
   cudaStreamCreate(&stream);
 
-  H2Factorize<float> fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
+  H2Factorize2<float> fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
   fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
   fac.compute(COMP);
   fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());

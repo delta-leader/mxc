@@ -46,7 +46,7 @@ public:
     bodies: the points
     upper_level: the approximation from the upper level
   */
-  WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, const double epsilon, const long long max_rank, const long long cell_begin, const long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level, const bool fix_rank);
+  WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, const double epsilon, long long max_rank, const long long cell_begin, const long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level, const bool fix_rank);
 
 
   /*

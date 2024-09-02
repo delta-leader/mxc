@@ -38,8 +38,8 @@ int main(int argc, char* argv[]) {
   long long Nleaf = (long long)1 << levels;
   // the number of cells (i.e. nodes) in the cluster tree
   long long ncells = Nleaf + Nleaf - 1;
-  for (size_t t=0; t<comp.size(); ++t) {
-  std::vector<double> params = {0.1, 0.5, 1, 2, 5, 10, 50, 100};
+  //for (size_t t=0; t<comp.size(); ++t) {
+  std::vector<double> params = {100}; //{0.1, 0.5, 1, 2, 5, 10, 50, 100};
   std::vector<double> conds(params.size());
   std::vector<double> approx(params.size());
   std::vector<double> consterr(params.size());
@@ -141,9 +141,9 @@ int main(int argc, char* argv[]) {
     //std::cout << cerr << std::endl;
     //std::cout << approx_err << std::endl;
     
-    //std::cout << "Condition #: " << cond <<std::endl;
-    //std::cout << "Construct Err: " << cerr << std::endl;
-    //std::cout << "Approximation Err: " << approx_err << std::endl;
+    std::cout << "Condition #: " << cond <<std::endl;
+    std::cout << "Construct Err: " << cerr << std::endl;
+    std::cout << "Approximation Err: " << approx_err << std::endl;
     //std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     //std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     //std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
@@ -174,17 +174,18 @@ int main(int argc, char* argv[]) {
   matM.matVecMul(&B_low[0]);
   approx_err = computeRelErr(lenX, &Vector_dt<DT>(B_low)[0], &B_ref[0]);
   consterr[i] = approx_err;
+  std::cout<<"Before fact"<<std::endl;
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
   //matM.factorizeM();
-  matM.factorizeM(comp[t]);
-
+  matM.factorizeM(comp[0]);
+  
   //Vector_dt<DT_low> test(Ones);
   //matM.matVecMul(&test[0]);
   //approx_err = computeRelErr(lenX, &Vector_dt<DT>(test)[0], &B_ref[0]);
-  //std::cout<<"After fact "<<approx_err<<std::endl;
+  std::cout<<"After fact "<<approx_err<<std::endl;
   
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -218,10 +219,10 @@ int main(int argc, char* argv[]) {
     //std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
     //std::cout << "H^2-Matrix Substitution Err: " << serr_test << std::endl;
 
-    //std::cout << cerr_m << std::endl;
-    //std::cout << approx_err << std::endl;
-    //std::cout << serr << std::endl;
-    //std::cout << serr_test << std::endl;
+    std::cout << cerr_m << std::endl;
+    std::cout << approx_err << std::endl;
+    std::cout << serr << std::endl;
+    std::cout << serr_test << std::endl;
   }
   
   B.reset();
@@ -237,9 +238,9 @@ int main(int argc, char* argv[]) {
   ir_f[i] = computeRelErr(lenX, &B[0], &Ones[0]);
 
   if (mpi_rank == 0) {
-    //std::cout << matA.resid[iters] << std::endl;
-    //std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
-    //std::cout << iters << std::endl;
+    std::cout << matA.resid[iters] << std::endl;
+    std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
+    std::cout << iters << std::endl;
     //std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
     //std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     //std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
@@ -262,9 +263,9 @@ int main(int argc, char* argv[]) {
   gmres_f[i] = computeRelErr(lenX, &B[0], &Ones[0]);
 
   if (mpi_rank == 0) {
-    //std::cout << matA.resid[iters] << std::endl;
-    //std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
-    //std::cout << iters << std::endl;
+    std::cout << matA.resid[iters] << std::endl;
+    std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
+    std::cout << iters << std::endl;
     //std::cout << "GMRES-IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
     //std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     //std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
@@ -276,15 +277,15 @@ int main(int argc, char* argv[]) {
   matM_test.free_all_comms();
   //std::cout<<std::endl;
   }
-  std::vector<std::vector<double>> results = {params, conds, approx, consterr, solverr, ir_b, ir_f, gmres_b, gmres_f};
+  /*std::vector<std::vector<double>> results = {params, conds, approx, consterr, solverr, ir_b, ir_f, gmres_b, gmres_f};
   std::cout<<Nbody<<std::endl;
   for (size_t i=0; i<results.size(); ++i){
     for (size_t j=0; j<results[i].size(); ++j)
       std::cout<<results[i][j]<<", ";
     std::cout<<std::endl;
   }
-  std::cout<<std::endl;
-  }
+  std::cout<<std::endl;*/
+  //}
   MPI_Finalize();
   return 0;
 }
