@@ -10,8 +10,8 @@
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
-  //typedef std::complex<double> DT; typedef std::complex<float> DT_low;
-  typedef double DT; typedef float DT_low;
+  typedef std::complex<double> DT; typedef std::complex<float> DT_low;
+  //typedef double DT; typedef float DT_low;
   std::vector<cublasComputeType_t> comp = {CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_COMPUTE_32F_FAST_16BF};
   //COMP = CUBLAS_COMPUTE_32F_FAST_TF32;
   //const auto COMP = CUBLAS_COMPUTE_32F_FAST_16BF;
@@ -38,8 +38,8 @@ int main(int argc, char* argv[]) {
   long long Nleaf = (long long)1 << levels;
   // the number of cells (i.e. nodes) in the cluster tree
   long long ncells = Nleaf + Nleaf - 1;
-  //for (size_t t=0; t<comp.size(); ++t) {
-  std::vector<double> params = {100}; //{0.1, 0.5, 1, 2, 5, 10, 50, 100};
+  for (size_t t=0; t<comp.size(); ++t) {
+  std::vector<double> params = {1};//{1, 2, 5, 10, 20, 50};
   std::vector<double> conds(params.size());
   std::vector<double> approx(params.size());
   std::vector<double> consterr(params.size());
@@ -56,9 +56,9 @@ int main(int argc, char* argv[]) {
   //Laplace3D<DT> eval(params[i]);
   //Yukawa3D<DT> eval(params[i], params[j]);
   //Gaussian<DT> eval(params[i]);
-  IMQ<DT> eval(params[i]);
+  //IMQ<DT> eval(params[i]);
   //Matern3<DT> eval(params[i]);
-  //Helmholtz3D<DT> eval(1., 4.);
+  Helmholtz3D<DT> eval(params[i], 1.);
   
   // body contains the points
   // 3 corresponds to the dimension
@@ -174,18 +174,17 @@ int main(int argc, char* argv[]) {
   matM.matVecMul(&B_low[0]);
   approx_err = computeRelErr(lenX, &Vector_dt<DT>(B_low)[0], &B_ref[0]);
   consterr[i] = approx_err;
-  std::cout<<"Before fact"<<std::endl;
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
-  //matM.factorizeM();
-  matM.factorizeM(comp[0]);
+  matM.factorizeM();
+  //matM.factorizeM(comp[t]);
   
   //Vector_dt<DT_low> test(Ones);
   //matM.matVecMul(&test[0]);
   //approx_err = computeRelErr(lenX, &Vector_dt<DT>(test)[0], &B_ref[0]);
-  std::cout<<"After fact "<<approx_err<<std::endl;
+  //std::cout<<"After fact "<<approx_err<<std::endl;
   
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -212,17 +211,17 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     //std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
-    //std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
-    //std::cout << "H^2-Preconditi Approximation Err: " << approx_err << std::endl;
+    std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
+    std::cout << "H^2-Preconditi Approximation Err: " << approx_err << std::endl;
     //std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     //std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
-    //std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
-    //std::cout << "H^2-Matrix Substitution Err: " << serr_test << std::endl;
+    std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
+    std::cout << "H^2-Matrix Substitution Err: " << serr_test << std::endl;
 
-    std::cout << cerr_m << std::endl;
-    std::cout << approx_err << std::endl;
-    std::cout << serr << std::endl;
-    std::cout << serr_test << std::endl;
+    //std::cout << cerr_m << std::endl;
+    //std::cout << approx_err << std::endl;
+    //std::cout << serr << std::endl;
+    //std::cout << serr_test << std::endl;
   }
   
   B.reset();
@@ -241,7 +240,7 @@ int main(int argc, char* argv[]) {
     std::cout << matA.resid[iters] << std::endl;
     std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     std::cout << iters << std::endl;
-    //std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
+    std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
     //std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     //std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
     //for (long long i = 0; i <= matA.iters; i++)
@@ -263,9 +262,9 @@ int main(int argc, char* argv[]) {
   gmres_f[i] = computeRelErr(lenX, &B[0], &Ones[0]);
 
   if (mpi_rank == 0) {
-    std::cout << matA.resid[iters] << std::endl;
-    std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
-    std::cout << iters << std::endl;
+    //std::cout << matA.resid[iters] << std::endl;
+    //std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
+    //std::cout << iters << std::endl;
     //std::cout << "GMRES-IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
     //std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     //std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
@@ -277,15 +276,15 @@ int main(int argc, char* argv[]) {
   matM_test.free_all_comms();
   //std::cout<<std::endl;
   }
-  /*std::vector<std::vector<double>> results = {params, conds, approx, consterr, solverr, ir_b, ir_f, gmres_b, gmres_f};
+  std::vector<std::vector<double>> results = {params, conds, approx, consterr, solverr, ir_b, ir_f, gmres_b, gmres_f};
   std::cout<<Nbody<<std::endl;
   for (size_t i=0; i<results.size(); ++i){
     for (size_t j=0; j<results[i].size(); ++j)
       std::cout<<results[i][j]<<", ";
     std::cout<<std::endl;
   }
-  std::cout<<std::endl;*/
-  //}
+  std::cout<<std::endl;
+  }
   MPI_Finalize();
   return 0;
 }

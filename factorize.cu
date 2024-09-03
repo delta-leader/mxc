@@ -9,6 +9,13 @@
 #include <cuda_fp16.h>
 #include <iostream>
 
+inline void checkCublasStatus(cublasStatus_t status) {
+    if (status != CUBLAS_STATUS_SUCCESS) {
+        printf("cuBLAS API failed with status %d\n", status);
+        throw std::logic_error("cuBLAS API failed");
+    }
+}
+
 __global__ void tofloat(const __half * __restrict__ in, float * __restrict__ out, const long long N){
   size_t idx = threadIdx.x+blockDim.x*blockIdx.x;
   if (idx < N)
@@ -707,6 +714,9 @@ H2Factorize2<DT>::H2Factorize2(long long LD, long long lenA, long long lenQ, cud
   cublasH = nullptr;
   cublasCreate(&cublasH);
   cublasSetStream(cublasH, stream);
+  
+  cublasLtH = nullptr;
+  cublasLtCreate(&cublasLtH);
 
   long long bsize = LD * LD * sizeof(DT);
   cudaMalloc(reinterpret_cast<void**>(&Adata), bsize * lenA);
@@ -755,6 +765,8 @@ H2Factorize2<DT>::~H2Factorize2() {
   cudaFree(V_R);
   cudaFree(ipiv);
   cudaFree(info);
+  cublasDestroy(cublasH);
+  cublasLtDestroy(cublasLtH);
 }
 
 template <typename DT> template <typename OT>
@@ -1015,10 +1027,42 @@ void H2Factorize2<float>::compute(const cublasComputeType_t COMP) {
   float one = 1, zero = 0, minus_one = -1;
   int info_host = 0;
 
-  const auto ALGO = CUBLAS_GEMM_DEFAULT;
+  cublasLtMatmulDesc_t matmulDesc = NULL;
+  checkCublasStatus(cublasLtMatmulDescCreate(&matmulDesc, CUBLAS_COMPUTE_32F, CUDA_R_32F));
+  const cublasOperation_t TRANS = CUBLAS_OP_T;
+  const cublasOperation_t NO_TRANS = CUBLAS_OP_N;
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(matmulDesc, CUBLASLT_MATMUL_DESC_TRANSA, &NO_TRANS, sizeof(TRANS)));
+  checkCublasStatus(cublasLtMatmulDescSetAttribute(matmulDesc, CUBLASLT_MATMUL_DESC_TRANSB, &TRANS, sizeof(TRANS)));
+  cublasLtMatrixLayout_t Adesc = NULL, Bdesc = NULL, Cdesc = NULL;
+  checkCublasStatus(cublasLtMatrixLayoutCreate(&Adesc, CUDA_R_32F, N, N, N));
+  checkCublasStatus(cublasLtMatrixLayoutCreate(&Bdesc, CUDA_R_32F, N, N, N));
+  checkCublasStatus(cublasLtMatrixLayoutCreate(&Cdesc, CUDA_R_32F, N, N, N));
+
+  // create preference handle; here we could use extra attributes to disable tensor ops or to make sure algo selected
+  // will work with badly aligned A, B, C; here for simplicity we just assume A,B,C are always well aligned (e.g.
+  // directly come from cudaMalloc)
+  cublasLtMatmulPreference_t preference = NULL;
+  checkCublasStatus(cublasLtMatmulPreferenceCreate(&preference));
+  size_t workspaceSize = 1024 * 1024 * 4;
+  void* workspace;
+  cudaMalloc(&workspace, workspaceSize);
+  checkCublasStatus(cublasLtMatmulPreferenceSetAttribute(preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES, &workspaceSize, sizeof(workspaceSize)));
+  // we just need the best available heuristic to try and run matmul. There is no guarantee this will work, e.g. if A
+  // is badly aligned, you can request more (e.g. 32) algos and try to run them one by one until something works
+  int returnedResults                             = 0;
+  cublasLtMatmulHeuristicResult_t heuristicResult = {};
+  checkCublasStatus(cublasLtMatmulAlgoGetHeuristic(cublasLtH, matmulDesc, Adesc, Bdesc, Cdesc, Cdesc, preference, 1, &heuristicResult, &returnedResults));
+  if (returnedResults == 0) {
+    checkCublasStatus(CUBLAS_STATUS_NOT_SUPPORTED);
+  }
+
   for (long long i=0; i<D; ++i) {
-    cublasSgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, Uptr[i], N, Aptr_SS[i], N, &zero, Bptr[i], N);
-    cublasSgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, Uptr[i], N, Bptr[i], N, &zero, Aptr_SS[i], N);
+    checkCublasStatus(cublasLtMatmul(cublasLtH, matmulDesc, &one, Uptr[i], Adesc, Aptr_SS[i], Bdesc, &zero, Bptr[i], Cdesc, Bptr[i], Cdesc,
+                                     &heuristicResult.algo, workspace, workspaceSize, stream));
+    //cublasSgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, Uptr[i], N, Aptr_SS[i], N, &zero, Bptr[i], N);
+    checkCublasStatus(cublasLtMatmul(cublasLtH, matmulDesc, &one, Uptr[i], Adesc, Bptr[i], Cdesc, &zero, Aptr_SS[i], Bdesc, Aptr_SS[i], Bdesc,
+                                     &heuristicResult.algo, workspace, workspaceSize, stream));
+    //cublasSgemm(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, Uptr[i], N, Bptr[i], N, &zero, Aptr_SS[i], N);
   }
   //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &U[0], N, &A_SS[0], N, &zero, &B[0], N, 1);
   //cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(U), CUDA_R_32F, N, reinterpret_cast<void**>(A_SS), CUDA_R_32F, N, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(B), CUDA_R_32F, N, D, COMP, ALGO);
