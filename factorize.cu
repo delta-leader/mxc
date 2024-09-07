@@ -334,8 +334,8 @@ void H2Factorize<cuComplex>::compute(const cublasComputeType_t COMP) {
 
   for (int64_t i = D; i < lenA; i += maxQ) {
     int64_t len = std::min(lenA - i, maxQ);
-    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(&U[i]), CUDA_R_32F, N, reinterpret_cast<void**>(&A_SS[i]), CUDA_C_32F, N, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(B), CUDA_C_32F, N, len, COMP, ALGO);
-    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(&V[i]), CUDA_R_32F, N, reinterpret_cast<void**>(B), CUDA_C_32F, N, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(&A_SS[i]), CUDA_C_32F, N, len, COMP, ALGO);
+    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(&U[i]), CUDA_C_32F, N, reinterpret_cast<void**>(&A_SS[i]), CUDA_C_32F, N, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(B), CUDA_C_32F, N, len, COMP, ALGO);
+    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(&V[i]), CUDA_C_32F, N, reinterpret_cast<void**>(B), CUDA_C_32F, N, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(&A_SS[i]), CUDA_C_32F, N, len, COMP, ALGO);
   }
 
   cudaStreamSynchronize(stream);

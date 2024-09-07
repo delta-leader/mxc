@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
   // the number of cells (i.e. nodes) in the cluster tree
   long long ncells = Nleaf + Nleaf - 1;
   for (size_t t=0; t<comp.size(); ++t) {
-  std::vector<double> params = {1};//{1, 2, 5, 10, 20, 50};
+  std::vector<double> params = {1, 2, 5, 10, 20, 50};
   std::vector<double> conds(params.size());
   std::vector<double> approx(params.size());
   std::vector<double> consterr(params.size());
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
   //Gaussian<DT> eval(params[i]);
   //IMQ<DT> eval(params[i]);
   //Matern3<DT> eval(params[i]);
-  Helmholtz3D<DT> eval(params[i], 1.);
+  Helmholtz3D<DT> eval(params[i], 0.1);
   
   // body contains the points
   // 3 corresponds to the dimension
@@ -70,8 +70,8 @@ int main(int argc, char* argv[]) {
   std::vector<Cell> cell(ncells);
 
   // create the points (i.e. bodies)
-  //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
-  uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
+  mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
+  //uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
   //uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   //build the tree (i.e. set the values in the cell array)
@@ -141,9 +141,9 @@ int main(int argc, char* argv[]) {
     //std::cout << cerr << std::endl;
     //std::cout << approx_err << std::endl;
     
-    std::cout << "Condition #: " << cond <<std::endl;
-    std::cout << "Construct Err: " << cerr << std::endl;
-    std::cout << "Approximation Err: " << approx_err << std::endl;
+    //std::cout << "Condition #: " << cond <<std::endl;
+    //std::cout << "Construct Err: " << cerr << std::endl;
+    //std::cout << "Approximation Err: " << approx_err << std::endl;
     //std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     //std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     //std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
@@ -178,8 +178,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
-  matM.factorizeM();
-  //matM.factorizeM(comp[t]);
+  //matM.factorizeM();
+  matM.factorizeM(comp[t]);
   
   //Vector_dt<DT_low> test(Ones);
   //matM.matVecMul(&test[0]);
@@ -211,12 +211,12 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     //std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
-    std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
-    std::cout << "H^2-Preconditi Approximation Err: " << approx_err << std::endl;
+    //std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
+    //std::cout << "H^2-Preconditi Approximation Err: " << approx_err << std::endl;
     //std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     //std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
-    std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
-    std::cout << "H^2-Matrix Substitution Err: " << serr_test << std::endl;
+    //std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
+    //std::cout << "H^2-Matrix Substitution Err: " << serr_test << std::endl;
 
     //std::cout << cerr_m << std::endl;
     //std::cout << approx_err << std::endl;
@@ -237,10 +237,10 @@ int main(int argc, char* argv[]) {
   ir_f[i] = computeRelErr(lenX, &B[0], &Ones[0]);
 
   if (mpi_rank == 0) {
-    std::cout << matA.resid[iters] << std::endl;
-    std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
-    std::cout << iters << std::endl;
-    std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
+    //std::cout << matA.resid[iters] << std::endl;
+    //std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
+    //std::cout << iters << std::endl;
+    //std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
     //std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     //std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
     //for (long long i = 0; i <= matA.iters; i++)

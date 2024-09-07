@@ -15,4 +15,4 @@ module load eigen/3.4
 cd build
 make -j
 
-mpirun -n 1 ./main.app 2048 1 128 100 1e-12 hss >> helmholtz_square_2048_hss.txt
+mpirun -n 1 ./main.app 2048 1 128 100 1e-12 hss >> helmholtz_circle_2048_hss.txt
