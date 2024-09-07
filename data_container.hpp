@@ -18,11 +18,11 @@ public:
   }
 
   inline T* operator[](long long index) {
-    return data.data() + offsets[index];
+    return data.data() + offsets.at(index);
   }
 
   inline const T* operator[](long long index) const {
-    return data.data() + offsets[index];
+    return data.data() + offsets.at(index);
   }
 
   inline long long size() const {

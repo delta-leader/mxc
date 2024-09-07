@@ -24,27 +24,27 @@ public:
 
 class H2Matrix {
 private:
-  std::vector<long long> DimsLr;
   std::vector<long long> UpperStride;
-  MatrixDataContainer<std::complex<double>> Q;
-  MatrixDataContainer<std::complex<double>> R;
   MatrixDataContainer<double> S;
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
   std::vector<std::complex<double>*> C;
 
-  std::vector<long long> ARows;
-  std::vector<long long> ACols;
-  MatrixDataContainer<std::complex<double>> A;
   std::vector<std::complex<double>*> NA;
-  std::vector<int> Ipivots;
-
   std::vector<std::complex<double>*> NX;
   std::vector<std::complex<double>*> NY;
 
 public:
   std::vector<long long> Dims;
+  std::vector<long long> DimsLr;
+
+  std::vector<long long> ARows;
+  std::vector<long long> ACols;
+  MatrixDataContainer<std::complex<double>> Q;
+  MatrixDataContainer<std::complex<double>> R;
+  MatrixDataContainer<std::complex<double>> A;
+
   MatrixDataContainer<std::complex<double>> X;
   MatrixDataContainer<std::complex<double>> Y;
   

@@ -62,7 +62,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
     else
       gen_matrix(eval, N, M, Fbodies, Xbodies, RX.data());
     
-    Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(RX);
+    Eigen::ColPivHouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> rrqr(RX);
     rank = std::min(K, (long long)std::floor(epi));
     if (epi < 1.) {
       rrqr.setThreshold(epi);
@@ -78,7 +78,8 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
       Eigen::Map<Eigen::MatrixXd> body(Xbodies, 3, M);
       body = body * rrqr.colsPermutation();
 
-      Eigen::HouseholderQR<Eigen::MatrixXcd> qr = (A.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * C.topRows(rank).transpose())).householderQr();
+      RX = A.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * C.topRows(rank).transpose());
+      Eigen::HouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> qr(RX);
       A = qr.householderQ();
       C = Eigen::MatrixXcd::Zero(M, M);
       C.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
@@ -167,7 +168,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   A = MatrixDataContainer<std::complex<double>>(ARows[nodes], Asizes.data());
-  Ipivots = std::vector<int>(std::reduce(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes)));
 
   if (std::reduce(Dims.begin(), Dims.end())) {
     typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
@@ -351,26 +351,12 @@ void H2Matrix::resetX() {
   std::fill(X[0], X[0] + X.size(), std::complex<double>(0., 0.));
   std::fill(Y[0], Y[0] + Y.size(), std::complex<double>(0., 0.));
 }
-#include <factorize.cuh>
-#include <cuda_runtime_api.h>
 
 void H2Matrix::factorize(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
-
-  cudaStream_t stream;
-  cudaStreamCreate(&stream);
-
-  H2Factorize fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
-  fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
-  fac.compute();
-  fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
-  cudaStreamDestroy(stream);
-
-  /*typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
-  std::vector<long long> ipiv_offsets(nodes);
-  std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
+  typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
 
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
@@ -384,16 +370,12 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     V.noalias() = Ui.adjoint() * Aii.transpose();
     Aii.noalias() = Ui.adjoint() * V.transpose();
 
-    Eigen::PartialPivLU<Eigen::MatrixXcd> plu = Aii.bottomRightCorner(Mr, Mr).lu();
     Eigen::MatrixXcd b(dims_max, M);
-    Eigen::Map<Eigen::VectorXi> ipiv(Ipivots.data() + ipiv_offsets[i], Mr);
-
-    Aii.bottomRightCorner(Mr, Mr) = plu.matrixLU();
-    ipiv = plu.permutationP().indices();
-    V.bottomRows(Mr) = plu.solve(Ui.rightCols(Mr).adjoint());
+    Eigen::HouseholderQR<Eigen::MatrixXcd> fac(Aii.bottomRightCorner(Mr, Mr));
+    V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
 
     if (0 < Ms) {
-      Aii.bottomLeftCorner(Mr, Ms) = plu.solve(Aii.bottomLeftCorner(Mr, Ms));
+      Aii.bottomLeftCorner(Mr, Ms) = fac.solve(Aii.bottomLeftCorner(Mr, Ms));
       Aii.topLeftCorner(Ms, Ms) -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
       V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
     }
@@ -409,7 +391,7 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
         b.topRows(N) = Uj.adjoint() * Aij.transpose();
         Aij.noalias() = V * b.topRows(N).transpose();
       }
-  }*/
+  }
 }
 
 void H2Matrix::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm) {
@@ -437,31 +419,20 @@ void H2Matrix::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA,
 void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
-  std::vector<long long> ipiv_offsets(nodes);
-  std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
 
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
   comm.level_merge(X[0], X.size());
   for (long long i = 0; i < nodes; i++) {
-    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
 
     if (0 < Mr) {
       Vector_t x(X[i + ibegin], M);
-      Vector_t y(Y[i + ibegin], M);
-      Matrix_t q(Q[i + ibegin], M, M);
-      Matrix_t Aii(A[diag], M, M);
-      Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
-      
-      y.noalias() = q.adjoint() * x;
-      y.bottomRows(Mr).applyOnTheLeft(p);
-      Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
-      Aii.bottomRightCorner(Mr, Mr).triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
-      x = y;
+      Matrix_t q(R[i + ibegin], M, M);
+      x = q * x;
     }
   }
 

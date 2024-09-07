@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <cmath>
 
+#include <cuda_runtime_api.h>
+#include <factorize.cuh>
+
 H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
 }
 
@@ -69,6 +72,38 @@ void H2MatrixSolver::factorizeM() {
     A[l].factorize(comm[l]);
     if (0 < l)
       A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+  }
+}
+
+void H2MatrixSolver::factorizeDeviceM(int device) {
+  long long dims_max = 0, lenA = 0, lenQ = 0;
+  for (long long l = levels; l >= 0; l--) {
+    dims_max = std::max(dims_max, *std::max_element(A[l].Dims.begin(), A[l].Dims.end()));
+    lenA = std::max(lenA, (long long)A[l].ACols.size());
+    lenQ = std::max(lenQ, comm[l].lenNeighbors());
+  }
+
+  if (cudaSetDevice(device) == cudaSuccess) {
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    H2Factorize fac(dims_max, lenA, lenQ, stream);
+
+    for (long long l = levels; l >= 0; l--) {
+      long long ibegin = comm[l].oLocal();
+      long long nodes = comm[l].lenLocal();
+      long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
+      long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
+
+      fac.setData(dim, rank, ibegin, nodes, A[l].ARows.data(), A[l].ACols.data(), A[l].A, A[l].Q);
+      fac.compute();
+      fac.getResults(ibegin, nodes, A[l].A, A[l].R);
+      
+      if (0 < l)
+        A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+    }
+
+    cudaStreamSynchronize(stream);
+    cudaStreamDestroy(stream);
   }
 }
 

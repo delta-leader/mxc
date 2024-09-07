@@ -22,6 +22,7 @@ public:
 
   void matVecMul(std::complex<double> X[]);
   void factorizeM();
+  void factorizeDeviceM(int device);
   void solvePrecondition(std::complex<double> X[]);
   void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
 

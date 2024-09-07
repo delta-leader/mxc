@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(0.03);
-  Helmholtz3D eval(1., 4.);
+  Helmholtz3D eval(4., .1);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody);
@@ -74,8 +74,10 @@ int main(int argc, char* argv[]) {
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
-  int mpi_rank = 0;
+  int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
   if (mpi_rank == 0) {
     std::cout << "Construct Err: " << cerr << std::endl;
     std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
@@ -107,6 +109,7 @@ int main(int argc, char* argv[]) {
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
   matM.factorizeM();
+  //matM.factorizeDeviceM(mpi_rank % mpi_size);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -146,8 +149,6 @@ int main(int argc, char* argv[]) {
     for (long long i = 0; i <= matA.iters; i++)
       std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
 
-    int mpi_size = 0;
-    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     if (csv != nullptr)
       write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
         h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
