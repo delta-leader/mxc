@@ -426,17 +426,16 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
   comm.level_merge(X[0], X.size());
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
-    long long Ms = DimsLr[i + ibegin];
-    long long Mr = M - Ms;
 
-    if (0 < Mr) {
+    if (0 < M) {
       Vector_t x(X[i + ibegin], M);
+      Vector_t y(Y[i + ibegin], M);
       Matrix_t q(R[i + ibegin], M, M);
-      x = q * x;
+      y.noalias() = q * x;
     }
   }
 
-  comm.neighbor_bcast(X);
+  comm.neighbor_bcast(Y);
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
@@ -444,6 +443,23 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
     long long Mr = M - Ms;
 
     Vector_t x(X[i + ibegin], M);
+    Vector_t y(Y[i + ibegin], M);
+    x = y;
+
+    if (0 < Mr)
+      for (long long ij = ARows[i]; ij < diag; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
+
+        if (0 < Nr) {
+          Vector_t xj(Y[j], N);
+          Matrix_t Aij(A[ij], M, N);
+          x.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        }
+      }
+
     if (0 < Ms) {
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
@@ -452,39 +468,13 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
         long long Nr = N - Ns;
 
         if (0 < Nr) {
-          Vector_t xj(X[j], N);
+          Vector_t xj(Y[j], N);
           Matrix_t Aij(A[ij], M, N);
           x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
         }
       }
       Vector_t xo(NX[i + ibegin], Ms);
       xo = x.topRows(Ms);
-    }
-
-    if (0 < Mr) {
-      Vector_t y(Y[i + ibegin], M);
-      y = x;
-      for (long long ij = ARows[i]; ij < diag; ij++) {
-        long long j = ACols[ij];
-        long long N = Dims[j];
-        long long Ns = DimsLr[j];
-        long long Nr = N - Ns;
-
-        if (0 < Nr) {
-          Vector_t xj(X[j], N);
-          Matrix_t Aij(A[ij], M, N);
-          y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
-        }
-      }
-    }
-  }
-
-  for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    if (0 < M) {
-      Vector_t x(X[i + ibegin], M);
-      Vector_t y(Y[i + ibegin], M);
-      x = y;
     }
   }
 }
@@ -496,7 +486,18 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    long long Ms = DimsLr[i + ibegin];
+
+    Vector_t x(X[i + ibegin], M);
+    if (0 < Ms) {
+      Vector_t xo(NX[i + ibegin], Ms);
+      x.topRows(Ms) = xo;
+    }
+  }
   comm.neighbor_bcast(X);
+
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
@@ -505,9 +506,9 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
 
     Vector_t x(X[i + ibegin], M);
     Vector_t y(Y[i + ibegin], M);
+    y = x;
 
     if (0 < Mr) {
-      y.bottomRows(Mr) = x.bottomRows(Mr);
       for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
         long long N = Dims[j];
@@ -527,16 +528,11 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
         long long Ns = DimsLr[j];
 
         if (0 < Ns) {
-          Vector_t xo(NX[j], Ns);
+          Vector_t xj(X[j], N);
           Matrix_t Aij(A[ij], M, N);
-          y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xo;
+          y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xj.topRows(Ns);
         }
       }
-    }
-
-    if (0 < Ms) {
-      Vector_t xo(NX[i + ibegin], Ms);
-      y.topRows(Ms) = xo;
     }
   }
 
@@ -549,6 +545,4 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
       x.noalias() = q.conjugate() * y;
     }
   }
-
-  comm.neighbor_bcast(X);
 }
