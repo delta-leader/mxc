@@ -3,12 +3,14 @@
 #include <comm-mpi.hpp>
 #include <kernel.hpp>
 
+#include <algorithm>
+#include <cmath>
+
 #include <mkl.h>
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/LU>
-#include <algorithm>
-#include <cmath>
+#include <Eigen/SparseCore>
 
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
   lbegin(lbegin), lend(lbegin + len), M(len) {
@@ -141,7 +143,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   X = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
   Y = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
   NX = std::vector<std::complex<double>*>(xlen, nullptr);
-  NY = std::vector<std::complex<double>*>(xlen, nullptr);
 
   for (long long i = 0; i < xlen; i++) {
     long long ci = comm.iGlobal(i);
@@ -150,7 +151,6 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     for (long long y = child; y < cend; y++) {
       long long offset_y = std::reduce(&lowerA.DimsLr[child], &lowerA.DimsLr[y]);
       lowerA.NX[y] = X[i] + offset_y;
-      lowerA.NY[y] = Y[i] + offset_y;
     }
   }
 
@@ -281,7 +281,6 @@ void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   comm.level_merge(X[0], X.size());
-  comm.neighbor_bcast(X);
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
@@ -291,8 +290,10 @@ void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
       Vector_t xo(NX[i + ibegin], N);
       Matrix_t q(Q[i + ibegin], M, N);
       xo.noalias() = q.transpose() * x;
+      x.topRows(N) = xo;
     }
   }
+  comm.neighbor_bcast(X);
 }
 
 void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
@@ -307,19 +308,20 @@ void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
     long long M = Dims[i + ibegin];
     long long K = DimsLr[i + ibegin];
     if (0 < K) {
-      Vector_t y(Y[i + ibegin], M);
-      Vector_t yo(NY[i + ibegin], K);
+      Eigen::VectorXcd z = Eigen::VectorXcd::Zero(K);
 
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         long long j = CCols[ij];
         long long N = DimsLr[j];
 
-        Vector_t xo(NX[j], N);
+        Vector_t x(X[j], N);
         Matrix_t c(C[ij], K, N, Stride_t(UpperStride[i], 1));
-        yo.noalias() += c * xo;
+        z.noalias() += c * x;
       }
+
       Matrix_t q(Q[i + ibegin], M, K, Stride_t(M, 1));
-      y.noalias() = q * yo;
+      Vector_t y(Y[i + ibegin], M);
+      y.noalias() += q * z;
     }
   }
 }
@@ -330,6 +332,7 @@ void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
+  comm.neighbor_bcast(X);
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];

@@ -33,7 +33,6 @@ private:
 
   std::vector<std::complex<double>*> NA;
   std::vector<std::complex<double>*> NX;
-  std::vector<std::complex<double>*> NY;
 
 public:
   std::vector<long long> Dims;
