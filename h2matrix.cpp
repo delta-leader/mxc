@@ -283,16 +283,22 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   }
 }
 
-void H2Matrix::upwardCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA) {
+void H2Matrix::upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA) {
   long long NZ = LowerX.size();
   long long ibegin = comm.oLocal();
-  vector_gather(LowerX.data(), LowerX.data() + NZ, lowerA.X[0], X[ibegin]);
+  const std::complex<double>* input = src == 'X' ? lowerA.X[0] : lowerA.Y[0];
+  std::complex<double>* output = dst == 'X' ? X[ibegin] : Y[ibegin];
+
+  vector_gather(LowerX.data(), LowerX.data() + NZ, input, output);
 }
 
-void H2Matrix::downwardCopyNext(const H2Matrix& upperA, const ColCommMPI& upperComm) {
+void H2Matrix::downwardCopyNext(char src, char dst, const H2Matrix& upperA, const ColCommMPI& upperComm) {
+  long long NZ = upperA.LowerX.size();
   long long ibegin = upperComm.oLocal();
-  long long nodes = upperComm.lenLocal();
-  vector_scatter(upperA.X[ibegin], upperA.X[ibegin + nodes], upperA.LowerX.data(), X[0]);
+  const std::complex<double>* input = src == 'X' ? upperA.X[ibegin] : upperA.Y[ibegin];
+  std::complex<double>* output = dst == 'X' ? X[0] : Y[0];
+
+  vector_scatter(input, input + NZ, upperA.LowerX.data(), output);
 }
 
 void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
@@ -326,20 +332,18 @@ void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
     long long M = Dims[i + ibegin];
     long long K = DimsLr[i + ibegin];
     if (0 < K) {
-      Eigen::VectorXcd z = Eigen::VectorXcd::Zero(K);
-
+      Vector_t y(Y[i + ibegin], M);
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         long long j = CCols[ij];
         long long N = DimsLr[j];
 
         Vector_t x(X[j], N);
         Matrix_t c(C[ij], K, N, Stride_t(UpperStride[i], 1));
-        z.noalias() += c * x;
+        y.topRows(K).noalias() += c * x;
       }
 
       Matrix_t q(Q[i + ibegin], M, K, Stride_t(M, 1));
-      Vector_t y(Y[i + ibegin], M);
-      y.noalias() += q * z;
+      y = q * y.topRows(K);
     }
   }
 }

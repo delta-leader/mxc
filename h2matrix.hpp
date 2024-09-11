@@ -50,8 +50,8 @@ public:
   H2Matrix() {}
   H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
 
-  void upwardCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA);
-  void downwardCopyNext(const H2Matrix& upperA, const ColCommMPI& upperComm);
+  void upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA);
+  void downwardCopyNext(char src, char dst, const H2Matrix& upperA, const ColCommMPI& upperComm);
 
   void matVecUpwardPass(const ColCommMPI& comm);
   void matVecHorizontalandDownwardPass(const ColCommMPI& comm);
