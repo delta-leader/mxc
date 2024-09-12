@@ -10,7 +10,6 @@
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/LU>
-#include <Eigen/SparseCore>
 
 WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
   lbegin(lbegin), lend(lbegin + len), M(len) {

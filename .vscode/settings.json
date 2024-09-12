@@ -82,6 +82,7 @@
         "locale": "cpp",
         "__config": "cpp",
         "core": "cpp",
-        "ios": "cpp"
+        "ios": "cpp",
+        "shared_mutex": "cpp"
     }
 }

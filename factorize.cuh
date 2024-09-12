@@ -12,7 +12,7 @@ private:
   cublasHandle_t cublasH;
 
   long long maxA, maxQ;
-  long long lenD, lenA, bdim, rank;
+  long long lenD, lenA, bdim, rank, offsetD;
   cuDoubleComplex* Adata, *Bdata, *Udata, *Vdata;
   cuDoubleComplex** A_SS, **A_SR, **A_RS, **A_RR;
   cuDoubleComplex** B, **U, **V, **V_R;

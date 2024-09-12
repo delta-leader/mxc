@@ -3,7 +3,12 @@
 #include <algorithm>
 #include <numeric>
 #include <tuple>
-#include <mkl.h>
+
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+#include <thrust/gather.h>
+#include <thrust/transform.h>
+#include <thrust/complex.h>
 
 H2Factorize::H2Factorize(long long LD, long long lenA, long long lenQ, cudaStream_t stream) : maxA(lenA), maxQ(lenQ), stream(stream) {
   cublasH = nullptr;
@@ -64,13 +69,13 @@ void H2Factorize::setData(long long bdim, long long rank, long long D, long long
   long long block = bdim * bdim;
   lenD = M;
   lenA = std::min(maxA, A.nblocks());
+  offsetD = D;
   long long lenQ = std::min(maxQ, Q.nblocks());
   H2Factorize::bdim = bdim;
   H2Factorize::rank = rank;
 
-  MKL_Zomatcopy_batch_strided('C', 'C', bdim, bdim, std::complex<double>(1., 0.), Q[0], bdim, block, reinterpret_cast<std::complex<double>*>(hostA), bdim, block, lenQ);
+  std::copy(Q[0], Q[lenQ], reinterpret_cast<std::complex<double>*>(hostA));
   cudaMemcpy(Udata, hostA, block * lenQ * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice);
-  cudaMemcpy(Vdata, &Udata[D * block], block * M * sizeof(cuDoubleComplex), cudaMemcpyDeviceToDevice);
 
   std::copy(A[0], A[lenA], reinterpret_cast<std::complex<double>*>(hostA));
   cudaMemcpy(Adata, hostA, block * lenA * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice);
@@ -110,14 +115,37 @@ void H2Factorize::setData(long long bdim, long long rank, long long D, long long
   cudaMemcpy(V_R, hostP, M * sizeof(cuDoubleComplex*), cudaMemcpyHostToDevice);
 }
 
+struct swapXY {
+  long long M, B;
+  swapXY(long long M, long long B) : M(M), B(B) {}
+  __host__ __device__ long long operator()(long long i) const {
+    long long x = i / B; long long y = i - x * B;
+    long long z = y / M; long long w = y - z * M;
+    return x * B + z + w * M;
+  } 
+};
+
+struct conjugateDouble {
+  __host__ __device__ thrust::complex<double> operator()(const thrust::complex<double>& z) const {
+    return thrust::conj(z);
+  }
+};
+
 void H2Factorize::compute() {
   long long N = bdim, S = rank, R = N - S;
   long long D = lenD;
   cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.), minus_one = make_cuDoubleComplex(-1., 0.);
   int info_host = 0;
 
-  cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, A_SS, N, &zero, B, N, D);
-  cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, U, N, B, N, &zero, A_SS, N, D);
+  long long ST = N * N, Dsize = ST * D;
+  thrust::device_ptr<const thrust::complex<double>> u = thrust::device_ptr<const thrust::complex<double>>(reinterpret_cast<const thrust::complex<double>*>(&Udata[offsetD * ST]));
+  thrust::device_ptr<thrust::complex<double>> v = thrust::device_ptr<thrust::complex<double>>(reinterpret_cast<thrust::complex<double>*>(Vdata));
+
+  auto map = thrust::make_transform_iterator(thrust::make_counting_iterator(0ll), swapXY(N, ST));
+  thrust::gather(thrust::cuda::par.on(stream), map, map + Dsize, thrust::make_transform_iterator(u, conjugateDouble()), v);
+
+  cublasZgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, N, N, N, &one, U, N, A_SS, N, &zero, B, N, D);
+  cublasZgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, N, N, N, &one, U, N, B, N, &zero, A_SS, N, D);
 
   cublasZgetrfBatched(cublasH, R, A_RR, N, ipiv, info, D);
   cublasZgetrsBatched(cublasH, CUBLAS_OP_N, R, S, A_RR, N, ipiv, A_RS, N, &info_host, D);
@@ -127,7 +155,7 @@ void H2Factorize::compute() {
 
   for (int64_t i = D; i < lenA; i += maxQ) {
     int64_t len = std::min(lenA - i, maxQ);
-    cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &U[i], N, &A_SS[i], N, &zero, B, N, len);
+    cublasZgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, N, N, N, &one, &U[i], N, &A_SS[i], N, &zero, B, N, len);
     cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, N, N, N, &one, &V[i], N, B, N, &zero, &A_SS[i], N, len);
   }
   cudaStreamSynchronize(stream);
