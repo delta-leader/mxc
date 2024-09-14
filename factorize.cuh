@@ -1,6 +1,5 @@
 #pragma once
 
-#include <data_container.hpp>
 #include <complex>
 #include <cuComplex.h>
 #include <cuda_runtime_api.h>
@@ -24,7 +23,5 @@ public:
   H2Factorize(long long LD, long long lenA, long long lenQ, cudaStream_t stream);
   ~H2Factorize();
 
-  void setData(long long bdim, long long rank, long long D, long long M, const long long ARows[], const long long ACols[], const MatrixDataContainer<std::complex<double>>& A, const MatrixDataContainer<std::complex<double>>& Q);
-  void compute();
-  void getResults(long long D, long long M, MatrixDataContainer<std::complex<double>>& A, MatrixDataContainer<std::complex<double>>& Q);
+  void compute(long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], std::complex<double>* A, std::complex<double>* R, const std::complex<double>* Q);
 };
