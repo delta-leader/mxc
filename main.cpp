@@ -108,8 +108,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
-  //matM.factorizeM();
-  matM.factorizeDeviceM(mpi_rank % mpi_size);
+  matM.factorizeM();
+  //matM.factorizeDeviceM(mpi_rank % mpi_size);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;

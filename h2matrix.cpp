@@ -379,8 +379,13 @@ void H2Matrix::resetX() {
 void H2Matrix::factorize(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
+  long long xlen = comm.lenNeighbors();
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
   typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
+
+  std::vector<long long> Bsizes(xlen);
+  std::fill(Bsizes.begin(), Bsizes.end(), dims_max * dims_max);
+  MatrixDataContainer<std::complex<double>> B(xlen, Bsizes.data());
 
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
@@ -394,7 +399,6 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     V.noalias() = Ui.adjoint() * Aii.transpose();
     Aii.noalias() = Ui.adjoint() * V.transpose();
 
-    Eigen::MatrixXcd b(dims_max, M);
     Eigen::HouseholderQR<Eigen::MatrixXcd> fac(Aii.bottomRightCorner(Mr, Mr));
     V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
 
@@ -404,16 +408,45 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
       V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
     }
 
+    Matrix_t b(B[i + ibegin], dims_max, M);
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 
       if (ij != diag) {
         long long j = ACols[ij];
         long long N = Dims[j];
+        long long Ns = DimsLr[j];
 
         Matrix_t Uj(Q[j], N, N);
         Matrix_t Aij(A[ij], M, N);
 
         b.topRows(N) = Uj.adjoint() * Aij.transpose();
         Aij.noalias() = V * b.topRows(N).transpose();
+      }
+    
+    b.topLeftCorner(Mr, Ms) = Aii.bottomLeftCorner(Mr, Ms);
+    b.topRightCorner(Mr, Mr) = V.bottomRows(Mr) * Ui.rightCols(Mr);
+  }
+
+  comm.neighbor_bcast(R);
+  comm.neighbor_bcast(B);
+
+  for (long long i = 0; i < nodes; i++) {
+    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    long long M = Dims[i + ibegin];
+    long long Ms = DimsLr[i + ibegin];
+    long long Mr = M - Ms;
+    Matrix_t Aii(A[diag], M, M);
+
+    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++)
+      if (ij != diag) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
+        
+        Matrix_t Aij(A[ij], M, N);
+        Matrix_t Bj(B[j], dims_max, N);
+        Aij.topLeftCorner(Ms, Ns) -= Aii.topRightCorner(Ms, Mr) * Aij.bottomLeftCorner(Mr, Ns) + Aij.topRightCorner(Ms, Nr) * Bj.topLeftCorner(Nr, Ns);
+        Aii.topLeftCorner(Ms, Ms) -= Aij.topRightCorner(Ms, Nr) * Bj.topRightCorner(Nr, Nr) * Aij.topRightCorner(Ms, Nr).transpose();
       }
   }
 }
