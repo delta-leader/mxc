@@ -11,6 +11,7 @@ class ColCommMPI {
 protected:
   long long Proc;
   std::vector<std::pair<long long, long long>> Boxes;
+  std::vector<long long> BoxOffsets;
   
   std::vector<std::pair<int, MPI_Comm>> NeighborComm;
   MPI_Comm MergeComm;
@@ -20,7 +21,8 @@ protected:
   template<class T> inline void level_merge(T* data, long long len) const;
   template<class T> inline void level_sum(T* data, long long len) const;
   template<class T> inline void neighbor_bcast(T* data) const;
-  template<class T> inline void neighbor_bcast(MatrixDataContainer<T>& dc) const;
+  template<class T> inline void neighbor_bcast(T* data, const long long noffsets[]) const;
+  template<class T> inline void neighbor_bcast(MatrixDataContainer<T>& dc, const long long noffsets[]) const;
 
 public:
   ColCommMPI() : Proc(-1), Boxes(), NeighborComm(), MergeComm(MPI_COMM_NULL), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL) {};
@@ -32,6 +34,7 @@ public:
   long long oGlobal() const;
   long long lenLocal() const;
   long long lenNeighbors() const;
+  long long dataSizesToNeighborOffsets(long long Dims[]) const;
 
   void level_merge(std::complex<double>* data, long long len) const;
   void level_sum(std::complex<double>* data, long long len) const;

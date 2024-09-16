@@ -413,7 +413,6 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
       if (ij != diag) {
         long long j = ACols[ij];
         long long N = Dims[j];
-        long long Ns = DimsLr[j];
 
         Matrix_t Uj(Q[j], N, N);
         Matrix_t Aij(A[ij], M, N);
@@ -425,8 +424,6 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     b.topLeftCorner(Mr, Ms) = Aii.bottomLeftCorner(Mr, Ms);
     b.topRightCorner(Mr, Mr) = V.bottomRows(Mr) * Ui.rightCols(Mr);
   }
-
-  comm.neighbor_bcast(R);
   comm.neighbor_bcast(B);
 
   for (long long i = 0; i < nodes; i++) {

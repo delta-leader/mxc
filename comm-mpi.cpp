@@ -65,8 +65,10 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
   std::vector<long long> NeighborRanks(cols.begin(), cols.end());
   Proc = std::distance(NeighborRanks.begin(), std::find(NeighborRanks.begin(), NeighborRanks.end(), p));
   Boxes = std::vector<std::pair<long long, long long>>(NeighborRanks.size());
+  BoxOffsets = std::vector<long long>(NeighborRanks.size() + 1);
   NeighborComm = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? NeighborRanks.size() : 0);
 
+  BoxOffsets[0] = 0;
   for (long long i = 0; i < (long long)NeighborRanks.size(); i++) {
     long long ibegin = Mapping[NeighborRanks[i]].first;
     long long iend = Mapping[NeighborRanks[i]].second;
@@ -74,6 +76,7 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
     std::for_each(&Cols[Rows[ibegin]], &Cols[Rows[iend]], [&](long long col) { icols.insert(col_to_mpi_rank(col)); });
 
     Boxes[i] = std::make_pair(ibegin, iend - ibegin);
+    BoxOffsets[i + 1] = BoxOffsets[i] + (iend - ibegin);
     if (p == mpi_rank)
       NeighborComm[i].first = std::distance(icols.begin(), std::find(icols.begin(), icols.end(), NeighborRanks[i]));
   }
@@ -96,22 +99,16 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
 long long ColCommMPI::iLocal(long long iglobal) const {
   std::vector<std::pair<long long, long long>>::const_iterator iter = std::find_if(Boxes.begin(), Boxes.end(), 
     [=](std::pair<long long, long long> i) { return i.first <= iglobal && iglobal < i.first + i.second; });
-  return (0 <= iglobal && iter != Boxes.end()) ? (iglobal - (*iter).first + std::accumulate(Boxes.begin(), iter, 0ll, 
-    [](const long long& init, std::pair<long long, long long> i) { return init + i.second; })) : -1;
+  return (0 <= iglobal && iter != Boxes.end()) ? (iglobal - (*iter).first + BoxOffsets[std::distance(Boxes.begin(), iter)]) : -1;
 }
 
 long long ColCommMPI::iGlobal(long long ilocal) const {
-  long long iter = 0;
-  while (iter < (long long)Boxes.size() && Boxes[iter].second <= ilocal) {
-    ilocal = ilocal - Boxes[iter].second;
-    iter = iter + 1;
-  }
-  return (0 <= ilocal && iter <= (long long)Boxes.size()) ? (Boxes[iter].first + ilocal) : -1;
+  std::vector<long long>::const_iterator iter = std::prev(std::find_if_not(BoxOffsets.begin() + 1, BoxOffsets.end(), [=](long long i) { return i <= ilocal; }));
+  return (0 <= ilocal && ilocal < BoxOffsets.back()) ? (Boxes[std::distance(BoxOffsets.begin(), iter)].first + ilocal - *iter) : -1;
 }
 
 long long ColCommMPI::oLocal() const {
-  return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.begin() + Proc, 0ll,
-    [](const long long& init, const std::pair<long long, long long>& p) { return init + p.second; }) : -1;
+  return 0 <= Proc ? BoxOffsets[Proc] : -1;
 }
 
 long long ColCommMPI::oGlobal() const {
@@ -123,8 +120,16 @@ long long ColCommMPI::lenLocal() const {
 }
 
 long long ColCommMPI::lenNeighbors() const {
-  return 0 <= Proc ? std::accumulate(Boxes.begin(), Boxes.end(), 0ll,
-    [](const long long& init, const std::pair<long long, long long>& p) { return init + p.second; }) : 0; 
+  return 0 <= Proc ? BoxOffsets.back() : 0; 
+}
+
+long long ColCommMPI::dataSizesToNeighborOffsets(long long Dims[]) const {
+  std::inclusive_scan(Dims, Dims + BoxOffsets.back(), Dims);
+  long long nranks = Boxes.size();
+  for (long long i = 1; i <= nranks; i++)
+    if (i != BoxOffsets[i])
+      std::iter_swap(&Dims[i - 1], Dims + BoxOffsets[i] - 1);
+  return nranks;
 }
 
 template<class T> inline MPI_Datatype get_mpi_datatype() {
@@ -156,32 +161,24 @@ template<class T> inline void ColCommMPI::level_sum(T* data, long long len) cons
 }
 
 template<typename T> inline void ColCommMPI::neighbor_bcast(T* data) const {
-  std::vector<long long> offsets(Boxes.size() + 1, 0);
-  std::transform_inclusive_scan(Boxes.begin(), Boxes.end(), offsets.begin() + 1, std::plus<long long>(), 
-    [](const std::pair<long long, long long>& p) { return p.second; });
-
   record_mpi();
   for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
-    long long llen = offsets[p + 1] - offsets[p];
-    MPI_Bcast(&data[offsets[p]], llen, get_mpi_datatype<T>(), NeighborComm[p].first, NeighborComm[p].second);
+    long long llen = BoxOffsets[p + 1] - BoxOffsets[p];
+    MPI_Bcast(&data[BoxOffsets[p]], llen, get_mpi_datatype<T>(), NeighborComm[p].first, NeighborComm[p].second);
   }
   if (DupComm != MPI_COMM_NULL)
-    MPI_Bcast(data, offsets.back(), get_mpi_datatype<T>(), 0, DupComm);
+    MPI_Bcast(data, BoxOffsets.back(), get_mpi_datatype<T>(), 0, DupComm);
   record_mpi();
 }
 
-template<class T> inline void ColCommMPI::neighbor_bcast(MatrixDataContainer<T>& dc) const {
-  std::vector<long long> offsets(Boxes.size() + 1, 0);
-  std::transform_inclusive_scan(Boxes.begin(), Boxes.end(), offsets.begin() + 1, std::plus<long long>(), 
-    [](const std::pair<long long, long long>& p) { return p.second; });
-  
+template<class T> inline void ColCommMPI::neighbor_bcast(T* data, const long long noffsets[]) const {
   record_mpi();
   for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
-    T* start = dc[offsets[p]], *end = dc[offsets[p + 1]];
+    T* start = data + (0 < p ? noffsets[p - 1] : 0), *end = data + noffsets[p];
     MPI_Bcast(start, std::distance(start, end), get_mpi_datatype<T>(), NeighborComm[p].first, NeighborComm[p].second);
   }
   if (DupComm != MPI_COMM_NULL)
-    MPI_Bcast(dc[0], dc.size(), get_mpi_datatype<T>(), 0, DupComm);
+    MPI_Bcast(data, noffsets[Boxes.size() - 1], get_mpi_datatype<T>(), 0, DupComm);
   record_mpi();
 }
 
@@ -198,11 +195,19 @@ void ColCommMPI::neighbor_bcast(long long* data) const {
 }
 
 void ColCommMPI::neighbor_bcast(MatrixDataContainer<double>& dc) const {
-  neighbor_bcast<double>(dc);
+  std::vector<long long> dims(lenNeighbors());
+  for (long long i = 0; i < lenNeighbors(); i++)
+    dims[i] = std::distance(dc[i], dc[i + 1]);
+  dataSizesToNeighborOffsets(dims.data());
+  neighbor_bcast<double>(dc[0], dims.data());
 }
 
 void ColCommMPI::neighbor_bcast(MatrixDataContainer<std::complex<double>>& dc) const {
-  neighbor_bcast<std::complex<double>>(dc);
+  std::vector<long long> dims(lenNeighbors());
+  for (long long i = 0; i < lenNeighbors(); i++)
+    dims[i] = std::distance(dc[i], dc[i + 1]);
+  dataSizesToNeighborOffsets(dims.data());
+  neighbor_bcast<std::complex<double>>(dc[0], dims.data());
 }
 
 std::pair<double, double> timer = std::make_pair(0., 0.);
