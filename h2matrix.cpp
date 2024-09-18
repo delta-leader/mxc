@@ -49,6 +49,36 @@ const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].data() : nullptr;
 }
 
+template <class T>
+MatrixDataContainer<T>::MatrixDataContainer(long long len, const long long* dims) : offsets(len + 1), data() {
+  std::inclusive_scan(dims, &dims[len], offsets.begin() + 1);
+  offsets[0] = 0;
+  data = std::vector<T>(offsets.back());
+}
+
+template <class T>
+T* MatrixDataContainer<T>::operator[](long long index) {
+  return data.data() + offsets.at(index);
+}
+
+template <class T>
+const T* MatrixDataContainer<T>::operator[](long long index) const {
+  return data.data() + offsets.at(index);
+}
+
+template <class T>
+long long MatrixDataContainer<T>::size() const {
+  return offsets.back();
+}
+
+template <class T>
+void MatrixDataContainer<T>::reset() {
+  std::fill(data.begin(), data.end(), static_cast<T>(0));
+}
+
+template class MatrixDataContainer<double>;
+template class MatrixDataContainer<std::complex<double>>;
+
 template<class T>
 inline void vector_gather(const long long* map_begin, const long long* map_end, const T* input_first, T* result) {
   std::transform(map_begin, map_end, result, [&](long long i) { return input_first[i]; });
@@ -376,11 +406,6 @@ void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
         y.noalias() += c * x;
       }
   }
-}
-
-void H2Matrix::resetX() {
-  std::fill(X[0], X[0] + X.size(), std::complex<double>(0., 0.));
-  std::fill(Y[0], Y[0] + Y.size(), std::complex<double>(0., 0.));
 }
 
 void H2Matrix::factorize(const ColCommMPI& comm) {

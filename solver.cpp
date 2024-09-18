@@ -55,7 +55,7 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
   Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
 
   for (long long l = levels; l >= 0; l--)
-    A[l].resetX();
+  { A[l].X.reset(); A[l].Y.reset(); }
   X_leaf = X_in;
 
   for (long long l = levels; l >= 0; l--) {
@@ -130,7 +130,7 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   Vector_t X_leaf(A[levels].X[lbegin], lenX);
 
   for (long long l = levels; l >= 0; l--)
-    A[l].resetX();
+  { A[l].X.reset(); A[l].Y.reset(); }
   X_leaf = X_in;
 
   for (long long l = levels; l >= 0; l--) {

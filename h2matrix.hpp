@@ -1,6 +1,7 @@
 #pragma once
 
-#include <data_container.hpp>
+#include <vector>
+#include <numeric>
 #include <complex>
 
 class MatrixAccessor;
@@ -20,6 +21,21 @@ public:
 
   long long fbodies_size_at_i(long long i) const;
   const double* fbodies_at_i(long long i) const;
+};
+
+template<class T> class MatrixDataContainer {
+private:
+  std::vector<long long> offsets;
+  std::vector<T> data;
+
+public:
+  MatrixDataContainer() {}
+  MatrixDataContainer(long long len, const long long* dims);
+
+  T* operator[](long long index);
+  const T* operator[](long long index) const;
+  long long size() const;
+  void reset();
 };
 
 class H2Matrix {
@@ -57,7 +73,6 @@ public:
   void matVecUpwardPass(const ColCommMPI& comm);
   void matVecHorizontalandDownwardPass(const ColCommMPI& comm);
   void matVecLeafHorizontalPass(const ColCommMPI& comm);
-  void resetX();
 
   void factorize(const ColCommMPI& comm);
   void factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm);
