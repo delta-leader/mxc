@@ -1,9 +1,9 @@
 
 #include <comm-mpi.hpp>
-#include <data_container.hpp>
 
 #include <algorithm>
 #include <set>
+#include <numeric>
 
 MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
@@ -160,17 +160,6 @@ template<class T> inline void ColCommMPI::level_sum(T* data, long long len) cons
   record_mpi();
 }
 
-template<typename T> inline void ColCommMPI::neighbor_bcast(T* data) const {
-  record_mpi();
-  for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
-    long long llen = BoxOffsets[p + 1] - BoxOffsets[p];
-    MPI_Bcast(&data[BoxOffsets[p]], llen, get_mpi_datatype<T>(), NeighborComm[p].first, NeighborComm[p].second);
-  }
-  if (DupComm != MPI_COMM_NULL)
-    MPI_Bcast(data, BoxOffsets.back(), get_mpi_datatype<T>(), 0, DupComm);
-  record_mpi();
-}
-
 template<class T> inline void ColCommMPI::neighbor_bcast(T* data, const long long noffsets[]) const {
   record_mpi();
   for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
@@ -190,24 +179,16 @@ void ColCommMPI::level_sum(std::complex<double>* data, long long len) const {
   level_sum<std::complex<double>>(data, len);
 }
 
-void ColCommMPI::neighbor_bcast(long long* data) const {
-  neighbor_bcast<long long>(data);
+void ColCommMPI::neighbor_bcast(long long data[], const long long noffsets[]) const {
+  neighbor_bcast<long long>(data, noffsets);
 }
 
-void ColCommMPI::neighbor_bcast(MatrixDataContainer<double>& dc) const {
-  std::vector<long long> dims(lenNeighbors());
-  for (long long i = 0; i < lenNeighbors(); i++)
-    dims[i] = std::distance(dc[i], dc[i + 1]);
-  dataSizesToNeighborOffsets(dims.data());
-  neighbor_bcast<double>(dc[0], dims.data());
+void ColCommMPI::neighbor_bcast(double data[], const long long noffsets[]) const {
+  neighbor_bcast<double>(data, noffsets);
 }
 
-void ColCommMPI::neighbor_bcast(MatrixDataContainer<std::complex<double>>& dc) const {
-  std::vector<long long> dims(lenNeighbors());
-  for (long long i = 0; i < lenNeighbors(); i++)
-    dims[i] = std::distance(dc[i], dc[i + 1]);
-  dataSizesToNeighborOffsets(dims.data());
-  neighbor_bcast<std::complex<double>>(dc[0], dims.data());
+void ColCommMPI::neighbor_bcast(std::complex<double> data[], const long long noffsets[]) const {
+  neighbor_bcast<std::complex<double>>(data, noffsets);
 }
 
 std::pair<double, double> timer = std::make_pair(0., 0.);

@@ -33,6 +33,7 @@ private:
 
   std::vector<std::complex<double>*> NA;
   std::vector<long long> LowerX;
+  std::vector<long long> NbXoffsets;
 
 public:
   std::vector<long long> Dims;

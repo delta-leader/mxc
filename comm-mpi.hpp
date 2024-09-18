@@ -5,8 +5,6 @@
 #include <vector>
 #include <complex>
 
-template<class T> class MatrixDataContainer;
-
 class ColCommMPI {
 protected:
   long long Proc;
@@ -20,9 +18,7 @@ protected:
 
   template<class T> inline void level_merge(T* data, long long len) const;
   template<class T> inline void level_sum(T* data, long long len) const;
-  template<class T> inline void neighbor_bcast(T* data) const;
   template<class T> inline void neighbor_bcast(T* data, const long long noffsets[]) const;
-  template<class T> inline void neighbor_bcast(MatrixDataContainer<T>& dc, const long long noffsets[]) const;
 
 public:
   ColCommMPI() : Proc(-1), Boxes(), NeighborComm(), MergeComm(MPI_COMM_NULL), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL) {};
@@ -39,9 +35,9 @@ public:
   void level_merge(std::complex<double>* data, long long len) const;
   void level_sum(std::complex<double>* data, long long len) const;
 
-  void neighbor_bcast(long long* data) const;
-  void neighbor_bcast(MatrixDataContainer<double>& dc) const;
-  void neighbor_bcast(MatrixDataContainer<std::complex<double>>& dc) const;
+  void neighbor_bcast(long long data[], const long long noffsets[]) const;
+  void neighbor_bcast(double data[], const long long noffsets[]) const;
+  void neighbor_bcast(std::complex<double> data[], const long long noffsets[]) const;
 
   static double get_comm_time();
   static void record_mpi();
