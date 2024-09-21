@@ -19,7 +19,6 @@ private:
   int* ipiv, *info;
   
 public:
-  H2Factorize() {}
   H2Factorize(long long LD, long long lenA, long long lenQ, cudaStream_t stream);
   ~H2Factorize();
 

@@ -12,7 +12,7 @@ H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local
 }
 
 H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, bool fix_rank, MPI_Comm world) : 
-  levels(levels), A(levels + 1), comm(levels + 1), allocedComm(), local_bodies(0, 0) {
+  levels(levels), A(levels + 1), local_bodies(0, 0) {
   
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
@@ -25,7 +25,18 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
   for (long long i = 0; i <= levels; i++)
-    comm[i] = ColCommMPI(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
+    comm.emplace_back(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
+
+  std::vector<MatrixDesc> desc;
+  desc.reserve(levels + 1);
+  desc.emplace_back(0, 1, -1, -1, &tree[0], Near, Far);
+  for (long long i = 1; i <= levels; i++) {
+    long long lbegin = comm[i].oGlobal();
+    long long lend = lbegin + comm[i].lenLocal();
+    long long ubegin = comm[i - 1].oGlobal();
+    long long uend = ubegin + comm[i - 1].lenLocal();
+    desc.emplace_back(lbegin, lend, ubegin, uend, &tree[0], Near, Far);
+  }
 
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++)

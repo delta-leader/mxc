@@ -8,6 +8,7 @@ class MatrixAccessor;
 class CSR;
 class Cell;
 class ColCommMPI;
+class MatrixDesc;
 
 class WellSeparatedApproximation {
 private:
