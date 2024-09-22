@@ -5,13 +5,12 @@
 #include <vector>
 #include <complex>
 
-template<class T> class MatrixDataContainer;
-
 class ColCommMPI {
 protected:
   // number of processes in the communicator
   long long Proc;
   std::vector<std::pair<long long, long long>> Boxes;
+  std::vector<long long> BoxOffsets;
   
   // contains all the other procsses on the same level
   std::vector<std::pair<int, MPI_Comm>> NeighborComm;
@@ -46,16 +45,21 @@ public:
   // the number of cell on the current level
   long long lenLocal() const;
   long long lenNeighbors() const;
+  long long dataSizesToNeighborOffsets(long long Dims[]) const;
 
   template <typename DT>
   void level_merge(DT* data, long long len) const;
   template <typename DT>
   void level_sum(DT* data, long long len) const;
-
+  
   template <typename DT>
-  void neighbor_bcast(DT* data) const;
-  template <typename DT>
+  void neighbor_bcast(DT* data, const long long noffsets[]) const;
+  /*template <typename DT>
   void neighbor_bcast(MatrixDataContainer<DT>& dc) const;
+  */
+  //void neighbor_bcast(long long data[], const long long noffsets[]) const;
+  //void neighbor_bcast(double data[], const long long noffsets[]) const;
+  //void neighbor_bcast(std::complex<double> data[], const long long noffsets[]) const;
 
   static double get_comm_time();
   static void record_mpi();

@@ -6,6 +6,8 @@
 #include <cmath>
 #include <iostream>
 
+#include <factorize.cuh>
+
 /* explicit template instantiation */
 // complex double
 template class H2MatrixSolver<std::complex<double>>;
@@ -41,7 +43,7 @@ H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), l
 
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, const bool factorization_basis, MPI_Comm world, double scale) : 
-  levels(max_level), A(max_level + 1), comm(max_level + 1), allocedComm(), local_bodies(0, 0) {
+  levels(max_level), A(max_level + 1), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
   CSR Near('N', cells, theta);
@@ -61,7 +63,18 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
   
   // create a communicator for each level
   for (long long i = 0; i <= levels; i++)
-    comm[i] = ColCommMPI(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
+    comm.emplace_back(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
+
+  std::vector<MatrixDesc> desc;
+  desc.reserve(levels + 1);
+  desc.emplace_back(0, 1, -1, -1, &tree[0], Near, Far);
+  for (long long i = 1; i <= levels; i++) {
+    long long lbegin = comm[i].oGlobal();
+    long long lend = lbegin + comm[i].lenLocal();
+    long long ubegin = comm[i - 1].oGlobal();
+    long long uend = ubegin + comm[i - 1].lenLocal();
+    desc.emplace_back(lbegin, lend, ubegin, uend, &tree[0], Near, Far);
+  }
 
   // sample the far field for all cells in each level
   std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
@@ -156,23 +169,26 @@ void H2MatrixSolver<DT>::matVecMul(DT X[]) {
   VectorMap_dt Y_leaf(A[levels].Y[lbegin], lenX);
 
   // set the X and Y of all levels to 0
-  for (long long l = levels; l >= 0; l--)
-    A[l].resetX();
-  // X_leaf initially stores the input vector
+  for (long long l = levels; l >= 0; l--) {
+    A[l].X.reset();
+    A[l].Y.reset();
+  }
   X_leaf = X_in;
-  
-  // Multiply all the row bases with the vector
-  for (long long l = levels; l >= 0; l--)
+
+  for (long long l = levels; l >= 0; l--) {
     A[l].matVecUpwardPass(comm[l]);
-  // TODO is there any point in calling this for level 0?
-  // because NX and NY would just be nullptr
-  // multiply all the skeleton matrices and column bases
+    if (0 < l)
+      A[l - 1].upwardCopyNext('X', 'X', comm[l - 1], A[l]);
+  }
   for (long long l = 0; l <= levels; l++) {
+    if (0 < l)
+      A[l].downwardCopyNext('Y', 'Y', A[l - 1], comm[l - 1]);
     A[l].matVecHorizontalandDownwardPass(comm[l]);
   }
-  // multiply the leaf level dense matrices
+
+  X_leaf = X_in;
   A[levels].matVecLeafHorizontalPass(comm[levels]);
-  // write back the result (accumulated in Y_leaf)
+
   X_in = Y_leaf;
 }
 
@@ -201,6 +217,41 @@ void H2MatrixSolver<DT>::factorizeM(const cublasComputeType_t COMP) {
 }
 
 template <typename DT>
+void H2MatrixSolver<DT>::factorizeDeviceM(int device) {
+  long long dims_max = 0, lenA = 0, lenQ = 0;
+  for (long long l = levels; l >= 0; l--) {
+    dims_max = std::max(dims_max, *std::max_element(A[l].Dims.begin(), A[l].Dims.end()));
+    lenA = std::max(lenA, (long long)A[l].ACols.size());
+    lenQ = std::max(lenQ, comm[l].lenNeighbors());
+  }
+
+  int num_device;
+  cudaGetDeviceCount(&num_device);
+  if (cudaGetDeviceCount(&num_device) == cudaSuccess) {
+    cudaSetDevice(device % num_device);
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    H2Factorize<DT> fac(dims_max, lenA, lenQ, stream);
+
+    for (long long l = levels; l >= 0; l--) {
+      long long ibegin = comm[l].oLocal();
+      long long nodes = comm[l].lenLocal();
+      long long xlen = comm[l].lenNeighbors();
+      long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
+      long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
+
+      fac.compute(dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0]);
+      
+      if (0 < l)
+        A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+    }
+
+    cudaStreamSynchronize(stream);
+    cudaStreamDestroy(stream);
+  }
+}
+
+template <typename DT>
 void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   if (levels < 0)
     return;
@@ -215,17 +266,19 @@ void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
 
   // reset X to 0 for all levels
   for (long long l = levels; l >= 0; l--)
-    A[l].resetX();
-  // store X_in in X of the leaf levels
+  { A[l].X.reset(); A[l].Y.reset(); }
   X_leaf = X_in;
-  // forward substitution for all levels
+
   for (long long l = levels; l >= 0; l--) {
     A[l].forwardSubstitute(comm[l]);
+    if (0 < l)
+      A[l - 1].upwardCopyNext('X', 'X', comm[l - 1], A[l]);
   }
-  // backward substitution for all levels
-  for (long long l = 0; l <= levels; l++)
+  for (long long l = 0; l <= levels; l++) {
+    if (0 < l)
+      A[l].downwardCopyNext('X', 'X', A[l - 1], comm[l - 1]);
     A[l].backwardSubstitute(comm[l]);
-  // get the result from the leaf level and stor in X_in
+  }
   X_in = X_leaf;
 }
 

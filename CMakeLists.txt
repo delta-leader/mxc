@@ -19,7 +19,7 @@ file(GLOB sources "*.cpp" "*.cu")
 file(GLOB headers "*.hpp" "*.cuh")
 
 add_executable(main.app ${sources} ${headers})
-target_link_libraries(main.app $<LINK_ONLY:MKL::MKL> Eigen3::Eigen MPI::MPI_CXX cudart cublas cusparse cublasLt)
+target_link_libraries(main.app $<LINK_ONLY:MKL::MKL> Eigen3::Eigen MPI::MPI_CXX cudart cublas cublasLt)
 
 target_compile_definitions(main.app PRIVATE MKL_Complex16=std::complex<double> MKL_Complex8=std::complex<float> EIGEN_USE_MKL_ALL)
 target_compile_options(main.app PRIVATE $<TARGET_PROPERTY:MKL::MKL,INTERFACE_COMPILE_OPTIONS>)

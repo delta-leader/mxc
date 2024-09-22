@@ -4,6 +4,9 @@
 #include <kernel.hpp>
 #include <utils.hpp>
 
+#include <algorithm>
+#include <cmath>
+
 #include <mkl.h>
 #include <Eigen/Dense>
 #include <Eigen/QR>
@@ -17,18 +20,22 @@
 /* explicit template instantiation */
 // complex double
 template class WellSeparatedApproximation<std::complex<double>>;
+template class MatrixDataContainer<std::complex<double>>;
 template class H2Matrix<std::complex<double>>;
 // complex float
 template class WellSeparatedApproximation<std::complex<float>>;
+template class MatrixDataContainer<std::complex<float>>;
 template class H2Matrix<std::complex<float>>;
 // complex half
 //template class WellSeparatedApproximation<std::complex<Eigen::half>>;
 //template class H2Matrix<std::complex<Eigen::half>>;
 // double
 template class WellSeparatedApproximation<double>;
+template class MatrixDataContainer<double>;
 template class H2Matrix<double>;
 // float
 template class WellSeparatedApproximation<float>;
+template class MatrixDataContainer<float>;
 template class H2Matrix<float>;
 // half
 template class WellSeparatedApproximation<Eigen::half>;
@@ -49,6 +56,7 @@ template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
 template <typename DT>
 WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long max_rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level, const bool fix_rank) :
   lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
+  std::vector<std::vector<double>> Fbodies(len);
   // loop over the cells in the upper level
   for (long long i = upper_level.lbegin; i < upper_level.lend; i++)
     // collect the far field points from the upper level
@@ -93,6 +101,43 @@ long long WellSeparatedApproximation<DT>::fbodies_size_at_i(const long long i) c
 template <typename DT>
 const double* WellSeparatedApproximation<DT>::fbodies_at_i(const long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].data() : nullptr;
+}
+
+template <class T>
+MatrixDataContainer<T>::MatrixDataContainer(long long len, const long long* dims) : offsets(len + 1), data() {
+  std::inclusive_scan(dims, &dims[len], offsets.begin() + 1);
+  offsets[0] = 0;
+  data = std::vector<T>(offsets.back());
+}
+
+template <class T>
+T* MatrixDataContainer<T>::operator[](long long index) {
+  return data.data() + offsets.at(index);
+}
+
+template <class T>
+const T* MatrixDataContainer<T>::operator[](long long index) const {
+  return data.data() + offsets.at(index);
+}
+
+template <class T>
+long long MatrixDataContainer<T>::size() const {
+  return offsets.back();
+}
+
+template <class T>
+void MatrixDataContainer<T>::reset() {
+  std::fill(data.begin(), data.end(), static_cast<T>(0));
+}
+
+template<class T>
+inline void vector_gather(const long long* map_begin, const long long* map_end, const T* input_first, T* result) {
+  std::transform(map_begin, map_end, result, [&](long long i) { return input_first[i]; });
+}
+
+template<class T>
+inline void vector_scatter(const T* first, const T* last, const long long* map, T* result) {
+  std::for_each(first, last, [&](const T& element) { result[map[std::distance(first, &element)]] = element; });
 }
 
 /*
@@ -148,6 +193,7 @@ long long compute_basis(const MatrixAccessor<DT>& kernel, const double epsilon, 
       // get the corresponding rank
       // TODO ugly fix to convert epsilon to Eigen::half
       DT eps{epsilon};
+      // TODO make epsilon double only
       rrqr.setThreshold(get_real(eps));
       rank = rrqr.rank();
     }
@@ -174,7 +220,8 @@ long long compute_basis(const MatrixAccessor<DT>& kernel, const double epsilon, 
       // TODO why do I need to reorder?
       // We now have the row ID A = X * A(rows) and calculate the QR of X
       // because we want an orthogonal basis
-      Eigen::HouseholderQR<Matrix_dt> qr = (Q_ref.template triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * R_ref.topRows(rank).transpose())).householderQr();
+      RX = Q_ref.template triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * R_ref.topRows(rank).transpose());
+      Eigen::HouseholderQR<Eigen::Ref<Matrix_dt>> qr(RX);
       // A stores the Q matrix
       Q_ref = qr.householderQ();
       // C stores the R matrix, since the memory was already allocated before
@@ -220,19 +267,15 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
   // index of the first cell for this process on this level in the global cell array (xlen-1 for a single process)
   long long ybegin = comm.oGlobal();
 
-  // first child of first cell
-  long long ychild = cells[ybegin].Child[0];
-  // convert to local index
-  long long localChildIndex = lowerComm.iLocal(ychild);
-
   // stores the offsets to the first child of each cell on this level
   // local means it starts from 0 (i.e. it does not include the level offset)
   // Usually a sequence of 0, 2, 4, etc. (all 0s for the leaf level)
   std::vector<long long> localChildOffsets(nodes + 1);
-  localChildOffsets[0] = 0;
-  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return c.Child[1] - ychild; });
-
-  // initalize vectors to 0
+  localChildOffsets[0] = lowerComm.iLocal(cells[ybegin].Child[0]);
+  // convert to local index
+  long long localChildIndex = localChildOffsets[0] - cells[ybegin].Child[0];
+  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
+  
   Dims = std::vector<long long>(xlen, 0);
   DimsLr = std::vector<long long>(xlen, 0);
   UpperStride = std::vector<long long>(nodes, 0);
@@ -255,45 +298,33 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
   C = std::vector<DT*>(CRows[nodes], nullptr);
 
-  // get the number of points for each cell
-  if (localChildOffsets.back() == 0){
-    // leaf level case (i.e. there is no lower level)
-    // number of points contained in each cell
+  if (localChildOffsets.back() == -1)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
-  } else {
-    // get the low-rank dimensions from the lower level,
-    // i.e. add the ranks of the (two) children.
-    std::vector<long long>::const_iterator iter = h2_lower.DimsLr.begin() + localChildIndex;
-    std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
-      [&](long long start, long long end) { return std::reduce(iter + start, iter + end); });
-  } 
+  else {
+    long long lowerBegin = localChildOffsets[0];
+    long long lowerLen = localChildOffsets[nodes] - lowerBegin;
+    long long copyOffset = std::reduce(lowerA.Dims.begin(), lowerA.Dims.begin() + lowerBegin);
 
-  // cast the dimensions to all processes (on the same level)
-  comm.neighbor_bcast(Dims.data());
-  // allocates storage for the total number of points on this level
-  // i.e. sum of points per cell
+    std::vector<long long> dims_offsets(lowerLen), ranks_offsets(lowerLen + 1);
+    std::exclusive_scan(lowerA.Dims.begin() + localChildOffsets[0], lowerA.Dims.begin() + localChildOffsets[nodes], dims_offsets.begin(), copyOffset);
+    std::inclusive_scan(lowerA.DimsLr.begin() + localChildOffsets[0], lowerA.DimsLr.begin() + localChildOffsets[nodes], ranks_offsets.begin() + 1);
+    ranks_offsets[0] = 0;
+
+    std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
+      [&](long long start, long long end) { return ranks_offsets[end - lowerBegin] - ranks_offsets[start - lowerBegin]; });
+
+    LowerX = std::vector<long long>(ranks_offsets.back());
+    for (long long i = 0; i < lowerLen; i++)
+      std::iota(LowerX.begin() + ranks_offsets[i], LowerX.begin() + ranks_offsets[i + 1], dims_offsets[i]);
+  }
+
+  std::vector<long long> neighbor_ones(xlen, 1ll);
+  comm.dataSizesToNeighborOffsets(neighbor_ones.data());
+  comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
   X = MatrixDataContainer<DT>(xlen, Dims.data());
   Y = MatrixDataContainer<DT>(xlen, Dims.data());
-  // pointers to X/Y on the parent cell
-  // i.e. if a parent has two children with 128 elements each
-  // the corresponding pointers for the first block would be set 
-  // to NX[0] -> X[0], NX[1] -> X[128]
-  NX = std::vector<DT*>(xlen, nullptr);
-  NY = std::vector<DT*>(xlen, nullptr);
-
-  // basically sets the NX, NY pointers of the children (i.e. lower level)
-  // for every node on this level
-  for (long long i = 0; i < xlen; i++) {
-    long long ci = comm.iGlobal(i);
-    long long child = lowerComm.iLocal(cells[ci].Child[0]);
-    long long cend = 0 <= child ? (child + cells[ci].Child[1] - cells[ci].Child[0]) : -1;
-    // for all children of that node
-    for (long long y = child; y < cend; y++) {
-      long long offset_y = std::reduce(&h2_lower.DimsLr[child], &h2_lower.DimsLr[y]);
-      h2_lower.NX[y] = X[i] + offset_y;
-      h2_lower.NY[y] = Y[i] + offset_y;
-    }
-  }
+  NbXoffsets = std::vector<long long>(Dims.begin(), Dims.end());
+  NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
 
   // Q stores the basis (as a matrix) for each cell
   // Each Q is a square matrix of size Dims x Dims
@@ -323,9 +354,6 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   A = MatrixDataContainer<DT>(ARows[nodes], Asizes.data());
-  // the lenght of this vector is the total number of points stores for all S on this level
-  // within the constructor this is only allocated, but not used
-  Ipivots = std::vector<int>(std::reduce(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes)));
 
   // skips levels that contain no points
   // e.g. if there are no low-rank blocks on this level (because they are split further)
@@ -345,8 +373,8 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
       // get the number of points in that cell
       const long long nrows = Dims[i + ibegin];
       // get the child cell indices
-      long long childi_start = localChildIndex + localChildOffsets[i];
-      long long childi_end = localChildIndex + localChildOffsets[i + 1];
+      long long childi_start = localChildOffsets[i];
+      long long childi_end = localChildOffsets[i + 1];
       // get the corresponding Q matrix for this cell
       // note that this is a reference
       Eigen::Map<Matrix_dt> Qi_ref(Q[i + ibegin], nrows, nrows);
@@ -439,7 +467,9 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
     
     // We broadcast all the particles
     // not entirely sure why, were they not created on every node?
-    comm.neighbor_bcast(S);
+    comm.dataSizesToNeighborOffsets(Ssizes.data());
+    comm.neighbor_bcast(S[0], Ssizes.data());
+
     std::vector<std::vector<double>> cbodies(nodes);
     // loop over all nodes
     for (long long i = 0; i < nodes; i++) {
@@ -486,13 +516,15 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
       DimsLr[i + ibegin] = rank;
     }
 
-    comm.neighbor_bcast(DimsLr.data());
-    comm.neighbor_bcast(S);
-    comm.neighbor_bcast(Q);
-    comm.neighbor_bcast(R);
+    comm.dataSizesToNeighborOffsets(Qsizes.data());
+    comm.neighbor_bcast(DimsLr.data(), neighbor_ones.data());
+    comm.neighbor_bcast(S[0], Ssizes.data());
+    comm.neighbor_bcast(Q[0], Qsizes.data());
+    comm.neighbor_bcast(R[0], Qsizes.data());
   }
 }
 
+// TODO check if any variables changed
 template <typename DT> template <typename OT>
 H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : DimsLr(h2matrix.DimsLr), 
   UpperStride(h2matrix.UpperStride), Q(h2matrix.Q), R(h2matrix.R), S(h2matrix.S),
@@ -509,6 +541,26 @@ H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : DimsLr(h2matrix.DimsLr),
 }
 
 template <typename DT>
+void H2Matrix<DT>::upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix<DT>& lowerA) {
+  long long NZ = LowerX.size();
+  long long ibegin = comm.oLocal();
+  const DT* input = src == 'X' ? lowerA.X[0] : lowerA.Y[0];
+  DT* output = dst == 'X' ? X[ibegin] : Y[ibegin];
+
+  vector_gather(LowerX.data(), LowerX.data() + NZ, input, output);
+}
+
+template <typename DT>
+void H2Matrix<DT>::downwardCopyNext(char src, char dst, const H2Matrix<DT>& upperA, const ColCommMPI& upperComm) {
+  long long NZ = upperA.LowerX.size();
+  long long ibegin = upperComm.oLocal();
+  const DT* input = src == 'X' ? upperA.X[ibegin] : upperA.Y[ibegin];
+  DT* output = dst == 'X' ? X[0] : Y[0];
+
+  vector_scatter(input, input + NZ, upperA.LowerX.data(), output);
+}
+
+template <typename DT>
 void H2Matrix<DT>::matVecUpwardPass(const ColCommMPI& comm) {
   // from the lowest level to the highest level
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
@@ -518,10 +570,6 @@ void H2Matrix<DT>::matVecUpwardPass(const ColCommMPI& comm) {
   const long long ibegin = comm.oLocal();
   // number of cells on this process
   const long long nodes = comm.lenLocal();
-  // TODO confirm
-  // reduce and broadcast X to all processes?
-  comm.level_merge(X[0], X.size());
-  comm.neighbor_bcast(X);
 
   // for all cells on this process
   for (long long i = 0; i < nodes; i++) {
@@ -532,11 +580,11 @@ void H2Matrix<DT>::matVecUpwardPass(const ColCommMPI& comm) {
       // multiply the vector with the row basis
       // and store it to X of the upper level
       VectorMap_dt x(X[i + ibegin], nrows);
-      VectorMap_dt x_parent(NX[i + ibegin], rank);
       MatrixMap_dt q(Q[i + ibegin], nrows, rank);
-      x_parent.noalias() = q.transpose() * x;
+      x.topRows(rank) = q.transpose() * x;
     }
   }
+  comm.neighbor_bcast(X[0], NbXoffsets.data());
 }
 
 template <typename DT>
@@ -559,23 +607,21 @@ void H2Matrix<DT>::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
     // e.g. where NY is not set
     if (0 < rank_i) {
       VectorMap_dt y(Y[i + ibegin], nrows);
-      VectorMap_dt y_parent(NY[i + ibegin], rank_i);
-
       // for all cells in the far field (can be multiple per row)
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         const long long j = CCols[ij];
         const long long rank_j = DimsLr[j];
 
-        VectorMap_dt x_parent(NX[j], rank_j);
+        VectorMap_dt x(X[j], rank_j);
         // skeleton matrix
         MatrixMap_dt c(C[ij], rank_i, rank_j, Stride_t(UpperStride[i], 1));
         // multiply with the skeleton matrix
-        y_parent.noalias() += c * x_parent;
+        y.topRows(rank_i).noalias() += c * x;
       }
       // multiply the vector with the column basis
       // and store in Y
       MatrixMap_dt q(Q[i + ibegin], nrows, rank_i, Stride_t(nrows, 1));
-      y.noalias() = q * y_parent;
+      y = q * y.topRows(rank_i);
     }
   }
 }
@@ -589,6 +635,7 @@ void H2Matrix<DT>::matVecLeafHorizontalPass(const ColCommMPI& comm) {
   const long long ibegin = comm.oLocal();
   // the number of cells for this process on this level
   const long long nodes = comm.lenLocal();
+  comm.neighbor_bcast(X[0], NbXoffsets.data());
 
   // for all cells
   for (long long i = 0; i < nodes; i++) {
@@ -610,35 +657,20 @@ void H2Matrix<DT>::matVecLeafHorizontalPass(const ColCommMPI& comm) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::resetX() {
-  std::fill(X[0], X[0] + X.size(), DT{});
-  std::fill(Y[0], Y[0] + Y.size(), DT{});
-}
-#include <factorize.cuh>
-#include <cuda_runtime_api.h>
-
-template <typename DT>
 void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   // the first cell for this process on this level
   long long ibegin = comm.oLocal();
   // the number of cells for this process on this level
   long long nodes = comm.lenLocal();
+  long long xlen = comm.lenNeighbors();
   // the maximum dimension on this level
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
+  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
-  cudaStream_t stream;
-  cudaStreamCreate(&stream);
+  std::vector<long long> Bsizes(xlen);
+  std::fill(Bsizes.begin(), Bsizes.end(), dims_max * dims_max);
+  MatrixDataContainer<DT> B(xlen, Bsizes.data());
 
-  H2Factorize<DT> fac(dims_max, ARows[nodes], comm.lenNeighbors(), stream);
-  fac.setData(*std::max_element(DimsLr.begin(), DimsLr.end()), ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Q);
-  fac.compute();
-  fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
-  cudaStreamDestroy(stream);
-
-  /*typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
-  std::vector<long long> ipiv_offsets(nodes);
-  // prefix sum over the dimensions on this process
-  std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
   for (long long i = 0; i < nodes; i++) {
     // index of the diagonal block
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
@@ -662,30 +694,19 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
     // Aii = | Srs Srr|
     Aii.noalias() = Ui.adjoint() * V.transpose();
 
-    // factorize the redundant part, i.e. Srr
-    Eigen::PartialPivLU<Matrix_dt> plu = Aii.bottomRightCorner(Mr, Mr).lu();
-    Matrix_dt b(dims_max, M);
-    // this is a reference
-    Eigen::Map<Eigen::VectorXi> ipiv(Ipivots.data() + ipiv_offsets[i], Mr);
-
-    // write the factorization back into A
-    Aii.bottomRightCorner(Mr, Mr) = plu.matrixLU();
-    // write back the pivots
-    ipiv = plu.permutationP().indices();
-    // Srr^-1 Qr^-1 
-    // note that V is completely overwritten (see below)
-    V.bottomRows(Mr) = plu.solve(Ui.rightCols(Mr).adjoint());
+    Eigen::HouseholderQR<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> fac(Aii.bottomRightCorner(Mr, Mr));
+    V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
 
     // if there is a skeleton part
     // TODO should always trigger, unless all blocks are dense
     if (0 < Ms) {
-      Aii.bottomLeftCorner(Mr, Ms) = plu.solve(Aii.bottomLeftCorner(Mr, Ms));
+      Aii.bottomLeftCorner(Mr, Ms) = fac.solve(Aii.bottomLeftCorner(Mr, Ms));
       Aii.topLeftCorner(Ms, Ms) -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
       V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
     }
 
-    // for all cells in the near field
-    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+    MatrixMap_dt b(B[i + ibegin], dims_max, M);
+    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 
       if (ij != diag) {
         long long j = ACols[ij];
         long long N = Dims[j];
@@ -699,7 +720,34 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
         b.topRows(N) = Uj.adjoint() * Aij.transpose();
         Aij.noalias() = V * b.topRows(N).transpose();
       }
-  }*/
+    
+    b.topLeftCorner(Mr, Ms) = Aii.bottomLeftCorner(Mr, Ms);
+    b.topRightCorner(Mr, Mr) = V.bottomRows(Mr) * Ui.rightCols(Mr);
+  }
+  comm.dataSizesToNeighborOffsets(Bsizes.data());
+  comm.neighbor_bcast(B[0], Bsizes.data());
+
+  for (long long i = 0; i < nodes; i++) {
+    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    long long M = Dims[i + ibegin];
+    long long Ms = DimsLr[i + ibegin];
+    long long Mr = M - Ms;
+    MatrixMap_dt Aii(A[diag], M, M);
+
+    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+      if (ij != diag) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
+        
+        MatrixMap_dt Aij(A[ij], M, N);
+        MatrixMap_dt Bj(B[j], dims_max, N);
+        Aij.topLeftCorner(Ms, Ns) -= Aii.topRightCorner(Ms, Mr) * Aij.bottomLeftCorner(Mr, Ns) + Aij.topRightCorner(Ms, Nr) * Bj.topLeftCorner(Nr, Ns);
+        Aii.topLeftCorner(Ms, Ms) -= Aij.topRightCorner(Ms, Nr) * Bj.topRightCorner(Nr, Nr) * Aij.topRightCorner(Ms, Nr).transpose();
+      }
+    }
+  }
 }
 
 template <typename DT>
@@ -821,114 +869,22 @@ void H2Matrix<DT>::forwardSubstitute(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   // the number of cells for this process on this level
   long long nodes = comm.lenLocal();
-  std::vector<long long> ipiv_offsets(nodes);
-  // prefix sum over the dimensions on this process
-  // stored in ipiv_offsets
-  std::exclusive_scan(Dims.begin() + ibegin, Dims.begin() + (ibegin + nodes), ipiv_offsets.begin(), 0ll);
 
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
-  comm.level_merge(X[0], X.size());
-  // for all cells on this level
-  for (long long i = 0; i < nodes; i++) {
-    // index of the diagonal block
-    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
-    // nrows
-    long long M = Dims[i + ibegin];
-    // skeleton dimension
-    long long Ms = DimsLr[i + ibegin];
-    // redundant dimension
-    long long Mr = M - Ms;
-    
-    // added a guard agains empty Dims
-    if (0 < Mr) {
-      VectorMap_dt x(X[i + ibegin], M);
-      VectorMap_dt y(Y[i + ibegin], M);
-      MatrixMap_dt q(Q[i + ibegin], M, M);
-      // the diagonal block
-      MatrixMap_dt Aii(A[diag], M, M);
-      // get the pivots for the redudandant part
-      Eigen::PermutationMatrix<Eigen::Dynamic> p(Eigen::Map<Eigen::VectorXi>(Ipivots.data() + ipiv_offsets[i], Mr));
-    
-      // Y = Q^-1 X
-      y.noalias() = q.adjoint() * x;
-      // privot Yr
-      y.bottomRows(Mr).applyOnTheLeft(p);
-      // solve Lrr y = Yr
-      Aii.bottomRightCorner(Mr, Mr).template triangularView<Eigen::UnitLower>().solveInPlace(y.bottomRows(Mr));
-      // solve Urr y = y
-      Aii.bottomRightCorner(Mr, Mr).template triangularView<Eigen::Upper>().solveInPlace(y.bottomRows(Mr));
-      // store result in x
-      x = y;
-    }
-  }
-
-  // broadcast X
-  comm.neighbor_bcast(X);
-  // for all cells
-  for (long long i = 0; i < nodes; i++) {
-    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
-    long long M = Dims[i + ibegin];
-    long long Ms = DimsLr[i + ibegin];
-    long long Mr = M - Ms;
-
-    VectorMap_dt x(X[i + ibegin], M);
-    if (0 < Ms) {
-      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        long long j = ACols[ij];
-        long long N = Dims[j];
-        long long Ns = DimsLr[j];
-        long long Nr = N - Ns;
-        
-        if (0 < Nr) {
-          VectorMap_dt xj(X[j], N);
-          MatrixMap_dt Aij(A[ij], M, N);
-          x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
-        }
-      }
-      VectorMap_dt xo(NX[i + ibegin], Ms);
-      xo = x.topRows(Ms);
-    }
-    
-    if (0 < Mr) {
-      VectorMap_dt y(Y[i + ibegin], M);
-      y = x;
-      for (long long ij = ARows[i]; ij < diag; ij++) {
-        long long j = ACols[ij];
-        // TODO is it possible for just N to be empty?
-        long long N = Dims[j];
-        long long Ns = DimsLr[j];
-        long long Nr = N - Ns;
-
-        if (0 < Nr) {
-          VectorMap_dt xj(X[j], N);
-          MatrixMap_dt Aij(A[ij], M, N);
-          y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
-        }
-      }
-    }
-  }
-
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
+
     if (0 < M) {
       VectorMap_dt x(X[i + ibegin], M);
       VectorMap_dt y(Y[i + ibegin], M);
-      x = y;
+      MatrixMap_dt q(R[i + ibegin], M, M);
+      y.noalias() = q * x;
     }
   }
-}
 
-template <typename DT>
-void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
-
-  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
-  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
-
-  comm.neighbor_bcast(X);
+  comm.neighbor_bcast(Y[0], NbXoffsets.data());
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
@@ -937,9 +893,61 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
 
     VectorMap_dt x(X[i + ibegin], M);
     VectorMap_dt y(Y[i + ibegin], M);
+    x = y;
+
+    if (0 < Mr)
+      for (long long ij = ARows[i]; ij < diag; ij++) {
+        long long j = ACols[ij];
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
+        
+        if (0 < Nr) {
+          VectorMap_dt xj(Y[j], N);
+          MatrixMap_dt Aij(A[ij], M, N);
+          x.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+        }
+      }
+
+    if (0 < Ms) {
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        // TODO is it possible for just N to be empty?
+        long long N = Dims[j];
+        long long Ns = DimsLr[j];
+        long long Nr = N - Ns;
+
+        if (0 < Nr) {
+          VectorMap_dt xj(Y[j], N);
+          MatrixMap_dt Aij(A[ij], M, N);
+          x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
+        }
+      }
+    }
+  }
+  comm.neighbor_bcast(X[0], NbXoffsets.data());
+}
+
+template <typename DT>
+void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
+
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
+  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt; 
+  comm.neighbor_bcast(X[0], NbXoffsets.data());
+  
+  for (long long i = 0; i < nodes; i++) {
+    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
+    long long M = Dims[i + ibegin];
+    long long Ms = DimsLr[i + ibegin];
+    long long Mr = M - Ms;
+
+    VectorMap_dt x(X[i + ibegin], M);
+    VectorMap_dt y(Y[i + ibegin], M);
+    y = x;
 
     if (0 < Mr) {
-      y.bottomRows(Mr) = x.bottomRows(Mr);
       for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
         long long N = Dims[j];
@@ -959,16 +967,11 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
         long long Ns = DimsLr[j];
 
         if (0 < Ns) {
-          VectorMap_dt xo(NX[j], Ns);
+          VectorMap_dt xj(X[j], N);
           MatrixMap_dt Aij(A[ij], M, N);
-          y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xo;
+          y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xj.topRows(Ns);
         }
       }
-    }
-
-    if (0 < Ms) {
-      VectorMap_dt xo(NX[i + ibegin], Ms);
-      y.topRows(Ms) = xo;
     }
   }
 
@@ -982,6 +985,4 @@ void H2Matrix<DT>::backwardSubstitute(const ColCommMPI& comm) {
       x.noalias() = q.conjugate() * y;
     }
   }
-
-  comm.neighbor_bcast(X);
 }

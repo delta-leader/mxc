@@ -64,6 +64,7 @@ public:
   // factorize the matrix
   void factorizeM();
   void factorizeM(const cublasComputeType_t COMP);
+  void factorizeDeviceM(int device);
   /*
   solve the system LUx = b
   after the matrix has been factorized

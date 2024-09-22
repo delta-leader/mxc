@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cublas_v2.h>
-
-#include <data_container.hpp>
+#include <vector>
+#include <numeric>
 #include <complex>
 
 template <typename DT>
@@ -10,6 +9,7 @@ class MatrixAccessor;
 class CSR;
 class Cell;
 class ColCommMPI;
+class MatrixDesc;
 
 /*
 Basically, this class is used to sample the far field of a node
@@ -59,20 +59,28 @@ public:
   const double* fbodies_at_i(const long long i) const;
 };
 
+template<class T> class MatrixDataContainer {
+private:
+  std::vector<long long> offsets;
+  std::vector<T> data;
+
+public:
+  template <typename U> friend class MatrixDataContainer;
+  MatrixDataContainer() {}
+  MatrixDataContainer(long long len, const long long* dims);
+
+  T* operator[](long long index);
+  const T* operator[](long long index) const;
+  long long size() const;
+  void reset();
+};
+
 template <typename DT = std::complex<double>>
 class H2Matrix {
 private:
-  // stores the rank for each cell
-  std::vector<long long> DimsLr;
   // the dimension (Dim) of the parent of each cell
   // i.e. the number of points in the parent
   std::vector<long long> UpperStride;
-  // the basis matrices
-  // the basis is computed as a row ID such that A = X A(rows)
-  // where X = QR
-  MatrixDataContainer<DT> Q;
-  // the corresponding R matrices (see above)
-  MatrixDataContainer<DT> R;
   // stores the points corresponding to each cell
   MatrixDataContainer<double> S;
 
@@ -85,33 +93,30 @@ private:
   // from this level
   std::vector<DT*> C;
 
-  // Near field rows and columns in CSR format
-  std::vector<long long> ARows;
-  std::vector<long long> ACols;
-  // stores the dense matrices at the leaf level
-  // at the upper levels it stores the skeleton matrices
-  // TODO what about the skeleton matrices on the leaf level?
-  MatrixDataContainer<DT> A;
-  // Pointer to the upper level skeleton/dense matrices for the near field
-  // 0 initialized as far as I can tell
-  // TODO not sure how this is used?
+  // pointer to the uper level skeleton matrices
   std::vector<DT*> NA;
-  // length is equal to the total number of points at this level
-  // TODO not used yet
-  std::vector<int> Ipivots;
-
-  // pointers to X of the parent
-  std::vector<DT*> NX;
-  // pointers ot Y of the parent
-  std::vector<DT*> NY;
+  std::vector<long long> LowerX;
+  std::vector<long long> NbXoffsets;
 
 public:
   template <typename OT> friend class H2Matrix;
   template <typename OT> friend class H2MatrixSolver;
   // the number of points contained in each cell for this level
   std::vector<long long> Dims;
-  // Used for storing the input/output vector
-  // and intermediate results during matrix-vector multiplication
+  // stores the rank for each cell
+  std::vector<long long> DimsLr;
+
+  // Near field rows and columns in CSR format
+  std::vector<long long> ARows;
+  std::vector<long long> ACols;
+  // the basis matrices
+  // the basis is computed as a row ID such that A = X A(rows)
+  // where X = QR
+  MatrixDataContainer<DT> Q;
+  // the corresponding R matrices (see above)
+  MatrixDataContainer<DT> R;
+  MatrixDataContainer<DT> A;
+
   MatrixDataContainer<DT> X;
   MatrixDataContainer<DT> Y;
   
@@ -139,6 +144,9 @@ public:
   template <typename OT>
   H2Matrix(const H2Matrix<OT>& h2matrix);
 
+  void upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA);
+  void downwardCopyNext(char src, char dst, const H2Matrix& upperA, const ColCommMPI& upperComm);
+
   /*
   multiplies the Q matrices for all cells on this level with a vector
   the vector needs to be stored in X beforehand
@@ -160,8 +168,6 @@ public:
   comm: the communicator for this level
   */
   void matVecLeafHorizontalPass(const ColCommMPI& comm);
-  // initializes X and Y to zero
-  void resetX();
 
   /*
   factorize the matrix on this level
@@ -181,4 +187,3 @@ public:
   */
   void backwardSubstitute(const ColCommMPI& comm);
 };
-

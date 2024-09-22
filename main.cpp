@@ -133,8 +133,10 @@ int main(int argc, char* argv[]) {
   double approx_err = computeRelErr(lenX, &B[0], &B_ref[0]);
   //approx[i] = approx_err;
 
-  int mpi_rank = 0;
+  int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+
   if (mpi_rank == 0) {
     //std::cout<< params[i] << std::endl;
     //std::cout << cond <<std::endl;
@@ -180,12 +182,13 @@ int main(int argc, char* argv[]) {
 
   //matM.factorizeM();
   matM.factorizeM();
+  //matM.factorizeDeviceM(mpi_rank % mpi_size);
   
   //Vector_dt<DT_low> test(Ones);
   //matM.matVecMul(&test[0]);
   //approx_err = computeRelErr(lenX, &Vector_dt<DT>(test)[0], &B_ref[0]);
   //std::cout<<"After fact "<<approx_err<<std::endl;
-  
+
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
   h2_factor_comm_time = ColCommMPI::get_comm_time();
