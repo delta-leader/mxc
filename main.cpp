@@ -10,8 +10,8 @@
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
-  typedef std::complex<double> DT; typedef std::complex<float> DT_low;
-  //typedef double DT; typedef float DT_low;
+  //typedef std::complex<double> DT; typedef std::complex<float> DT_low;
+  typedef double DT; typedef float DT_low;
   std::vector<cublasComputeType_t> comp = {CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_COMPUTE_32F_FAST_16BF};
   //COMP = CUBLAS_COMPUTE_32F_FAST_TF32;
   //const auto COMP = CUBLAS_COMPUTE_32F_FAST_16BF;
@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
   long long Nleaf = (long long)1 << levels;
   // the number of cells (i.e. nodes) in the cluster tree
   long long ncells = Nleaf + Nleaf - 1;
-  for (size_t t=0; t<comp.size(); ++t) {
+  //for (size_t t=0; t<comp.size(); ++t) {
   std::vector<double> params = {1, 2, 5, 10, 20, 50};
   std::vector<double> conds(params.size());
   std::vector<double> approx(params.size());
@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
   std::vector<double> ir_f(params.size());
   std::vector<double> gmres_f(params.size());
   std::vector<double> gmres_b(params.size());
-  for (size_t i=0; i<params.size(); ++i) {
+  //for (size_t i=0; i<params.size(); ++i) {
   // kernel functions, here we select the appropriate function
   // by setting the corresponding parameters
   // In this case the template argument deduction fails for the matvec (double)
@@ -56,9 +56,9 @@ int main(int argc, char* argv[]) {
   //Laplace3D<DT> eval(params[i]);
   //Yukawa3D<DT> eval(params[i], params[j]);
   //Gaussian<DT> eval(params[i]);
-  //IMQ<DT> eval(params[i]);
+  IMQ<DT> eval(1);
   //Matern3<DT> eval(params[i]);
-  Helmholtz3D<DT> eval(params[i], 0.1);
+  //Helmholtz3D<DT> eval(params[i], 0.1);
   
   // body contains the points
   // 3 corresponds to the dimension
@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
   Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Amap(&A[0], Nbody, Nbody);
   Eigen::JacobiSVD<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> svd(Amap);
   double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
-  conds[i] = cond;
+  //conds[i] = cond;
   
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
@@ -131,7 +131,7 @@ int main(int argc, char* argv[]) {
   matA.matVecMul(&B[0]);
   mat_vec_reference(eval, lenX, Nbody, &B_ref[0], &Ones[0], &body[matA.local_bodies.first * 3], &body[0]);
   double approx_err = computeRelErr(lenX, &B[0], &B_ref[0]);
-  approx[i] = approx_err;
+  //approx[i] = approx_err;
 
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
@@ -141,9 +141,9 @@ int main(int argc, char* argv[]) {
     //std::cout << cerr << std::endl;
     //std::cout << approx_err << std::endl;
     
-    //std::cout << "Condition #: " << cond <<std::endl;
-    //std::cout << "Construct Err: " << cerr << std::endl;
-    //std::cout << "Approximation Err: " << approx_err << std::endl;
+    std::cout << "Condition #: " << cond <<std::endl;
+    std::cout << "Construct Err: " << cerr << std::endl;
+    std::cout << "Approximation Err: " << approx_err << std::endl;
     //std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     //std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     //std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
@@ -173,13 +173,13 @@ int main(int argc, char* argv[]) {
   Vector_dt<DT_low> B_low(Ones);
   matM.matVecMul(&B_low[0]);
   approx_err = computeRelErr(lenX, &Vector_dt<DT>(B_low)[0], &B_ref[0]);
-  consterr[i] = approx_err;
+  //consterr[i] = approx_err;
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
   //matM.factorizeM();
-  matM.factorizeM(comp[t]);
+  matM.factorizeM();
   
   //Vector_dt<DT_low> test(Ones);
   //matM.matVecMul(&test[0]);
@@ -207,16 +207,16 @@ int main(int argc, char* argv[]) {
   H2MatrixSolver<DT> matM_test(matM);
   matM_test.solvePrecondition(&B[0]);
   double serr_test = computeRelErr(lenX, &B[0], &Ones[0]);
-  solverr[i] = serr_test;
+  //solverr[i] = serr_test;
 
   if (mpi_rank == 0) {
     //std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
-    //std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
-    //std::cout << "H^2-Preconditi Approximation Err: " << approx_err << std::endl;
-    //std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
+    std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
+    std::cout << "H^2-Preconditi Approximation Err: " << approx_err << std::endl;
+    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     //std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
-    //std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
-    //std::cout << "H^2-Matrix Substitution Err: " << serr_test << std::endl;
+    std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
+    std::cout << "H^2-Matrix Substitution Err: " << serr_test << std::endl;
 
     //std::cout << cerr_m << std::endl;
     //std::cout << approx_err << std::endl;
@@ -233,15 +233,15 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   ir_time = MPI_Wtime() - ir_time;
   ir_comm_time = ColCommMPI::get_comm_time();
-  ir_b[i] = matA.resid[iters];
-  ir_f[i] = computeRelErr(lenX, &B[0], &Ones[0]);
+  //ir_b[i] = matA.resid[iters];
+  //ir_f[i] = computeRelErr(lenX, &B[0], &Ones[0]);
 
   if (mpi_rank == 0) {
     //std::cout << matA.resid[iters] << std::endl;
     //std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
-    //std::cout << iters << std::endl;
-    //std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
-    //std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
+    ///std::cout << iters << std::endl;
+    std::cout << "IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
+    std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     //std::cout << "IR Time: " << ir_time << ", Comm: " << ir_comm_time << std::endl;
     //for (long long i = 0; i <= matA.iters; i++)
       //std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
@@ -258,15 +258,15 @@ int main(int argc, char* argv[]) {
   gmres_ir_time = MPI_Wtime() - gmres_ir_time;
   gmres_ir_comm_time = ColCommMPI::get_comm_time();
 
-  gmres_b[i] = matA.resid[iters];
-  gmres_f[i] = computeRelErr(lenX, &B[0], &Ones[0]);
+  //gmres_b[i] = matA.resid[iters];
+  //gmres_f[i] = computeRelErr(lenX, &B[0], &Ones[0]);
 
   if (mpi_rank == 0) {
     //std::cout << matA.resid[iters] << std::endl;
     //std::cout << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     //std::cout << iters << std::endl;
-    //std::cout << "GMRES-IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
-    //std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
+    std::cout << "GMRES-IR Residual: " << matA.resid[iters] << ", Iters: " << iters << std::endl;
+    std::cout << "Forward Error: " << computeRelErr(lenX, &B[0], &Ones[0]) << std::endl;
     //std::cout << "GMRES-IR Time: " << gmres_ir_time << ", Comm: " << gmres_ir_comm_time << std::endl;
   }
   
@@ -275,8 +275,8 @@ int main(int argc, char* argv[]) {
   matM_high.free_all_comms();
   matM_test.free_all_comms();
   //std::cout<<std::endl;
-  }
-  std::vector<std::vector<double>> results = {params, conds, approx, consterr, solverr, ir_b, ir_f, gmres_b, gmres_f};
+  //}
+  /*std::vector<std::vector<double>> results = {params, conds, approx, consterr, solverr, ir_b, ir_f, gmres_b, gmres_f};
   std::cout<<Nbody<<std::endl;
   for (size_t i=0; i<results.size(); ++i){
     for (size_t j=0; j<results[i].size(); ++j)
@@ -284,7 +284,7 @@ int main(int argc, char* argv[]) {
     std::cout<<std::endl;
   }
   std::cout<<std::endl;
-  }
+  }*/
   MPI_Finalize();
   return 0;
 }
