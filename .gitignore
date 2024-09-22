@@ -51,3 +51,6 @@ _deps
 *.ptx
 *.cubin
 *.fatbin
+
+# vscode
+.vscode
