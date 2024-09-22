@@ -188,7 +188,7 @@ struct conjugateFloat {
 
 // needs explicit specialization due to cuBLAS calls
 template <>
-void H2Factorize<cuDoubleComplex>::factorize(const long long bdim, const long long rank, const long long block) {
+void H2Factorize<cuDoubleComplex>::factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D) {
  long long rdim = bdim - rank;
   int info_host = 0;
   cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.), minus_one = make_cuDoubleComplex(-1., 0.);
@@ -216,7 +216,7 @@ void H2Factorize<cuDoubleComplex>::factorize(const long long bdim, const long lo
 }
 
 template <>
-void H2Factorize<cuComplex>::factorize(const long long bdim, const long long rank, const long long block) {
+void H2Factorize<cuComplex>::factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D) {
  long long rdim = bdim - rank;
   int info_host = 0;
   cuComplex one = make_cuComplex(1., 0.), zero = make_cuComplex(0., 0.), minus_one = make_cuComplex(-1., 0.);
@@ -244,7 +244,7 @@ void H2Factorize<cuComplex>::factorize(const long long bdim, const long long ran
 }
 
 template <>
-void H2Factorize<double>::factorize(const long long bdim, const long long rank, const long long block) {
+void H2Factorize<double>::factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D) {
  long long rdim = bdim - rank;
   int info_host = 0;
   double one = 1., zero = 0., minus_one = -1.;
@@ -272,7 +272,7 @@ void H2Factorize<double>::factorize(const long long bdim, const long long rank, 
 }
 
 template <>
-void H2Factorize<float>::factorize(const long long bdim, const long long rank, const long long block) {
+void H2Factorize<float>::factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D) {
  long long rdim = bdim - rank;
   int info_host = 0;
   float one = 1., zero = 0., minus_one = -1.;
@@ -300,7 +300,7 @@ void H2Factorize<float>::factorize(const long long bdim, const long long rank, c
 }
 
 template <typename DT> template <typename OT>
-void H2Factorize::compute(const long long bdim, const long long rank, const long long D, const long long M, const long long N, const long long ARows[], const long long ACols[], OT* const A, OT* const R, const OT* const Q) {
+void H2Factorize<DT>::compute(const long long bdim, const long long rank, const long long D, const long long M, const long long N, const long long ARows[], const long long ACols[], OT* const A, OT* const R, const OT* const Q) {
   long long block = bdim * bdim;
   long long lenA = ARows[M];
 
@@ -348,7 +348,7 @@ void H2Factorize::compute(const long long bdim, const long long rank, const long
   DT** V_R = thrust::raw_pointer_cast(v_r.data());
   DT** B = thrust::raw_pointer_cast(b.data());
 
-  factorize(bdim, rank, block);
+  factorize(bdim, rank, block, M, D);
   cudaStreamSynchronize(stream);
 
   cudaMemcpy(hostA, Adata, block * lenA * sizeof(DT), cudaMemcpyDeviceToHost);

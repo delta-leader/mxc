@@ -12,26 +12,26 @@
 // complex double
 template void ColCommMPI::level_merge<std::complex<double>>(std::complex<double>*, long long) const;
 template void ColCommMPI::level_sum<std::complex<double>>(std::complex<double>*, long long) const;
-template void ColCommMPI::neighbor_bcast<std::complex<double>>(std::complex<double>&) const;
+template void ColCommMPI::neighbor_bcast<std::complex<double>>(std::complex<double>*, const long long[]) const;
 // complex float
 template void ColCommMPI::level_merge<std::complex<float>>(std::complex<float>*, long long) const;
 template void ColCommMPI::level_sum<std::complex<float>>(std::complex<float>*, long long) const;
-template void ColCommMPI::neighbor_bcast<std::complex<float>>(std::complex<float>&) const;
+template void ColCommMPI::neighbor_bcast<std::complex<float>>(std::complex<float>*, const long long[]) const;
 // double
 template void ColCommMPI::level_merge<double>(double*, long long) const;
 template void ColCommMPI::level_sum<double>(double*, long long) const;
-template void ColCommMPI::neighbor_bcast<double>(double& dc) const;
+template void ColCommMPI::neighbor_bcast<double>(double*, const long long[]) const;
 // float
 template void ColCommMPI::level_merge<float>(float*, long long) const;
 template void ColCommMPI::level_sum<float>(float*, long long) const;
-template void ColCommMPI::neighbor_bcast<float>(float& dc) const;
+template void ColCommMPI::neighbor_bcast<float>(float*, const long long[]) const;
 // half
 template void ColCommMPI::level_merge<Eigen::half>(Eigen::half*, long long) const;
 template void ColCommMPI::level_sum<Eigen::half>(Eigen::half*, long long) const;
-template void ColCommMPI::neighbor_bcast<Eigen::half>(Eigen::half& dc) const;
+template void ColCommMPI::neighbor_bcast<Eigen::half>(Eigen::half*, const long long[]) const;
 
 // long long
-template void ColCommMPI::neighbor_bcast<long long>(long long*) const;
+template void ColCommMPI::neighbor_bcast<long long>(long long*, const long long[]) const;
 
 MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
@@ -148,7 +148,7 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
 }
 
 ColCommMPI::ColCommMPI(const ColCommMPI& comm, const std::vector<MPI_Comm>& allocedComm) :
-  Proc(comm.Proc), Boxes(comm.Boxes) {
+  Proc(comm.Proc), Boxes(comm.Boxes), BoxOffsets(comm.BoxOffsets) {
 
   for (size_t i = 0; i< comm.NeighborComm.size(); ++i) {
     std::pair<int, MPI_Comm> neighbor(comm.NeighborComm[i].first, find_same(comm.NeighborComm[i].second, allocedComm));

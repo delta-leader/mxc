@@ -20,7 +20,7 @@ private:
   DT* hostA, **hostP;
   int* ipiv, *info;
 
-  void factorize(const long long bdim, const long long rank, const long long block);
+  void factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D);
   
 public:
   H2Factorize() {}

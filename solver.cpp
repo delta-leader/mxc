@@ -62,8 +62,9 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
   std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
   // create a communicator for each level
-  for (long long i = 0; i <= levels; i++)
+  for (long long i = 0; i <= levels; i++) {
     comm.emplace_back(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
+  }
 
   std::vector<MatrixDesc> desc;
   desc.reserve(levels + 1);
@@ -136,14 +137,14 @@ H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
         A[level].NA[i] = child_begin + offset;
       }
     }
-    for (size_t i = 0; i < A[level].NX.size(); ++i) {
+    /*for (size_t i = 0; i < A[level].NX.size(); ++i) {
       const OT* ptrx = solver.A[level].NX[i];
       offset = std::distance(solver.A[level - 1].X[0], ptrx);
       A[level].NX [i]= A[level - 1].X[0] + offset;
       const OT* ptry = solver.A[level].NY[i];
       offset = std::distance(solver.A[level - 1].Y[0], ptry);
       A[level].NY[i] = A[level - 1].Y[0] + offset;
-    }
+    }*/
   }
 }
 
@@ -161,7 +162,7 @@ void H2MatrixSolver<DT>::matVecMul(DT X[]) {
   long long llen = comm[levels].lenLocal();
   // number of points the lowest level for this process (single process: all)
   long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
-
+  
   // reference to X
   VectorMap_dt X_in(X, lenX);
   // reference to the lowest level X and Y
@@ -185,10 +186,9 @@ void H2MatrixSolver<DT>::matVecMul(DT X[]) {
       A[l].downwardCopyNext('Y', 'Y', A[l - 1], comm[l - 1]);
     A[l].matVecHorizontalandDownwardPass(comm[l]);
   }
-
   X_leaf = X_in;
   A[levels].matVecLeafHorizontalPass(comm[levels]);
-
+  
   X_in = Y_leaf;
 }
 
@@ -204,7 +204,7 @@ void H2MatrixSolver<DT>::factorizeM() {
   }
 }
 
-template <typename DT>
+/*template <typename DT>
 void H2MatrixSolver<DT>::factorizeM(const cublasComputeType_t COMP) {
   // factorize all levels, bottom  up
   // TODO how does this precompute the fill-ins?
@@ -215,6 +215,7 @@ void H2MatrixSolver<DT>::factorizeM(const cublasComputeType_t COMP) {
       A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
   }
 }
+*/
 
 template <typename DT>
 void H2MatrixSolver<DT>::factorizeDeviceM(int device) {
@@ -232,6 +233,77 @@ void H2MatrixSolver<DT>::factorizeDeviceM(int device) {
     cudaStream_t stream;
     cudaStreamCreate(&stream);
     H2Factorize<DT> fac(dims_max, lenA, lenQ, stream);
+
+    for (long long l = levels; l >= 0; l--) {
+      long long ibegin = comm[l].oLocal();
+      long long nodes = comm[l].lenLocal();
+      long long xlen = comm[l].lenNeighbors();
+      long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
+      long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
+
+      fac.compute(dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0]);
+      
+      if (0 < l)
+        A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+    }
+
+    cudaStreamSynchronize(stream);
+    cudaStreamDestroy(stream);
+  }
+}
+
+// explicit instantiations to deal with complex values
+template <>
+void H2MatrixSolver<std::complex<double>>::factorizeDeviceM(int device) {
+  long long dims_max = 0, lenA = 0, lenQ = 0;
+  for (long long l = levels; l >= 0; l--) {
+    dims_max = std::max(dims_max, *std::max_element(A[l].Dims.begin(), A[l].Dims.end()));
+    lenA = std::max(lenA, (long long)A[l].ACols.size());
+    lenQ = std::max(lenQ, comm[l].lenNeighbors());
+  }
+
+  int num_device;
+  cudaGetDeviceCount(&num_device);
+  if (cudaGetDeviceCount(&num_device) == cudaSuccess) {
+    cudaSetDevice(device % num_device);
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    H2Factorize<cuDoubleComplex> fac(dims_max, lenA, lenQ, stream);
+
+    for (long long l = levels; l >= 0; l--) {
+      long long ibegin = comm[l].oLocal();
+      long long nodes = comm[l].lenLocal();
+      long long xlen = comm[l].lenNeighbors();
+      long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
+      long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
+
+      fac.compute(dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0]);
+      
+      if (0 < l)
+        A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+    }
+
+    cudaStreamSynchronize(stream);
+    cudaStreamDestroy(stream);
+  }
+}
+
+template <>
+void H2MatrixSolver<std::complex<float>>::factorizeDeviceM(int device) {
+  long long dims_max = 0, lenA = 0, lenQ = 0;
+  for (long long l = levels; l >= 0; l--) {
+    dims_max = std::max(dims_max, *std::max_element(A[l].Dims.begin(), A[l].Dims.end()));
+    lenA = std::max(lenA, (long long)A[l].ACols.size());
+    lenQ = std::max(lenQ, comm[l].lenNeighbors());
+  }
+
+  int num_device;
+  cudaGetDeviceCount(&num_device);
+  if (cudaGetDeviceCount(&num_device) == cudaSuccess) {
+    cudaSetDevice(device % num_device);
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    H2Factorize<cuComplex> fac(dims_max, lenA, lenQ, stream);
 
     for (long long l = levels; l >= 0; l--) {
       long long ibegin = comm[l].oLocal();

@@ -56,7 +56,7 @@ template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
 template <typename DT>
 WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long max_rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level, const bool fix_rank) :
   lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
-  std::vector<std::vector<double>> Fbodies(len);
+  std::vector<std::vector<double>> Fbodies(ncells);
   // loop over the cells in the upper level
   for (long long i = upper_level.lbegin; i < upper_level.lend; i++)
     // collect the far field points from the upper level
@@ -129,6 +129,14 @@ template <class T>
 void MatrixDataContainer<T>::reset() {
   std::fill(data.begin(), data.end(), static_cast<T>(0));
 }
+
+template <class T> template <class U>
+MatrixDataContainer<T>::MatrixDataContainer(const MatrixDataContainer<U>& container) : offsets(container.offsets) {
+  long long size = offsets.back();
+  this->data = std::vector<T>(size);
+  std::transform(container.data.data(), container.data.data() + size, data.begin(), [](U value) -> T {return T(value);});
+}
+
 
 template<class T>
 inline void vector_gather(const long long* map_begin, const long long* map_end, const T* input_first, T* result) {
@@ -303,11 +311,11 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
   else {
     long long lowerBegin = localChildOffsets[0];
     long long lowerLen = localChildOffsets[nodes] - lowerBegin;
-    long long copyOffset = std::reduce(lowerA.Dims.begin(), lowerA.Dims.begin() + lowerBegin);
+    long long copyOffset = std::reduce(h2_lower.Dims.begin(), h2_lower.Dims.begin() + lowerBegin);
 
     std::vector<long long> dims_offsets(lowerLen), ranks_offsets(lowerLen + 1);
-    std::exclusive_scan(lowerA.Dims.begin() + localChildOffsets[0], lowerA.Dims.begin() + localChildOffsets[nodes], dims_offsets.begin(), copyOffset);
-    std::inclusive_scan(lowerA.DimsLr.begin() + localChildOffsets[0], lowerA.DimsLr.begin() + localChildOffsets[nodes], ranks_offsets.begin() + 1);
+    std::exclusive_scan(h2_lower.Dims.begin() + localChildOffsets[0], h2_lower.Dims.begin() + localChildOffsets[nodes], dims_offsets.begin(), copyOffset);
+    std::inclusive_scan(h2_lower.DimsLr.begin() + localChildOffsets[0], h2_lower.DimsLr.begin() + localChildOffsets[nodes], ranks_offsets.begin() + 1);
     ranks_offsets[0] = 0;
 
     std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
@@ -526,15 +534,16 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
 
 // TODO check if any variables changed
 template <typename DT> template <typename OT>
-H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : DimsLr(h2matrix.DimsLr), 
-  UpperStride(h2matrix.UpperStride), Q(h2matrix.Q), R(h2matrix.R), S(h2matrix.S),
-  CRows(h2matrix.CRows), CCols(h2matrix.CCols), ARows(h2matrix.ARows), ACols(h2matrix.ACols),
-  A(h2matrix.A), Ipivots(h2matrix.Ipivots), Dims(h2matrix.Dims), X(h2matrix.X), Y(h2matrix.Y) {
+H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : UpperStride(h2matrix.UpperStride), S(h2matrix.S),
+  CRows(h2matrix.CRows), CCols(h2matrix.CCols), LowerX(h2matrix.LowerX), NbXoffsets(h2matrix.NbXoffsets),
+  Dims(h2matrix.Dims), DimsLr(h2matrix.DimsLr), ARows(h2matrix.ARows), ACols(h2matrix.ACols),
+  Q(h2matrix.Q), R(h2matrix.R), A(h2matrix.A),
+  X(h2matrix.X), Y(h2matrix.Y) {
 
     // those pointer all point to the upper level, so we need to set them
     // from outside
-    NX = std::vector<DT*>(Dims.size(), nullptr);
-    NY = std::vector<DT*>(Dims.size(), nullptr);
+    //NX = std::vector<DT*>(Dims.size(), nullptr);
+    //NY = std::vector<DT*>(Dims.size(), nullptr);
     long long nodes = UpperStride.size();
     NA = std::vector<DT*>(ARows[nodes], nullptr);
     C = std::vector<DT*>(CRows[nodes], nullptr);
@@ -665,7 +674,7 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   long long xlen = comm.lenNeighbors();
   // the maximum dimension on this level
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
-  typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
+  typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
   std::vector<long long> Bsizes(xlen);
   std::fill(Bsizes.begin(), Bsizes.end(), dims_max * dims_max);
@@ -749,7 +758,7 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
     }
   }
 }
-
+/*
 template <typename DT>
 void H2Matrix<DT>::factorize(const ColCommMPI& comm, const cublasComputeType_t COMP) {
   factorize(comm);
@@ -838,6 +847,7 @@ void H2Matrix<std::complex<float>>::factorize(const ColCommMPI& comm, const cubl
   fac.getResults(ibegin, nodes, ARows.data(), ACols.data(), Dims.data(), A, Ipivots.data());
   cudaStreamDestroy(stream);
 }
+*/
 
 template <typename DT>
 void H2Matrix<DT>::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm) {

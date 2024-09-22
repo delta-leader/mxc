@@ -63,7 +63,7 @@ public:
   void matVecMul(DT X[]);
   // factorize the matrix
   void factorizeM();
-  void factorizeM(const cublasComputeType_t COMP);
+  //void factorizeM(const cublasComputeType_t COMP);
   void factorizeDeviceM(int device);
   /*
   solve the system LUx = b

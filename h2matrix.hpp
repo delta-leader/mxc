@@ -65,9 +65,12 @@ private:
   std::vector<T> data;
 
 public:
-  template <typename U> friend class MatrixDataContainer;
+  template <class U> friend class MatrixDataContainer;
   MatrixDataContainer() {}
   MatrixDataContainer(long long len, const long long* dims);
+  template <class U>
+  MatrixDataContainer(const MatrixDataContainer<U>& container);
+
 
   T* operator[](long long index);
   const T* operator[](long long index) const;
@@ -174,7 +177,7 @@ public:
   comm: the communicator for this level
   */
   void factorize(const ColCommMPI& comm);
-  void factorize(const ColCommMPI& comm, const cublasComputeType_t COMP);
+  //void factorize(const ColCommMPI& comm, const cublasComputeType_t COMP);
   void factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm);
   /*
   forward substitution for this level

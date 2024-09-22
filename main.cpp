@@ -149,10 +149,10 @@ int main(int argc, char* argv[]) {
     //std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     //std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     //std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
-    /*Eigen::MatrixXcd A(Nbody, Nbody);
-    gen_matrix(eval, Nbody, Nbody, body.data(), body.data(), A.data());
-    double cond = 1. / A.lu().rcond();
-    std::cout << "Condition #: " << cond << std::endl;*/
+    //Eigen::MatrixXcd A(Nbody, Nbody);
+    //gen_matrix(eval, Nbody, Nbody, body.data(), body.data(), A.data());
+    //double cond = 1. / A.lu().rcond();
+    //std::cout << "Condition #: " << cond << std::endl;
   }
   
   MPI_Barrier(MPI_COMM_WORLD);
@@ -165,6 +165,7 @@ int main(int argc, char* argv[]) {
   else if (mode.compare("hss") == 0)
     matM = H2MatrixSolver(eval, epi, rank, cell, 0., &body[0], levels, true);
 
+  
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
@@ -179,7 +180,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
-
+  
   //matM.factorizeM();
   matM.factorizeM();
   //matM.factorizeDeviceM(mpi_rank % mpi_size);
@@ -230,8 +231,8 @@ int main(int argc, char* argv[]) {
   B.reset();
   MPI_Barrier(MPI_COMM_WORLD);
   double ir_time = MPI_Wtime(), ir_comm_time;
- // long long iters = matA.solveIR(epi, matM, &X1[0], &X2[0], 200);
- long long iters = matA.solveIR(epi, matM, &B[0], &B_ref[0], 200);
+  // long long iters = matA.solveIR(epi, matM, &X1[0], &X2[0], 200);
+  long long iters = matA.solveIR(epi, matM, &B[0], &B_ref[0], 200);
 
   MPI_Barrier(MPI_COMM_WORLD);
   ir_time = MPI_Wtime() - ir_time;
