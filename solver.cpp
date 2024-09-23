@@ -40,12 +40,12 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
 
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++)
-    wsa[l] = WellSeparatedApproximation(eval, epi, rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
+    wsa[l].construct(eval, epi, rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
 
   epi = fix_rank ? (double)rank : epi;
-  A[levels] = H2Matrix(eval, epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], fix_rank);
+  A[levels].construct(eval, epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], fix_rank);
   for (long long l = levels - 1; l >= 0; l--)
-    A[l] = H2Matrix(eval, epi, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], fix_rank);
+    A[l].construct(eval, epi, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], fix_rank);
 
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();

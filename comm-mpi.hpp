@@ -21,7 +21,6 @@ protected:
   template<class T> inline void neighbor_bcast(T* data, const long long noffsets[]) const;
 
 public:
-  ColCommMPI() : Proc(-1), Boxes(), NeighborComm(), MergeComm(MPI_COMM_NULL), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL) {};
   ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world = MPI_COMM_WORLD);
   
   long long iLocal(long long iglobal) const;

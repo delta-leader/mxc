@@ -12,14 +12,12 @@ class MatrixDesc;
 
 class WellSeparatedApproximation {
 private:
-  long long lbegin;
-  long long lend;
+  long long lbegin = 0;
+  long long lend = 0;
   std::vector<std::vector<double>> M;
 
 public:
-  WellSeparatedApproximation() : lbegin(0), lend(0) {}
-  WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper);
-
+  void construct(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper);
   long long fbodies_size_at_i(long long i) const;
   const double* fbodies_at_i(long long i) const;
 };
@@ -27,12 +25,10 @@ public:
 template<class T> class MatrixDataContainer {
 private:
   std::vector<long long> offsets;
-  std::vector<T> data;
+  T* data = nullptr;
 
 public:
-  MatrixDataContainer() {}
-  MatrixDataContainer(long long len, const long long* dims);
-
+  void alloc(long long len, const long long* dims);
   T* operator[](long long index);
   const T* operator[](long long index) const;
   long long size() const;
@@ -65,8 +61,7 @@ public:
   MatrixDataContainer<std::complex<double>> X;
   MatrixDataContainer<std::complex<double>> Y;
   
-  H2Matrix() {}
-  H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
+  void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
 
   void upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA);
   void downwardCopyNext(char src, char dst, const H2Matrix& upperA, const ColCommMPI& upperComm);

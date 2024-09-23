@@ -11,8 +11,10 @@
 #include <Eigen/QR>
 #include <Eigen/LU>
 
-WellSeparatedApproximation::WellSeparatedApproximation(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) :
-  lbegin(lbegin), lend(lbegin + len), M(len) {
+void WellSeparatedApproximation::construct(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) {
+  WellSeparatedApproximation::lbegin = lbegin;
+  lend = lbegin + len;
+  M.resize(len);
   std::vector<std::vector<double>> Fbodies(len);
   for (long long i = upper.lbegin; i < upper.lend; i++)
     for (long long c = cells[i].Child[0]; c < cells[i].Child[1]; c++)
@@ -50,20 +52,31 @@ const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
 }
 
 template <class T>
-MatrixDataContainer<T>::MatrixDataContainer(long long len, const long long* dims) : offsets(len + 1), data() {
+void MatrixDataContainer<T>::alloc(long long len, const long long* dims) {
+  offsets.resize(len + 1);
   std::inclusive_scan(dims, &dims[len], offsets.begin() + 1);
   offsets[0] = 0;
-  data = std::vector<T>(offsets.back());
+  long long data_len = offsets.back();
+
+  if (0 < data_len) {
+    data = (T*)std::realloc(data, offsets.back() * sizeof(T));
+    std::memset(data, 0, offsets.back() * sizeof(T));
+  }
+  else {
+    if (data)
+      std::free(data);
+    data = nullptr;
+  }
 }
 
 template <class T>
 T* MatrixDataContainer<T>::operator[](long long index) {
-  return data.data() + offsets.at(index);
+  return data + offsets[index];
 }
 
 template <class T>
 const T* MatrixDataContainer<T>::operator[](long long index) const {
-  return data.data() + offsets.at(index);
+  return data + offsets[index];
 }
 
 template <class T>
@@ -73,7 +86,7 @@ long long MatrixDataContainer<T>::size() const {
 
 template <class T>
 void MatrixDataContainer<T>::reset() {
-  std::fill(data.begin(), data.end(), static_cast<T>(0));
+  std::fill(data, data + offsets.back(), static_cast<T>(0));
 }
 
 template class MatrixDataContainer<double>;
@@ -140,7 +153,7 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
   return (k < RowIndex[i + 1]) ? k : -1;
 }
 
-H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies) {
+void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -150,23 +163,23 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   localChildOffsets[0] = lowerComm.iLocal(cells[ybegin].Child[0]);
   long long localChildIndex = localChildOffsets[0] - cells[ybegin].Child[0];
   std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
-  Dims = std::vector<long long>(xlen, 0);
-  DimsLr = std::vector<long long>(xlen, 0);
-  UpperStride = std::vector<long long>(nodes, 0);
+  Dims.resize(xlen, 0);
+  DimsLr.resize(xlen, 0);
+  UpperStride.resize(nodes, 0);
 
-  ARows = std::vector<long long>(Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
-  ACols = std::vector<long long>(Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
+  ARows.insert(ARows.begin(), Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
+  ACols.insert(ACols.begin(), Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
   long long offset = ARows[0];
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  NA = std::vector<std::complex<double>*>(ARows[nodes], nullptr);
+  NA.resize(ARows[nodes], nullptr);
 
-  CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
-  CCols = std::vector<long long>(Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
+  CRows.insert(CRows.begin(), Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
+  CCols.insert(CCols.begin(), Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
   offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  C = std::vector<std::complex<double>*>(CRows[nodes], nullptr);
+  C.resize(CRows[nodes], nullptr);
 
   if (localChildOffsets.back() == -1)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -183,7 +196,7 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
     std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
       [&](long long start, long long end) { return ranks_offsets[end - lowerBegin] - ranks_offsets[start - lowerBegin]; });
 
-    LowerX = std::vector<long long>(ranks_offsets.back());
+    LowerX.resize(ranks_offsets.back());
     for (long long i = 0; i < lowerLen; i++)
       std::iota(LowerX.begin() + ranks_offsets[i], LowerX.begin() + ranks_offsets[i + 1], dims_offsets[i]);
   }
@@ -191,25 +204,25 @@ H2Matrix::H2Matrix(const MatrixAccessor& eval, double epi, const Cell cells[], c
   std::vector<long long> neighbor_ones(xlen, 1ll);
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
   comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
-  X = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
-  Y = MatrixDataContainer<std::complex<double>>(xlen, Dims.data());
-  NbXoffsets = std::vector<long long>(Dims.begin(), Dims.end());
+  X.alloc(xlen, Dims.data());
+  Y.alloc(xlen, Dims.data());
+  NbXoffsets.insert(NbXoffsets.begin(), Dims.begin(), Dims.end());
   NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
 
   std::vector<long long> Qsizes(xlen, 0);
   std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
-  Q = MatrixDataContainer<std::complex<double>>(xlen, Qsizes.data());
-  R = MatrixDataContainer<std::complex<double>>(xlen, Qsizes.data());
+  Q.alloc(xlen, Qsizes.data());
+  R.alloc(xlen, Qsizes.data());
 
   std::vector<long long> Ssizes(xlen);
   std::transform(Dims.begin(), Dims.end(), Ssizes.begin(), [](const long long d) { return 3 * d; });
-  S = MatrixDataContainer<double>(xlen, Ssizes.data());
+  S.alloc(xlen, Ssizes.data());
 
   std::vector<long long> Asizes(ARows[nodes]);
   for (long long i = 0; i < nodes; i++)
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
-  A = MatrixDataContainer<std::complex<double>>(ARows[nodes], Asizes.data());
+  A.alloc(ARows[nodes], Asizes.data());
 
   if (std::reduce(Dims.begin(), Dims.end())) {
     typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
@@ -417,7 +430,8 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
 
   std::vector<long long> Bsizes(xlen);
   std::fill(Bsizes.begin(), Bsizes.end(), dims_max * dims_max);
-  MatrixDataContainer<std::complex<double>> B(xlen, Bsizes.data());
+  MatrixDataContainer<std::complex<double>> B;
+  B.alloc(xlen, Bsizes.data());
 
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);

@@ -64,9 +64,9 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
 
   std::vector<long long> NeighborRanks(cols.begin(), cols.end());
   Proc = std::distance(NeighborRanks.begin(), std::find(NeighborRanks.begin(), NeighborRanks.end(), p));
-  Boxes = std::vector<std::pair<long long, long long>>(NeighborRanks.size());
-  BoxOffsets = std::vector<long long>(NeighborRanks.size() + 1);
-  NeighborComm = std::vector<std::pair<int, MPI_Comm>>(p == mpi_rank ? NeighborRanks.size() : 0);
+  Boxes.resize(NeighborRanks.size());
+  BoxOffsets.resize(NeighborRanks.size() + 1);
+  NeighborComm.resize(p == mpi_rank ? NeighborRanks.size() : 0);
 
   BoxOffsets[0] = 0;
   for (long long i = 0; i < (long long)NeighborRanks.size(); i++) {
