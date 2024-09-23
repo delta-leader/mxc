@@ -13,9 +13,7 @@ private:
   long long maxA, maxQ;
   long long lenD, lenA, bdim, rank, offsetD;
   cuDoubleComplex* Adata, *Bdata, *Udata, *Vdata;
-  cuDoubleComplex** A_SS, **A_SR, **A_RS, **A_RR;
-  cuDoubleComplex** B, **U, **V, **V_R;
-  cuDoubleComplex* hostA, **hostP;
+  cuDoubleComplex* hostA;
   int* ipiv, *info;
   
 public:

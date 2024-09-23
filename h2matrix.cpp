@@ -15,7 +15,6 @@ void WellSeparatedApproximation::construct(const MatrixAccessor& eval, double ep
   WellSeparatedApproximation::lbegin = lbegin;
   lend = lbegin + len;
   M.resize(len);
-  std::vector<std::vector<double>> Fbodies(len);
   for (long long i = upper.lbegin; i < upper.lend; i++)
     for (long long c = cells[i].Child[0]; c < cells[i].Child[1]; c++)
       if (lbegin <= c && c < lend)

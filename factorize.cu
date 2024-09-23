@@ -25,28 +25,11 @@ H2Factorize::H2Factorize(long long LD, long long lenA, long long lenQ, cudaStrea
   cudaMalloc(reinterpret_cast<void**>(&Udata), bsize * lenQ);
   cudaMalloc(reinterpret_cast<void**>(&Vdata), bsize * lenQ);
 
-  long long psize = sizeof(cuDoubleComplex*);
-  cudaMalloc(reinterpret_cast<void**>(&A_SS), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&A_SR), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&A_RS), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&A_RR), psize * lenA);
-
-  cudaMalloc(reinterpret_cast<void**>(&B), psize * lenQ);
-  cudaMalloc(reinterpret_cast<void**>(&U), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&V), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&V_R), psize * lenQ);
-
   cudaMalloc(reinterpret_cast<void**>(&ipiv), LD * lenQ * sizeof(int));
   cudaMalloc(reinterpret_cast<void**>(&info), lenQ * sizeof(int));
 
   long long len = std::max(lenA, lenQ);
   cudaMallocHost(reinterpret_cast<void**>(&hostA), bsize * len);
-  cudaMallocHost(reinterpret_cast<void**>(&hostP), psize * len);
-
-  for (long long i = 0; i < lenQ; i++)
-    hostP[i] = &Bdata[i * LD * LD];
-
-  cudaMemcpy(B, hostP, psize * lenQ, cudaMemcpyHostToDevice);
 }
 
 H2Factorize::~H2Factorize() {
@@ -54,19 +37,10 @@ H2Factorize::~H2Factorize() {
   cudaFree(Bdata);
   cudaFree(Udata);
   cudaFree(Vdata);
-  cudaFree(A_SS);
-  cudaFree(A_SR);
-  cudaFree(A_RS);
-  cudaFree(A_RR);
-  cudaFree(B);
-  cudaFree(U);
-  cudaFree(V);
-  cudaFree(V_R);
   cudaFree(ipiv);
   cudaFree(info);
   
   cudaFreeHost(hostA);
-  cudaFreeHost(hostP);
 }
 
 struct keysDLU {
@@ -103,6 +77,26 @@ struct conjugateDouble {
     return thrust::conj(z);
   }
 };
+
+template<class T> struct copyFunc {
+  const T** srcs;
+  T** dsts;
+  long long M, B, ls, ld;
+  copyFunc(long long M, long long N, const T* srcs[], long long ls, T* dsts[], long long ld) :
+    srcs(srcs), dsts(dsts), M(M), B(M * N), ls(ls), ld(ld) {}
+  __host__ __device__ void operator()(long long i) const {
+    long long x = i / B; long long y = i - x * B;
+    long long z = y / M; long long w = y - z * M;
+    T e = srcs[x][z * ls + w];
+    dsts[x][z * ld + w] = e;
+  }
+};
+
+template<class T>
+void thrust_batch_copy(cudaStream_t stream, long long M, long long N, const T* srcs[], long long ls, T* dsts[], long long ld, long long batch_size) {
+  auto iter = thrust::make_counting_iterator(0ll);
+  thrust::for_each(thrust::cuda::par.on(stream), iter, iter + (M * N * batch_size), copyFunc(M, N, srcs, ls, dsts, ld));
+}
 
 void H2Factorize::compute(long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], std::complex<double>* A, std::complex<double>* R, const std::complex<double>* Q) {
   long long block = bdim * bdim;
@@ -152,6 +146,11 @@ void H2Factorize::compute(long long bdim, long long rank, long long D, long long
   cuDoubleComplex** V_R = thrust::raw_pointer_cast(v_r.data());
   cuDoubleComplex** B = thrust::raw_pointer_cast(b.data());
 
+  thrust::device_vector<int> Ipiv(M * bdim);
+  thrust::device_vector<int> Info(M);
+  int* ipiv = thrust::raw_pointer_cast(Ipiv.data());
+  int* info = thrust::raw_pointer_cast(Info.data());
+
   long long rdim = bdim - rank;
   int info_host = 0;
   cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.), minus_one = make_cuDoubleComplex(-1., 0.);
@@ -183,4 +182,6 @@ void H2Factorize::compute(long long bdim, long long rank, long long D, long long
 
   cudaMemcpy(hostA, Vdata, block * M * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost);
   std::copy(reinterpret_cast<std::complex<double>*>(hostA), reinterpret_cast<std::complex<double>*>(&hostA[block * M]), R + block * D);
+
+  thrust_batch_copy(stream, bdim, bdim, (const cuDoubleComplex**)A_SS, bdim, U, bdim, M);
 }
