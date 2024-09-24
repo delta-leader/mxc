@@ -59,7 +59,7 @@ void MatrixDataContainer<T>::alloc(long long len, const long long* dims) {
 
   if (0 < data_len) {
     data = (T*)std::realloc(data, offsets.back() * sizeof(T));
-    std::memset(data, 0, offsets.back() * sizeof(T));
+    std::fill(data, data + offsets.back(), static_cast<T>(0));
   }
   else {
     if (data)
