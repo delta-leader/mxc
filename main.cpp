@@ -102,7 +102,8 @@ int main(int argc, char* argv[]) {
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   Vector_dt<DT> X1(lenX);
   Vector_dt<DT> X2(lenX);
-  Vector_dt<DT> B(Ones);
+  Vector_dt<DT> B(lenX);
+  B.ones();
   Vector_dt<DT> B_ref(lenX);
 
   // copy the random vector
@@ -173,7 +174,7 @@ int main(int argc, char* argv[]) {
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
   matM.matVecMul(&X1_low[0]);
   double cerr_m = computeRelErr(lenX, &Vector_dt<DT>(X1_low)[0], &X2[0]);
-  Vector_dt<DT_low> B_low(Ones);
+  Vector_dt<DT_low> B_low(B);
   matM.matVecMul(&B_low[0]);
   approx_err = computeRelErr(lenX, &Vector_dt<DT>(B_low)[0], &B_ref[0]);
   //consterr[i] = approx_err;
