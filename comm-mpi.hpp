@@ -19,7 +19,6 @@ protected:
   MPI_Comm DupComm;
 
 public:
-  ColCommMPI() : Proc(-1), Boxes(), NeighborComm(), MergeComm(MPI_COMM_NULL), AllReduceComm(MPI_COMM_NULL), DupComm(MPI_COMM_NULL) {};
   /*
   Tree: cluster tree containing the pairs of children
   Mapping: contains a pair of (0,1) for each mpi process

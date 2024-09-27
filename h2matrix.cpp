@@ -54,9 +54,10 @@ template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
 //template H2Matrix<double>::H2Matrix(const H2Matrix<Eigen::half>&);
 
 template <typename DT>
-WellSeparatedApproximation<DT>::WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, double epsilon, long long max_rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level, const bool fix_rank) :
-  lbegin(cell_begin), lend(cell_begin + ncells), M(ncells) {
-  std::vector<std::vector<double>> Fbodies(ncells);
+void WellSeparatedApproximation<DT>::construct(const MatrixAccessor<DT>& kernel, double epsilon, long long max_rank, long long cell_begin, long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper_level, const bool fix_rank) {
+  this->lbegin = cell_begin;
+  this->lend = lbegin + ncells;
+  M.resize(ncells);
   // loop over the cells in the upper level
   for (long long i = upper_level.lbegin; i < upper_level.lend; i++)
     // collect the far field points from the upper level
@@ -104,20 +105,31 @@ const double* WellSeparatedApproximation<DT>::fbodies_at_i(const long long i) co
 }
 
 template <class T>
-MatrixDataContainer<T>::MatrixDataContainer(long long len, const long long* dims) : offsets(len + 1), data() {
+void MatrixDataContainer<T>::alloc(long long len, const long long* dims) {
+  offsets.resize(len + 1);
   std::inclusive_scan(dims, &dims[len], offsets.begin() + 1);
   offsets[0] = 0;
-  data = std::vector<T>(offsets.back());
+  long long data_len = offsets.back();
+
+  if (0 < data_len) {
+    data = (T*)std::realloc(data, offsets.back() * sizeof(T));
+    std::fill(data, data + offsets.back(), static_cast<T>(0));
+  }
+  else {
+    if (data)
+      std::free(data);
+    data = nullptr;
+  }
 }
 
 template <class T>
 T* MatrixDataContainer<T>::operator[](long long index) {
-  return data.data() + offsets.at(index);
+  return data + offsets[index];
 }
 
 template <class T>
 const T* MatrixDataContainer<T>::operator[](long long index) const {
-  return data.data() + offsets.at(index);
+  return data + offsets[index];
 }
 
 template <class T>
@@ -127,14 +139,14 @@ long long MatrixDataContainer<T>::size() const {
 
 template <class T>
 void MatrixDataContainer<T>::reset() {
-  std::fill(data.begin(), data.end(), static_cast<T>(0));
+  std::fill(data, data + offsets.back(), static_cast<T>(0));
 }
 
 template <class T> template <class U>
 MatrixDataContainer<T>::MatrixDataContainer(const MatrixDataContainer<U>& container) : offsets(container.offsets) {
   long long size = offsets.back();
-  this->data = std::vector<T>(size);
-  std::transform(container.data.data(), container.data.data() + size, data.begin(), [](U value) -> T {return T(value);});
+  data = (T*)std::realloc(data, offsets.back() * sizeof(T));
+  std::transform(container.data, container.data + size, data, [](U value) -> T {return T(value);});
 }
 
 
@@ -265,7 +277,7 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
 }
 
 template <typename DT>
-H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies, double scale) {
+void H2Matrix<DT>::construct(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies, double scale) {
   // number of cells on the same level
   long long xlen = comm.lenNeighbors();
   // index of the first cell for this process on this level (always 0 for a single process)
@@ -283,28 +295,23 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
   // convert to local index
   long long localChildIndex = localChildOffsets[0] - cells[ybegin].Child[0];
   std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
-  
-  Dims = std::vector<long long>(xlen, 0);
-  DimsLr = std::vector<long long>(xlen, 0);
-  UpperStride = std::vector<long long>(nodes, 0);
+  Dims.resize(xlen, 0);
+  DimsLr.resize(xlen, 0);
+  UpperStride.resize(nodes, 0);
 
-  // extract the indices of the near field for this level
-  ARows = std::vector<long long>(Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
-  ACols = std::vector<long long>(Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
-  // transform to entries local for this level
+  ARows.insert(ARows.begin(), Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
+  ACols.insert(ACols.begin(), Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
   long long offset = ARows[0];
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  NA = std::vector<DT*>(ARows[nodes], nullptr);
+  NA.resize(ARows[nodes], nullptr);
 
-  // extract the indices of the far field (sampled bodies) for this level
-  CRows = std::vector<long long>(Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
-  CCols = std::vector<long long>(Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
-  // transform to entries local for this level
+  CRows.insert(CRows.begin(), Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
+  CCols.insert(CCols.begin(), Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
   offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  C = std::vector<DT*>(CRows[nodes], nullptr);
+  C.resize(CRows[nodes], nullptr);
 
   if (localChildOffsets.back() == -1)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -321,7 +328,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
     std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
       [&](long long start, long long end) { return ranks_offsets[end - lowerBegin] - ranks_offsets[start - lowerBegin]; });
 
-    LowerX = std::vector<long long>(ranks_offsets.back());
+    LowerX.resize(ranks_offsets.back());
     for (long long i = 0; i < lowerLen; i++)
       std::iota(LowerX.begin() + ranks_offsets[i], LowerX.begin() + ranks_offsets[i + 1], dims_offsets[i]);
   }
@@ -329,9 +336,9 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
   std::vector<long long> neighbor_ones(xlen, 1ll);
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
   comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
-  X = MatrixDataContainer<DT>(xlen, Dims.data());
-  Y = MatrixDataContainer<DT>(xlen, Dims.data());
-  NbXoffsets = std::vector<long long>(Dims.begin(), Dims.end());
+  X.alloc(xlen, Dims.data());
+  Y.alloc(xlen, Dims.data());
+  NbXoffsets.insert(NbXoffsets.begin(), Dims.begin(), Dims.end());
   NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
 
   // Q stores the basis (as a matrix) for each cell
@@ -339,15 +346,14 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
   // note that the storage is 0 initialized
   std::vector<long long> Qsizes(xlen, 0);
   std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
-  Q = MatrixDataContainer<DT>(xlen, Qsizes.data());
-  // stores the corresponding R from the QR factorization of the basis
-  R = MatrixDataContainer<DT>(xlen, Qsizes.data());
+  Q.alloc(xlen, Qsizes.data());
+  R.alloc(xlen, Qsizes.data());
 
   // S stores the (rank) points contained within each cell
   // the dimensions are given by 3 * Dims
   std::vector<long long> Ssizes(xlen);
   std::transform(Dims.begin(), Dims.end(), Ssizes.begin(), [](const long long d) { return 3 * d; });
-  S = MatrixDataContainer<double>(xlen, Ssizes.data());
+  S.alloc(xlen, Ssizes.data());
 
   // on the leaf level A stores the near field matrices
   // on the intermediate level, A stores the skeleton matrices
@@ -361,7 +367,7 @@ H2Matrix<DT>::H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, c
   for (long long i = 0; i < nodes; i++)
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
-  A = MatrixDataContainer<DT>(ARows[nodes], Asizes.data());
+  A.alloc(ARows[nodes], Asizes.data());
 
   // skips levels that contain no points
   // e.g. if there are no low-rank blocks on this level (because they are split further)
@@ -678,7 +684,8 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
 
   std::vector<long long> Bsizes(xlen);
   std::fill(Bsizes.begin(), Bsizes.end(), dims_max * dims_max);
-  MatrixDataContainer<DT> B(xlen, Bsizes.data());
+  MatrixDataContainer<DT> B;
+  B.alloc(xlen, Bsizes.data());
 
   for (long long i = 0; i < nodes; i++) {
     // index of the diagonal block

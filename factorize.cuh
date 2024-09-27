@@ -6,7 +6,7 @@
 #include <cublas_v2.h>
 #include <cublasLt.h>
 
-template <typename DT = cuDoubleComplex>
+/*template <typename DT = cuDoubleComplex>
 class H2Factorize {
 private:
   cudaStream_t stream;
@@ -37,3 +37,7 @@ public:
   template <typename OT>
   void compute(const long long bdim, const long long rank, const long long D, const long long M, const long long N, const long long ARows[], const long long ACols[], OT* const A, OT* const R, const OT* const Q);
 };
+*/
+class ColCommMPI;
+
+void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], std::complex<double>* A, std::complex<double>* R, const std::complex<double>* Q, const ColCommMPI& comm);

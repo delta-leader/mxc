@@ -25,15 +25,14 @@ template <typename DT = std::complex<double>>
 class WellSeparatedApproximation {
 private:
   // first index in the cell array for the current level
-  long long lbegin;
+  long long lbegin = 0;
   // last index in the cell array for the current level
-  long long lend;
+  long long lend = 0;
   // the sampled bodies for each cell in the level
   // local index (i.e. starts from 0 for each level)
   std::vector<std::vector<double>> M;
 
 public:
-  WellSeparatedApproximation() : lbegin(0), lend(0) {}
   /*
   In:
     kernel: kernel function
@@ -46,8 +45,7 @@ public:
     bodies: the points
     upper_level: the approximation from the upper level
   */
-  WellSeparatedApproximation(const MatrixAccessor<DT>& kernel, const double epsilon, long long max_rank, const long long cell_begin, const long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level, const bool fix_rank);
-
+  void construct(const MatrixAccessor<DT>& kernel, const double epsilon, long long max_rank, const long long cell_begin, const long long ncells, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper_level, const bool fix_rank);
 
   /*
   Returns the number of sampled bodies for the cell with index idx.
@@ -62,16 +60,16 @@ public:
 template<class T> class MatrixDataContainer {
 private:
   std::vector<long long> offsets;
-  std::vector<T> data;
+  // TODO isn't that data never freed?
+  T* data = nullptr;
 
 public:
   template <class U> friend class MatrixDataContainer;
-  MatrixDataContainer() {}
-  MatrixDataContainer(long long len, const long long* dims);
+  MatrixDataContainer() = default;
   template <class U>
   MatrixDataContainer(const MatrixDataContainer<U>& container);
 
-
+  void alloc(long long len, const long long* dims);
   T* operator[](long long index);
   const T* operator[](long long index) const;
   long long size() const;
@@ -122,8 +120,9 @@ public:
 
   MatrixDataContainer<DT> X;
   MatrixDataContainer<DT> Y;
+
+  H2Matrix() = default;
   
-  H2Matrix() {}
   /*
   creates an H2 matrix for a certain level
   kernel: kernel function
@@ -138,15 +137,14 @@ public:
   lowerComm: communicator for this level
   use_near_bodies: not exactly sure what this does, default: false
   */
-  H2Matrix(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies = false, double scale=1);
-
+  void construct(const MatrixAccessor<DT>& kernel, const double epsilon, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix& h2_lower, const ColCommMPI& lowerComm, const bool use_near_bodies = false, double scale=1);
 
   /*
   Copy constructor to convert a H2matrix to a different datatype
   */
   template <typename OT>
   H2Matrix(const H2Matrix<OT>& h2matrix);
-
+  
   void upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA);
   void downwardCopyNext(char src, char dst, const H2Matrix& upperA, const ColCommMPI& upperComm);
 

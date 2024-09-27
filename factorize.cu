@@ -1,11 +1,13 @@
 
 #include <factorize.cuh>
+#include <comm-mpi.hpp>
 #include <algorithm>
 #include <numeric>
 #include <tuple>
 #include <mkl.h>
 #include <cstring>
 
+#include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <thrust/gather.h>
 #include <thrust/transform.h>
@@ -15,6 +17,8 @@
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/tuple.h>
 #include <thrust/sort.h>
+#include <thrust/for_each.h>
+#include <thrust/scan.h>
 
 #include <cuda_fp16.h>
 #include <iostream>
@@ -88,63 +92,6 @@ void omatcopy(char ordering, char trans, size_t rows, size_t cols, float *SRC, s
   MKL_Somatcopy(ordering, trans, rows, cols, 1, SRC, src_stride, DST, dst_stride);
 }
 
-template <typename DT>
-H2Factorize<DT>::H2Factorize(long long LD, long long lenA, long long lenQ, cudaStream_t stream) : maxA(lenA), maxQ(lenQ), stream(stream) {
-  cublasH = nullptr;
-  cublasCreate(&cublasH);
-  cublasSetStream(cublasH, stream);
-
-  long long bsize = LD * LD * sizeof(DT);
-  cudaMalloc(reinterpret_cast<void**>(&Adata), bsize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&Bdata), bsize * lenQ);
-  cudaMalloc(reinterpret_cast<void**>(&Udata), bsize * lenQ);
-  cudaMalloc(reinterpret_cast<void**>(&Vdata), bsize * lenQ);
-
-  long long psize = sizeof(DT*);
-  cudaMalloc(reinterpret_cast<void**>(&A_SS), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&A_SR), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&A_RS), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&A_RR), psize * lenA);
-
-  cudaMalloc(reinterpret_cast<void**>(&B), psize * lenQ);
-  cudaMalloc(reinterpret_cast<void**>(&U), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&V), psize * lenA);
-  cudaMalloc(reinterpret_cast<void**>(&V_R), psize * lenQ);
-
-  cudaMalloc(reinterpret_cast<void**>(&ipiv), LD * lenQ * sizeof(int));
-  cudaMalloc(reinterpret_cast<void**>(&info), lenQ * sizeof(int));
-
-  long long len = std::max(lenA, lenQ);
-  cudaMallocHost(reinterpret_cast<void**>(&hostA), bsize * len);
-  cudaMallocHost(reinterpret_cast<void**>(&hostP), psize * len);
-
-  for (long long i = 0; i < lenQ; i++)
-    hostP[i] = &Bdata[i * LD * LD];
-
-  cudaMemcpy(B, hostP, psize * lenQ, cudaMemcpyHostToDevice);
-}
-
-template <typename DT>
-H2Factorize<DT>::~H2Factorize() {
-  cudaFree(Adata);
-  cudaFree(Bdata);
-  cudaFree(Udata);
-  cudaFree(Vdata);
-  cudaFree(A_SS);
-  cudaFree(A_SR);
-  cudaFree(A_RS);
-  cudaFree(A_RR);
-  cudaFree(B);
-  cudaFree(U);
-  cudaFree(V);
-  cudaFree(V_R);
-  cudaFree(ipiv);
-  cudaFree(info);
-  
-  cudaFreeHost(hostA);
-  cudaFreeHost(hostP);
-}
-
 struct keysDLU {
   long long D, M, N;
   keysDLU(long long D, long long M, long long N) : D(D), M(M), N(N) {}
@@ -152,15 +99,18 @@ struct keysDLU {
     long long diff = D + y - x;
     long long pred = (diff != 0) + (diff < 0);
     return (pred * M + y) * N + x;
-  } 
+  }
 };
 
 template<class T> struct setDevicePtr {
   T* data;
-  long long block;
-  setDevicePtr(T* data, long long block) : data(data), block(block) {}
+  long long block, brows;
+  setDevicePtr(T* data, long long block, long long brows = 0) : data(data), block(block), brows(brows) {}
   __host__ __device__ T* operator()(long long i) const {
     return data + i * block;
+  }
+  __host__ __device__ T* operator()(long long y, long long x) const {
+    return data + (y + x * brows) * block;
   }
 };
 
@@ -187,7 +137,8 @@ struct conjugateFloat {
 };
 
 // needs explicit specialization due to cuBLAS calls
-template <>
+// TODO these need to be updated
+/*template <>
 void H2Factorize<cuDoubleComplex>::factorize(const long long lenA, const long long bdim, const long long rank, const long long block, const long long M, const long long D,
   cuDoubleComplex** A_SS, cuDoubleComplex** A_SR, cuDoubleComplex** A_RS, cuDoubleComplex** A_RR, cuDoubleComplex** U, cuDoubleComplex** V, cuDoubleComplex** V_R, cuDoubleComplex** B) {
   long long rdim = bdim - rank;
@@ -302,9 +253,9 @@ void H2Factorize<float>::factorize(const long long lenA, const long long bdim, c
     cublasSgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, &U[i], bdim, &A_SS[i], bdim, &zero, B, bdim, len);
     cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, &V[i], bdim, B, bdim, &zero, &A_SS[i], bdim, len);
   }
-}
+}*/
 
-template <typename DT> template <typename OT>
+/*template <typename DT> template <typename OT>
 void H2Factorize<DT>::compute(const long long bdim, const long long rank, const long long D, const long long M, const long long N, const long long ARows[], const long long ACols[], OT* const A, OT* const R, const OT* const Q) {
   long long block = bdim * bdim;
   long long lenA = ARows[M];
@@ -314,53 +265,112 @@ void H2Factorize<DT>::compute(const long long bdim, const long long rank, const 
 
   std::copy(A, A + block * lenA, reinterpret_cast<OT*>(hostA));
   cudaMemcpy(Adata, hostA, block * lenA * sizeof(DT), cudaMemcpyHostToDevice);
+*/
+template<class T> struct copyFunc {
+  const T** srcs;
+  T** dsts;
+  long long M, B, ls, ld;
+  copyFunc(long long M, long long N, const T* srcs[], long long ls, T* dsts[], long long ld) :
+    srcs(srcs), dsts(dsts), M(M), B(M * N), ls(ls), ld(ld) {}
+  __host__ __device__ void operator()(long long i) const {
+    long long x = i / B; long long y = i - x * B;
+    long long z = y / M; long long w = y - z * M;
+    T e = srcs[x][z * ls + w];
+    dsts[x][z * ld + w] = e;
+  }
+};
+
+void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], std::complex<double>* A, std::complex<double>* R, const std::complex<double>* Q, const ColCommMPI& comm) {
+  long long block = bdim * bdim;
+  long long lenA = ARows[M];
+  
+  cudaStream_t stream;
+  cublasGetStream(cublasH, &stream);
 
   thrust::device_vector<long long> row_offsets(ARows, ARows + M);
   thrust::device_vector<long long> rows(lenA, 0ll);
   thrust::device_vector<long long> cols(ACols, ACols + lenA);
-
-  auto one_iter = thrust::make_constant_iterator(1ll);
-  thrust::scatter(one_iter, one_iter + (M - 1), row_offsets.begin() + 1, rows.begin());
-  thrust::inclusive_scan(rows.begin(), rows.end(), rows.begin());
-
+  thrust::device_vector<long long> dist_cols(lenA);
   thrust::device_vector<long long> keys(lenA);
   thrust::device_vector<long long> indices(lenA);
+  thrust::device_vector<cuDoubleComplex*> a_ss(lenA), a_sr(lenA), a_rs(lenA), a_rr(lenA);
+  thrust::device_vector<cuDoubleComplex*> u(lenA), v(lenA), u_r(M), v_r(M), b(N), b_cols(lenA), b_i_cols(lenA);
+  thrust::device_vector<cuDoubleComplex*> a_sr_rows(lenA), acc(lenA), acc_final(M);
+
+  thrust::device_vector<cuDoubleComplex> Avec(lenA * block);
+  thrust::device_vector<cuDoubleComplex> Bvec(N * block);
+  thrust::device_vector<cuDoubleComplex> Uvec(N * block);
+  thrust::device_vector<cuDoubleComplex> Vvec(M * block);
+  
+  thrust::device_vector<int> Ipiv(M * bdim);
+  thrust::device_vector<int> Info(M);
+  std::vector<long long> Bsizes(N, block);
+  comm.dataSizesToNeighborOffsets(Bsizes.data());
+
+  auto inc_iter = thrust::make_counting_iterator(0ll);
+  auto one_iter = thrust::make_constant_iterator(1ll);
+  auto rwise_diag_iter = thrust::make_permutation_iterator(indices.begin(), rows.begin());
+
+  cuDoubleComplex* Adata = thrust::raw_pointer_cast(Avec.data());
+  cuDoubleComplex* Udata = thrust::raw_pointer_cast(Uvec.data());
+  cuDoubleComplex* Vdata = thrust::raw_pointer_cast(Vvec.data());
+  cuDoubleComplex* Bdata = thrust::raw_pointer_cast(Bvec.data());
+
+  cudaMemcpyAsync(Udata, Q, block * N * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(Adata, A, block * lenA * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
+
+  thrust::scatter(one_iter, one_iter + (M - 1), row_offsets.begin() + 1, rows.begin()); 
+  thrust::inclusive_scan(rows.begin(), rows.end(), rows.begin());
+  thrust::exclusive_scan_by_key(rows.begin(), rows.end(), one_iter, dist_cols.begin(), 0ll);
 
   thrust::transform(rows.begin(), rows.end(), cols.begin(), keys.begin(), keysDLU(D, M, N));
   thrust::sequence(indices.begin(), indices.end(), 0);
-  thrust::sort_by_key(keys.begin(), keys.end(), thrust::make_zip_iterator(rows.begin(), cols.begin(), indices.begin()));
+  thrust::sort_by_key(keys.begin(), keys.end(), thrust::make_zip_iterator(rows.begin(), cols.begin(), dist_cols.begin(), indices.begin()));
 
-  thrust::device_vector<DT*> a_ss(lenA), a_sr(lenA), a_rs(lenA), a_rr(lenA);
-  thrust::device_vector<DT*> u(lenA), v(lenA), v_r(lenA), b(maxQ);
+  long long reduc_len = 1ll + thrust::reduce(dist_cols.begin(), dist_cols.end(), 0ll, thrust::maximum<long long>());
+  thrust::device_vector<cuDoubleComplex> ACvec(reduc_len * M * rank * rank, make_cuDoubleComplex(0., 0.));
+  cuDoubleComplex* ACdata = thrust::raw_pointer_cast(ACvec.data());
 
   long long offset_SR = rank * bdim, offset_RS = rank, offset_RR = rank * (bdim + 1);
-  auto inc_iter = thrust::make_counting_iterator(0ll);
   thrust::transform(indices.begin(), indices.end(), a_ss.begin(), setDevicePtr(Adata, block));
   thrust::transform(indices.begin(), indices.end(), a_sr.begin(), setDevicePtr(Adata + offset_SR, block));
   thrust::transform(indices.begin(), indices.end(), a_rs.begin(), setDevicePtr(Adata + offset_RS, block));
   thrust::transform(indices.begin(), indices.end(), a_rr.begin(), setDevicePtr(Adata + offset_RR, block));
   thrust::transform(cols.begin(), cols.end(), u.begin(), setDevicePtr(Udata, block));
+  thrust::transform(cols.begin(), cols.begin() + M, u_r.begin(), setDevicePtr(Udata + offset_SR, block));
   thrust::transform(rows.begin(), rows.end(), v.begin(), setDevicePtr(Vdata, block));
-  thrust::transform(rows.begin(), rows.end(), v_r.begin(), setDevicePtr(Vdata + offset_RS, block));
-  thrust::transform(inc_iter, inc_iter + maxQ, b.begin(), setDevicePtr(Bdata, block));
+  thrust::transform(inc_iter, inc_iter + M, v_r.begin(), setDevicePtr(Vdata + offset_RS, block));
 
-  DT** A_SS = thrust::raw_pointer_cast(a_ss.data());
-  DT** A_SR = thrust::raw_pointer_cast(a_sr.data());
-  DT** A_RS = thrust::raw_pointer_cast(a_rs.data());
-  DT** A_RR = thrust::raw_pointer_cast(a_rr.data());
-  DT** U = thrust::raw_pointer_cast(u.data());
-  DT** V = thrust::raw_pointer_cast(v.data());
-  DT** V_R = thrust::raw_pointer_cast(v_r.data());
-  DT** B = thrust::raw_pointer_cast(b.data());
+  thrust::transform(inc_iter, inc_iter + N, b.begin(), setDevicePtr(Bdata, block));
+  thrust::transform(cols.begin(), cols.end(), b_cols.begin(), setDevicePtr(Bdata, block));
+  thrust::transform(cols.begin(), cols.end(), b_i_cols.begin(), setDevicePtr(Bdata + offset_SR, block));
+  thrust::transform(rwise_diag_iter, rwise_diag_iter + lenA, a_sr_rows.begin(), setDevicePtr(Adata + offset_SR, block));
+  thrust::transform(rows.begin(), rows.end(), dist_cols.begin(), acc.begin(), setDevicePtr(ACdata, rank * rank, M));
+  thrust::transform(inc_iter, inc_iter + M, acc_final.begin(), setDevicePtr(ACdata, rank * rank));
 
-  factorize(lenA, bdim, rank, block, M, D, A_SS, A_SR, A_RS, A_RR, U, V, V_R, B);
+  cuDoubleComplex** A_SS = thrust::raw_pointer_cast(a_ss.data());
+  cuDoubleComplex** A_SR = thrust::raw_pointer_cast(a_sr.data());
+  cuDoubleComplex** A_RS = thrust::raw_pointer_cast(a_rs.data());
+  cuDoubleComplex** A_RR = thrust::raw_pointer_cast(a_rr.data());
+  cuDoubleComplex** U = thrust::raw_pointer_cast(u.data());
+  cuDoubleComplex** U_R = thrust::raw_pointer_cast(u_r.data());
+  cuDoubleComplex** V = thrust::raw_pointer_cast(v.data());
+  cuDoubleComplex** V_R = thrust::raw_pointer_cast(v_r.data());
+  cuDoubleComplex** B = thrust::raw_pointer_cast(b.data());
+  cuDoubleComplex** B_Cols = thrust::raw_pointer_cast(b_cols.data());
+  cuDoubleComplex** B_I_Cols = thrust::raw_pointer_cast(b_i_cols.data());
+  cuDoubleComplex** A_SR_Rows = thrust::raw_pointer_cast(a_sr_rows.data());
+  cuDoubleComplex** ACC = thrust::raw_pointer_cast(acc.data());
+  cuDoubleComplex** ACC_Final = thrust::raw_pointer_cast(acc_final.data());
+
+  int* ipiv = thrust::raw_pointer_cast(Ipiv.data());
+  int* info = thrust::raw_pointer_cast(Info.data());
+
+  //factorize(lenA, bdim, rank, block, M, D, A_SS, A_SR, A_RS, A_RR, U, V, V_R, B);
   cudaStreamSynchronize(stream);
 
-  cudaMemcpy(hostA, Adata, block * lenA * sizeof(DT), cudaMemcpyDeviceToHost);
-  std::copy(reinterpret_cast<OT*>(hostA), reinterpret_cast<OT*>(&hostA[block * lenA]), A);
-
-  cudaMemcpy(hostA, Vdata, block * M * sizeof(DT), cudaMemcpyDeviceToHost);
-  std::copy(reinterpret_cast<OT*>(hostA), reinterpret_cast<OT*>(&hostA[block * M]), R + block * D); 
+  cudaMemcpy(A, Adata, block * lenA * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&R[block * D], Vdata, block * M * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost);
 }
 /*
 template <>
@@ -458,7 +468,7 @@ void H2Factorize<float>::compute() {
 
 /* explicit template instantiation */
 // complex double
-template class H2Factorize<cuDoubleComplex>;
+/*template class H2Factorize<cuDoubleComplex>;
 template void H2Factorize<cuDoubleComplex>::compute(const long long, const long long, const long long, const long long, const long long, const long long[], const long long[], std::complex<double>* const A, std::complex<double>* const R, const std::complex<double>* const Q);
 // complex float
 template class H2Factorize<cuComplex>;
@@ -469,7 +479,7 @@ template void H2Factorize<double>::compute(const long long, const long long, con
 // float
 template class H2Factorize<float>;
 template void H2Factorize<float>::compute(const long long, const long long, const long long, const long long, const long long, const long long[], const long long[], float* const A, float* const R, const float* const Q);
-
+*/
 /*
 template <typename DT>
 H2Factorize2<DT>::H2Factorize2(long long LD, long long lenA, long long lenQ, cudaStream_t stream) : maxA(lenA), maxQ(lenQ), bdim(LD), stream(stream) {

@@ -81,15 +81,15 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
   std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++) {
     // edited so that WSA will always try to match epsilon, unless fix_rank is specified
-    wsa[l] = WellSeparatedApproximation(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
+    wsa[l].construct(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
   }
   // this is an ugly fix to pack the max_rank into epsilon
   epsilon = fix_rank ? (double)max_rank : epsilon;
   // Create an H2 matrix for each level
   // note that fix_rank is now packed into epsilon (if specified) and we pass factorization basis for use_near bodies
-  A[levels] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis, scale);
+  A[levels].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis, scale);
   for (long long l = levels - 1; l >= 0; l--){
-    A[l] = H2Matrix(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis, scale);
+    A[l].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis, scale);
   }
   // the bodies local to each process
   // TODO confirm if this only references the S or the bodies array
@@ -232,7 +232,9 @@ void H2MatrixSolver<DT>::factorizeDeviceM(int device) {
     cudaSetDevice(device % num_device);
     cudaStream_t stream;
     cudaStreamCreate(&stream);
-    H2Factorize<DT> fac(dims_max, lenA, lenQ, stream);
+    cublasHandle_t cublasH;
+    cublasCreate(&cublasH);
+    cublasSetStream(cublasH, stream);
 
     for (long long l = levels; l >= 0; l--) {
       long long ibegin = comm[l].oLocal();
@@ -241,19 +243,21 @@ void H2MatrixSolver<DT>::factorizeDeviceM(int device) {
       long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
       long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
 
-      fac.compute(dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0]);
+      //TODO template
+      //compute_factorize(cublasH, dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0], comm[l]);
       
       if (0 < l)
         A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
     }
 
     cudaStreamSynchronize(stream);
+    cublasDestroy(cublasH);
     cudaStreamDestroy(stream);
   }
 }
 
 // explicit instantiations to deal with complex values
-template <>
+/*template <>
 void H2MatrixSolver<std::complex<double>>::factorizeDeviceM(int device) {
   long long dims_max = 0, lenA = 0, lenQ = 0;
   for (long long l = levels; l >= 0; l--) {
@@ -322,7 +326,7 @@ void H2MatrixSolver<std::complex<float>>::factorizeDeviceM(int device) {
     cudaStreamDestroy(stream);
   }
 }
-
+*/
 template <typename DT>
 void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   if (levels < 0)
