@@ -183,8 +183,7 @@ int main(int argc, char* argv[]) {
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
   
   //matM.factorizeM();
-  matM.factorizeM();
-  //matM.factorizeDeviceM(mpi_rank % mpi_size);
+  matM.factorizeDeviceM(mpi_rank % mpi_size);
   
   //Vector_dt<DT_low> test(Ones);
   //matM.matVecMul(&test[0]);

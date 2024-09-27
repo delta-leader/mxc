@@ -188,8 +188,9 @@ struct conjugateFloat {
 
 // needs explicit specialization due to cuBLAS calls
 template <>
-void H2Factorize<cuDoubleComplex>::factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D) {
- long long rdim = bdim - rank;
+void H2Factorize<cuDoubleComplex>::factorize(const long long lenA, const long long bdim, const long long rank, const long long block, const long long M, const long long D,
+  cuDoubleComplex** A_SS, cuDoubleComplex** A_SR, cuDoubleComplex** A_RS, cuDoubleComplex** A_RR, cuDoubleComplex** U, cuDoubleComplex** V, cuDoubleComplex** V_R, cuDoubleComplex** B) {
+  long long rdim = bdim - rank;
   int info_host = 0;
   cuDoubleComplex one = make_cuDoubleComplex(1., 0.), zero = make_cuDoubleComplex(0., 0.), minus_one = make_cuDoubleComplex(-1., 0.);
 
@@ -216,8 +217,9 @@ void H2Factorize<cuDoubleComplex>::factorize(const long long bdim, const long lo
 }
 
 template <>
-void H2Factorize<cuComplex>::factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D) {
- long long rdim = bdim - rank;
+void H2Factorize<cuComplex>::factorize(const long long lenA, const long long bdim, const long long rank, const long long block, const long long M, const long long D,
+  cuComplex** A_SS, cuComplex** A_SR, cuComplex** A_RS, cuComplex** A_RR, cuComplex** U, cuComplex** V, cuComplex** V_R, cuComplex** B) {
+  long long rdim = bdim - rank;
   int info_host = 0;
   cuComplex one = make_cuComplex(1., 0.), zero = make_cuComplex(0., 0.), minus_one = make_cuComplex(-1., 0.);
 
@@ -244,8 +246,9 @@ void H2Factorize<cuComplex>::factorize(const long long bdim, const long long ran
 }
 
 template <>
-void H2Factorize<double>::factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D) {
- long long rdim = bdim - rank;
+void H2Factorize<double>::factorize(const long long lenA, const long long bdim, const long long rank, const long long block, const long long M, const long long D,
+  double** A_SS, double** A_SR, double** A_RS, double** A_RR, double** U, double** V, double** V_R, double** B) {
+  long long rdim = bdim - rank;
   int info_host = 0;
   double one = 1., zero = 0., minus_one = -1.;
 
@@ -272,17 +275,18 @@ void H2Factorize<double>::factorize(const long long bdim, const long long rank, 
 }
 
 template <>
-void H2Factorize<float>::factorize(const long long bdim, const long long rank, const long long block, const long long M, const long long D) {
- long long rdim = bdim - rank;
+void H2Factorize<float>::factorize(const long long lenA, const long long bdim, const long long rank, const long long block, const long long M, const long long D,
+  float** A_SS, float** A_SR, float** A_RS, float** A_RR, float** U, float** V, float** V_R, float** B) {
+  long long rdim = bdim - rank;
   int info_host = 0;
   float one = 1., zero = 0., minus_one = -1.;
-
+  
   thrust::device_ptr<const float> u_ptr = thrust::device_ptr<const float>(reinterpret_cast<const float*>(&Udata[D * block]));
   thrust::device_ptr<float> v_ptr = thrust::device_ptr<float>(reinterpret_cast<float*>(Vdata));
 
   auto map = thrust::make_transform_iterator(thrust::make_counting_iterator(0ll), swapXY(bdim, block));
   thrust::gather(thrust::cuda::par.on(stream), map, map + block * M, u_ptr, v_ptr);
-
+  
   cublasSgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, U, bdim, A_SS, bdim, &zero, B, bdim, M);
   cublasSgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, U, bdim, B, bdim, &zero, A_SS, bdim, M);
 
@@ -291,8 +295,9 @@ void H2Factorize<float>::factorize(const long long bdim, const long long rank, c
   cublasSgetrsBatched(cublasH, CUBLAS_OP_N, rdim, bdim, A_RR, bdim, ipiv, V_R, bdim, &info_host, M);
 
   cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, A_SR, bdim, A_RS, bdim, &one, A_SS, bdim, M);
-
+  
   for (int64_t i = M; i < lenA; i += maxQ) {
+    //std::cout<<"CuBLAS loop "<<i<<std::endl;
     int64_t len = std::min(lenA - i, maxQ);
     cublasSgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, &U[i], bdim, &A_SS[i], bdim, &zero, B, bdim, len);
     cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, &V[i], bdim, B, bdim, &zero, &A_SS[i], bdim, len);
@@ -348,14 +353,14 @@ void H2Factorize<DT>::compute(const long long bdim, const long long rank, const 
   DT** V_R = thrust::raw_pointer_cast(v_r.data());
   DT** B = thrust::raw_pointer_cast(b.data());
 
-  factorize(bdim, rank, block, M, D);
+  factorize(lenA, bdim, rank, block, M, D, A_SS, A_SR, A_RS, A_RR, U, V, V_R, B);
   cudaStreamSynchronize(stream);
 
   cudaMemcpy(hostA, Adata, block * lenA * sizeof(DT), cudaMemcpyDeviceToHost);
   std::copy(reinterpret_cast<OT*>(hostA), reinterpret_cast<OT*>(&hostA[block * lenA]), A);
 
   cudaMemcpy(hostA, Vdata, block * M * sizeof(DT), cudaMemcpyDeviceToHost);
-  std::copy(reinterpret_cast<OT*>(hostA), reinterpret_cast<OT*>(&hostA[block * M]), R + block * D);
+  std::copy(reinterpret_cast<OT*>(hostA), reinterpret_cast<OT*>(&hostA[block * M]), R + block * D); 
 }
 /*
 template <>
