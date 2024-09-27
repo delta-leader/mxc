@@ -77,6 +77,49 @@ void mesh_sphere(double* bodies, long long nbodies, double r) {
   }
 }
 
+void mesh_sphere(double* bodies, long long nbodies) {
+  double r = std::sqrt(nbodies / (4 * M_PI));
+  const double phi = M_PI * (3. - std::sqrt(5.));  // golden angle in radians
+  const double d = r + r;
+  const double r2 = r * r;
+
+  for (long long i = 0; i < nbodies; ++i) {
+    const double y = r - ((double)i / (double)(nbodies - 1)) * d;  // y goes from r to -r
+
+    // Note: setting constant radius = 1 will produce a cylindrical shape
+    const double radius = std::sqrt(r2 - y * y);  // radius at y
+    const double theta = (double)i * phi;
+
+    const double x = radius * std::cos(theta);
+    const double z = radius * std::sin(theta);
+    bodies[i * 3] = x;
+    bodies[i * 3 + 1] = y;
+    bodies[i * 3 + 2] = z;
+  }
+}
+
+void mesh_ball(double* bodies, long long nbodies, unsigned int seed) {
+  double r = std::cbrt(3 * nbodies / (4 * M_PI));
+  std::mt19937 gen(seed);
+  std::uniform_real_distribution uniform_dist(-r, r);
+
+  double x, y, z, d;
+  for (long long i = 0; i < nbodies; ++i) {
+    bool stop = false;
+    while (!stop) {
+      x = uniform_dist(gen);
+      y = uniform_dist(gen);
+      z = uniform_dist(gen);
+      d = x*x + y*y + z*z;
+      if (d <= r + r)
+        stop = true;
+    }
+    bodies[i * 3] = x;
+    bodies[i * 3 + 1] = y;
+    bodies[i * 3 + 2] = z;
+  } 
+}
+
 void read_sorted_bodies(long long* nbodies, long long lbuckets, double* bodies, long long buckets[], const char* fname) {
   std::ifstream file(fname);
 

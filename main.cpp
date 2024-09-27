@@ -139,10 +139,10 @@ int main(int argc, char* argv[]) {
       }
 
       MPI_Barrier(MPI_COMM_WORLD);
-      std::cout<<params[i]<<std::endl;
-      for (size_t j=0; j<ranks.size(); ++j)
-        std::cout<<ranks[j]<<", ";
-      std::cout<<std::endl;
+      std::cout<<params[i]<<", ";
+      //for (size_t j=0; j<ranks.size(); ++j)
+        //std::cout<<ranks[j]<<", ";
+      //std::cout<<std::endl;
       for (size_t j=0; j<a_accs.size(); ++j)
         std::cout<<a_accs[j]<<", ";
       std::cout<<std::endl;
