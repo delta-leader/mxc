@@ -37,9 +37,9 @@ class Vector_dt {
     const DT& operator[] (const long long index) const {
       return data[index];
     }
-    void generate_random(const long long seed=999) {
+    void generate_random(const long long seed=999, double a=0, double b=1) {
       std::mt19937 gen(seed);
-      std::uniform_real_distribution uniform_dist(0., 1.);
+      std::uniform_real_distribution uniform_dist(a, b);
       std::generate(data.begin(), data.end(), 
         [&]() { return (DT) uniform_dist(gen); }
       );
@@ -80,9 +80,9 @@ class Vector_dt<std::complex<T>> {
     const DT& operator[] (const long long index) const {
       return data[index];
     }
-    void generate_random(const long long seed=999) {
+    void generate_random(const long long seed=999, double a=0, double b=1) {
       std::mt19937 gen(seed);
-      std::uniform_real_distribution uniform_dist(0., 1.);
+      std::uniform_real_distribution uniform_dist(a, b);
       std::generate(data.begin(), data.end(), 
         [&]() { return DT(uniform_dist(gen), 0.); }
       );
@@ -100,6 +100,7 @@ class MatrixAccessor {
 public:
   virtual DT operator()(double d) const = 0;
   virtual DT operator()(double d, double scale) const = 0;
+  virtual ~MatrixAccessor() = default;
 };
 
 template <typename DT = double>
@@ -181,11 +182,16 @@ public:
 template <typename DT = double>
 class Gaussian : public MatrixAccessor<DT> {
 public:
-  double alpha;
+  double alpha, s;
   // TODO doesn't this make the matrices extremely ill-conditoned?
-  Gaussian (double a) : alpha(1. / (a * a)) {}
+  //Gaussian (double a) : alpha(1. / (a * a)) {}
+  Gaussian (double a, double s=0) : alpha(a), s(s) {}
+  ~Gaussian() = default;
   DT operator()(double d) const override {
-    return std::exp(- alpha * d * d);
+    if (d == 0.)
+      return std::exp(- alpha * d * d) + s;
+    else
+      return std::exp(- alpha * d * d);
   }
   DT operator()(double d, double scale) const override {
     return std::exp(- alpha * d * d) * scale;
@@ -195,10 +201,15 @@ public:
 template <typename DT>
 class Gaussian<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
 public:
-  double alpha;
-  Gaussian (double a) : alpha(1. / (a * a)) {}
+  double alpha, s;
+  //Gaussian (double a) : alpha(1. / (a * a)) {}
+  Gaussian (double a, double s=0) : alpha(a), s(s) {}
+  ~Gaussian() = default;
   std::complex<DT> operator()(double d) const override {
-    return std::complex<DT>(std::exp(- alpha * d * d), 0.);
+    if (d == 0.)
+      return std::complex<DT>(std::exp(- alpha * d * d) + s, 0.);
+    else
+      return std::complex<DT>(std::exp(- alpha * d * d), 0.);
   }
   std::complex<DT> operator()(double d, double scale) const override {
     return std::complex<DT>(std::exp(- alpha * d * d), 0.) * scale;
@@ -210,9 +221,10 @@ class Helmholtz3D : public MatrixAccessor<DT> {
 public:
   double k;
   double singularity;
-  Helmholtz3D(double wave_number, double s) : k(wave_number), singularity(1. / s) {
+  Helmholtz3D(double s, double wave_number) : k(wave_number), singularity(1. / s) {
     std::cout<<"Helmholtz kernel without complex numbers!"<<std::endl;
   }
+  ~Helmholtz3D() = default;
   DT operator()(double d) const override {
     if (d == 0.)
       return singularity;
@@ -232,7 +244,8 @@ class Helmholtz3D<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
 public:
   double k;
   double singularity;
-  Helmholtz3D(double wave_number, double s) : k(wave_number), singularity(1. / s) {}
+  Helmholtz3D(double s, double wave_number) : k(wave_number), singularity(1. / s) {}
+  ~Helmholtz3D() = default;
   std::complex<DT> operator()(double d) const override {
     if (d == 0.)
       return std::complex<DT>(singularity, 0.);
@@ -248,12 +261,16 @@ public:
 };
 
 template <typename DT = double>
-class IMQ : public MatrixAccessor<DT> {
+class Imq : public MatrixAccessor<DT> {
 public:
-  double alpha;
-  IMQ (double a) : alpha(a) {}
+  double alpha, s;
+  Imq (double a, double s=0) : alpha(a), s(s) {}
+  ~Imq() = default;
   DT operator()(double d) const override {
-    return 1 / std::sqrt(1 + alpha * d * d);
+    if (d == 0.)
+      return 1 / std::sqrt(1 + alpha * d * d) + s;
+    else
+      return 1 / std::sqrt(1 + alpha * d * d);
   }
   DT operator()(double d, double scale) const override {
     return 1 / std::sqrt(1 + alpha * d * d) * scale;
@@ -261,12 +278,16 @@ public:
 };
 
 template <typename DT>
-class IMQ<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
+class Imq<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
 public:
-  double alpha;
-  IMQ (double a) : alpha(a) {}
+  double alpha, s;
+  Imq (double a, double s=0) : alpha(a), s(s) {}
+  ~Imq() = default;
   std::complex<DT> operator()(double d) const override {
-    return std::complex<DT>(1 / std::sqrt(1 + alpha * d * d), 0.);
+    if (d == 0.)
+      return std::complex<DT>(1 / std::sqrt(1 + alpha * d * d) + s, 0.);
+    else
+      return std::complex<DT>(1 / std::sqrt(1 + alpha * d * d), 0.);
   }
   std::complex<DT> operator()(double d, double scale) const override {
     return std::complex<DT>(1 / std::sqrt(1 + alpha * d * d), 0.) * scale;
@@ -276,11 +297,15 @@ public:
 template <typename DT = double>
 class Matern3 : public MatrixAccessor<DT> {
 public:
-  double alpha;
+  double alpha, sigma;
   double s = std::sqrt(3);
-  Matern3 (double a) : alpha(a) {}
+  Matern3 (double a, double s=0) : alpha(a), sigma(s) {}
+  ~Matern3() = default;
   DT operator()(double d) const override {
-    return (1 + s * alpha * d) * std::exp(-s * alpha * d);
+    if (d == 0.)
+      return (1 + s * alpha * d) * std::exp(-s * alpha * d) + sigma;
+    else
+      return (1 + s * alpha * d) * std::exp(-s * alpha * d);
   }
   DT operator()(double d, double scale) const override {
     return (1 + s * alpha * d) * std::exp(-s * alpha * d) * scale;
@@ -290,11 +315,15 @@ public:
 template <typename DT>
 class Matern3<std::complex<DT>> : public MatrixAccessor<std::complex<DT>> {
 public:
-  double alpha;
+  double alpha, sigma;
   double s = std::sqrt(3);
-  Matern3 (double a) : alpha(a) {}
+  Matern3 (double a, double s=0) : alpha(a), sigma(s) {}
+  ~Matern3() = default;
   std::complex<DT> operator()(double d) const override {
-    return std::complex<DT>((1 + s * alpha * d) * std::exp(-s * alpha * d), 0.);
+    if (d == 0.)
+      return std::complex<DT>((1 + s * alpha * d) * std::exp(-s * alpha * d) + sigma, 0.);
+    else
+      return std::complex<DT>((1 + s * alpha * d) * std::exp(-s * alpha * d), 0.);
   }
   std::complex<DT> operator()(double d, double scale) const override {
     return std::complex<DT>((1 + s * alpha * d) * std::exp(-s * alpha * d), 0.) * scale;
