@@ -10,10 +10,10 @@
 
 /* explicit template instantiation */
 // complex double
-template class H2MatrixSolver<std::complex<double>>;
+//template class H2MatrixSolver<std::complex<double>>;
 template double computeRelErr<double>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 // complex float
-template class H2MatrixSolver<std::complex<float>>;
+//template class H2MatrixSolver<std::complex<float>>;
 template double computeRelErr<float>(const long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
 // double
 template class H2MatrixSolver<double>;
@@ -244,7 +244,7 @@ void H2MatrixSolver<DT>::factorizeDeviceM(int device) {
       long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
 
       //TODO template
-      //compute_factorize(cublasH, dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0], comm[l]);
+      compute_factorize(cublasH, dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0], comm[l]);
       
       if (0 < l)
         A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);

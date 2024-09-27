@@ -40,4 +40,5 @@ public:
 */
 class ColCommMPI;
 
-void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], std::complex<double>* A, std::complex<double>* R, const std::complex<double>* Q, const ColCommMPI& comm);
+template <typename DT>
+void compute_factorize(const cublasHandle_t cublasH, const long long bdim, const long long rank, const long long D, const long long M, const long long N, const long long ARows[], const long long ACols[], DT* const A, DT* const R, const DT* const Q, const ColCommMPI& comm);
