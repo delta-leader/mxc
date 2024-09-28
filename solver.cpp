@@ -42,7 +42,7 @@ H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), l
 }
 
 template <typename DT>
-H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, const bool factorization_basis, MPI_Comm world, double scale) : 
+H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, const bool factorization_basis, MPI_Comm world) : 
   levels(max_level), A(max_level + 1), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
@@ -87,9 +87,9 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
   epsilon = fix_rank ? (double)max_rank : epsilon;
   // Create an H2 matrix for each level
   // note that fix_rank is now packed into epsilon (if specified) and we pass factorization basis for use_near bodies
-  A[levels].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis, scale);
+  A[levels].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis);
   for (long long l = levels - 1; l >= 0; l--){
-    A[l].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis, scale);
+    A[l].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis);
   }
   // the bodies local to each process
   // TODO confirm if this only references the S or the bodies array

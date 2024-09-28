@@ -45,7 +45,7 @@ public:
   fixed_rank: if true, use max_rank, use epsilon otherwise default; false
   world: MPI communicator, default: all processes
   */
-  H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank = false, const bool factorization_basis = false, MPI_Comm world = MPI_COMM_WORLD, double scale = 1);
+  H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank = false, const bool factorization_basis = false, MPI_Comm world = MPI_COMM_WORLD);
 
   /* creates an exact copy in a different datatype
   In:
@@ -79,7 +79,7 @@ public:
   void free_all_comms();
 
   template <typename OT>
-  long long solveIR(double tol, H2MatrixSolver<OT>& M, DT X[], const DT B[], long long max_iters, DT scale=1) {
+  long long solveIR(double tol, H2MatrixSolver<OT>& M, DT X[], const DT B[], long long max_iters) {
     typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
     typedef Eigen::Matrix<OT, Eigen::Dynamic, 1> Vector_ot;
     
@@ -93,7 +93,7 @@ public:
     Vector_dt test = b;
     Vector_ot x_ot = test.template cast<OT>();
     M.solvePrecondition(x_ot.data());
-    x = x_ot.template cast<DT>() * scale;
+    x = x_ot.template cast<DT>();
     Vector_dt r;
 
     DT norm_local = b.squaredNorm();
@@ -120,7 +120,7 @@ public:
       test = r;
       x_ot = test.template cast<OT>();
       M.solvePrecondition(x_ot.data());
-      x = x + x_ot.template cast<DT>() * scale;    
+      x = x + x_ot.template cast<DT>();    
     }
     r = -x;
     matVecMul(r.data());
