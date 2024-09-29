@@ -251,8 +251,8 @@ long long compute_basis(const MatrixAccessor<DT>& kernel, const double epsilon, 
     }
     else {
       // QR failed for some reason
+      R_ref = Q_ref.template triangularView<Eigen::Upper>();
       Q_ref = Matrix_dt::Identity(nrows, nrows);
-      R_ref = Matrix_dt::Identity(nrows, nrows);
     }
   }
   return rank;

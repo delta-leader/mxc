@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
   
       std::vector<double> a_accs(ranks.size());
       for (size_t j=0; j<ranks.size(); ++j) {
-        H2MatrixSolver<DT> matM = H2MatrixSolver(*eval, 1e-12, ranks[j], cell, theta, &body[0], levels, true, true);
+        H2MatrixSolver<DT> matM = H2MatrixSolver(*eval, 1e-12, ranks[j], cell, theta, &body[0], levels, true, true, true);
         long long lenX = matM.local_bodies.second - matM.local_bodies.first;
         Vector_dt<DT> X1(lenX);
         std::copy(&Xbody[matM.local_bodies.first], &Xbody[matM.local_bodies.second], &X1[0]);
