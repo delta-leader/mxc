@@ -138,8 +138,9 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
       C.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
     }
     else {
+      RX = A.triangularView<Eigen::Upper>();
       A = Eigen::MatrixXcd::Identity(M, M);
-      C = Eigen::MatrixXcd::Identity(M, M);
+      C = RX;
     }
   }
   return rank;
