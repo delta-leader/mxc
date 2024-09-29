@@ -13,9 +13,10 @@ int main(int argc, char* argv[]) {
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
   long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 256;
   long long rank = argc > 4 ? std::atoll(argv[4]) : 100;
-  double epi = argc > 5 ? std::atof(argv[5]) : 1e-10;
-  std::string mode = argc > 6 ? std::string(argv[6]) : "h2";
-  const char* csv = argc > 7 ? argv[7] : nullptr;
+  long long leveled_rank =  argc > 5 ? std::atoll(argv[5]) : 0;
+  double epi = argc > 6 ? std::atof(argv[6]) : 1e-10;
+  std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
+  const char* csv = argc > 8 ? argv[8] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   long long levels = (long long)std::log2((double)Nbody / leaf_size);
@@ -48,7 +49,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-  H2MatrixSolver matA(eval, epi, rank, cell, theta, &body[0], levels);
+  H2MatrixSolver matA(eval, epi, rank, leveled_rank, cell, theta, &body[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
@@ -93,9 +94,9 @@ int main(int argc, char* argv[]) {
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   H2MatrixSolver matM;
   if (mode.compare("h2") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, cell, theta, &body[0], levels, true);
+    matM = H2MatrixSolver(eval, epi, rank, leveled_rank, cell, theta, &body[0], levels, true);
   else if (mode.compare("hss") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, cell, 0., &body[0], levels, true);
+    matM = H2MatrixSolver(eval, epi, rank, leveled_rank, cell, 0., &body[0], levels, true);
 
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
