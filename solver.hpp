@@ -259,7 +259,10 @@ public:
     Eigen::Map<const Vector_dt> b(B, N);
     Eigen::Map<Vector_dt> x(X, N);
 
-    Q.col(0) = b;
+    // create initial solution
+    x = Vector_dt::Zero(N);
+
+    //Q.col(0) = b;
     Matrix_dt H(ld, max_iters);
     std::vector<DT> cs(max_iters);
     std::vector<DT> sn(max_iters);
@@ -324,13 +327,13 @@ public:
       
       if (error < tol){
         H.topLeftCorner(iter+1, iter+1).template triangularView<Eigen::Upper>().solveInPlace(s.topRows(iter+1));
-        x = Q.topLeftCorner(N, iter+1) * s.topRows(iter+1);      
+        x += Q.topLeftCorner(N, iter+1) * s.topRows(iter+1);   
         return iter + 1;
       }
     }
     
     H.topLeftCorner(max_iters, max_iters).template triangularView<Eigen::Upper>().solveInPlace(s.topRows(max_iters));
-    x = Q.topLeftCorner(N, max_iters) * s.topRows(max_iters);
+    x += Q.topLeftCorner(N, max_iters) * s.topRows(max_iters);
     return max_iters + 1;
   }
 
@@ -415,13 +418,13 @@ public:
       
       if (error < tol){
         H.topLeftCorner(iters+1, iters+1).template triangularView<Eigen::Upper>().solveInPlace(s.topRows(iters+1));
-        x = Q.topLeftCorner(N, iters+1) * s.topRows(iters+1);      
+        x += Q.topLeftCorner(N, iters+1) * s.topRows(iters+1);      
         return iters + 1;
       }
     }
     
     H.topLeftCorner(max_iters, max_iters).template triangularView<Eigen::Upper>().solveInPlace(s.topRows(max_iters));
-    x = Q.topLeftCorner(N, max_iters) * s.topRows(max_iters);
+    x += Q.topLeftCorner(N, max_iters) * s.topRows(max_iters);
     return max_iters + 1;
   }
 };

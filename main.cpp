@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
   //h2_rank.factorizeM();
   h2_rank.factorizeDeviceM(mpi_rank % mpi_size);
 
-  /*MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_WORLD);
   double ir_time = MPI_Wtime(), ir_comm_time;
   long long iters = h2_epi.solveIR(epi, h2_rank, &x[0], &b[0], 50);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -165,10 +165,10 @@ int main(int argc, char* argv[]) {
     std::cout<<h2_epi.resid[i]<<", ";
   }
   std::cout<<std::endl;
-  */
+  
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_ir_time = MPI_Wtime(), gmres_ir_comm_time;
-  long long gmres_iters = h2_epi.solveGMRESIR(epi, h2_rank, &x[0], &b[0], 10, 100, 1);
+  long long gmres_iters = h2_epi.solveGMRESIR(epi, h2_rank, &x[0], &b[0], 10, 50, 1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_ir_time = MPI_Wtime() - gmres_ir_time;
@@ -192,7 +192,7 @@ int main(int argc, char* argv[]) {
     std::cout<<h2_epi.resid[i]<<", ";
   }
   std::cout<<std::endl;
-
+  
   x.reset();
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime();
