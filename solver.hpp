@@ -66,7 +66,7 @@ public:
   fixed_rank: if true, use max_rank, use epsilon otherwise default; false
   world: MPI communicator, default: all processes
   */
-  H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank = false, const bool grow_rank = false, const bool factorization_basis = false, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long rank, const long long leveled_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank = false, const bool factorization_basis = false, MPI_Comm world = MPI_COMM_WORLD);
 
   /* creates an exact copy in a different datatype
   In:

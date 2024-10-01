@@ -42,7 +42,7 @@ H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), l
 }
 
 template <typename DT>
-H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, const bool grow_rank, const bool factorization_basis, MPI_Comm world) : 
+H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long rank, const long long leveled_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, const bool factorization_basis, MPI_Comm world) : 
   levels(max_level), A(max_level + 1), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
@@ -77,27 +77,20 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
     desc.emplace_back(lbegin, lend, ubegin, uend, &tree[0], Near, Far);
   }
 
+  auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
   // sample the far field for all cells in each level
   std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++) {
-    if (grow_rank) {
-      wsa[l].construct(kernel, epsilon, max_rank * (levels - l + 1), comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
-    } else {
-      // edited so that WSA will always try to match epsilon, unless fix_rank is specified
-      wsa[l].construct(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
-    }
+      wsa[l].construct(kernel, epsilon, rank_func(l), comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
   }
   // this is an ugly fix to pack the max_rank into epsilon
-  epsilon = fix_rank ? (double)max_rank : epsilon;
+  //epsilon = fix_rank ? (double)max_rank : epsilon;
+  
   // Create an H2 matrix for each level
   // note that fix_rank is now packed into epsilon (if specified) and we pass factorization basis for use_near bodies
-  A[levels].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis);
+  A[levels].construct(kernel, fix_rank ? (double)rank_func(levels) : epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis);
   for (long long l = levels - 1; l >= 0; l--){
-    if (fix_rank && grow_rank) {
-      epsilon += max_rank;
-    }
-    //std::cout<<l<<": "<<max_rank<<" "<<epsilon<<std::endl;
-    A[l].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis);
+    A[l].construct(kernel, fix_rank ? (double)rank_func(l) : epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis);
   }
   // the bodies local to each process
   // TODO confirm if this only references the S or the bodies array
@@ -127,7 +120,7 @@ H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
     A[i] = H2Matrix<DT>(solver.A[i]);
   }
   // set the pointers to the parent level
-  long long offset;
+  /*long long offset;
   for (size_t level = 1; level < A.size(); ++level) {
     // A matrix can be empty
     if (solver.A[level - 1].A.size() > 0) {
@@ -145,15 +138,15 @@ H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
         A[level].NA[i] = child_begin + offset;
       }
     }
-    /*for (size_t i = 0; i < A[level].NX.size(); ++i) {
+    for (size_t i = 0; i < A[level].NX.size(); ++i) {
       const OT* ptrx = solver.A[level].NX[i];
       offset = std::distance(solver.A[level - 1].X[0], ptrx);
       A[level].NX [i]= A[level - 1].X[0] + offset;
       const OT* ptry = solver.A[level].NY[i];
       offset = std::distance(solver.A[level - 1].Y[0], ptry);
       A[level].NY[i] = A[level - 1].Y[0] + offset;
-    }*/
-  }
+    }
+  }*/
 }
 
 template <typename DT>
@@ -189,10 +182,9 @@ void H2MatrixSolver<DT>::matVecMul(DT X[]) {
     if (0 < l)
       A[l - 1].upwardCopyNext('X', 'X', comm[l - 1], A[l]);
   }
-  for (long long l = 0; l <= levels; l++) {
-    if (0 < l)
-      A[l].downwardCopyNext('Y', 'Y', A[l - 1], comm[l - 1]);
-    A[l].matVecHorizontalandDownwardPass(comm[l]);
+  for (long long l = 1; l <= levels; l++) {
+    A[l].downwardCopyNext('Y', 'Y', A[l - 1], comm[l - 1]);
+    A[l].matVecHorizontalandDownwardPass(A[l - 1], comm[l]);
   }
   X_leaf = X_in;
   A[levels].matVecLeafHorizontalPass(comm[levels]);

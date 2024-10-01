@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
       //eval = new Helmholtz3D<DT>(alpha, 1);
   }
 
-  H2MatrixSolver h2_epi(*eval, epi, rank, cell, theta, &body[0], levels, false, false);
+  H2MatrixSolver h2_epi(*eval, epi, rank, 0, cell, theta, &body[0], levels, false, false);
   long long lenX = h2_epi.local_bodies.second - h2_epi.local_bodies.first;
   Vector_dt<DT> x(lenX);
   Vector_dt<DT> b(lenX);
@@ -148,7 +148,7 @@ int main(int argc, char* argv[]) {
   Eigen::JacobiSVD<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> svd(Amap);
   double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
     
-  H2MatrixSolver<DT> h2_rank = H2MatrixSolver(*eval, 1e-12, rank, cell, theta, &body[0], levels, true, false, fact_basis);
+  H2MatrixSolver<DT> h2_rank = H2MatrixSolver(*eval, 1e-12, rank, 0, cell, theta, &body[0], levels, true, fact_basis);
   h2_rank.factorizeM();
 
   /*MPI_Barrier(MPI_COMM_WORLD);

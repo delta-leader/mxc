@@ -304,14 +304,14 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& kernel, const double epsi
   long long offset = ARows[0];
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  NA.resize(ARows[nodes], nullptr);
+  NA.resize(ARows[nodes], -1);
 
   CRows.insert(CRows.begin(), Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
   CCols.insert(CCols.begin(), Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
   offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  C.resize(CRows[nodes], nullptr);
+  C.resize(CRows[nodes], -1);
 
   if (localChildOffsets.back() == -1)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -440,9 +440,9 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& kernel, const double epsi
               // set the pointer for the children
               if (0 <= low_near_idx)
                 // TODO is this ever used? It just points to zeroes I think
-                h2_lower.NA[low_near_idx] = A_ptr;
+                h2_lower.NA[low_near_idx] = std::distance(A[0], A_ptr);
               else if (0 <= low_far_idx) {
-                h2_lower.C[low_far_idx] = A_ptr;
+                h2_lower.C[low_far_idx] = std::distance(A[0], A_ptr);
                 // construct R from the child
                 MatrixMap_dt Rj(h2_lower.R[childj], nj, nj, Stride_t(h2_lower.Dims[childj], 1));
                 // this is a reference to the corresponding block in A
@@ -541,7 +541,7 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& kernel, const double epsi
 // TODO check if any variables changed
 template <typename DT> template <typename OT>
 H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : UpperStride(h2matrix.UpperStride), S(h2matrix.S),
-  CRows(h2matrix.CRows), CCols(h2matrix.CCols), LowerX(h2matrix.LowerX), NbXoffsets(h2matrix.NbXoffsets),
+  CRows(h2matrix.CRows), CCols(h2matrix.CCols), C(h2matrix.C), NA(h2matrix.NA), LowerX(h2matrix.LowerX), NbXoffsets(h2matrix.NbXoffsets),
   Dims(h2matrix.Dims), DimsLr(h2matrix.DimsLr), ARows(h2matrix.ARows), ACols(h2matrix.ACols),
   Q(h2matrix.Q), R(h2matrix.R), A(h2matrix.A),
   X(h2matrix.X), Y(h2matrix.Y) {
@@ -550,9 +550,9 @@ H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : UpperStride(h2matrix.Uppe
     // from outside
     //NX = std::vector<DT*>(Dims.size(), nullptr);
     //NY = std::vector<DT*>(Dims.size(), nullptr);
-    long long nodes = UpperStride.size();
-    NA = std::vector<DT*>(ARows[nodes], nullptr);
-    C = std::vector<DT*>(CRows[nodes], nullptr);
+    //long long nodes = UpperStride.size();
+    //NA = std::vector<DT*>(ARows[nodes], nullptr);
+    //C = std::vector<DT*>(CRows[nodes], nullptr);
 }
 
 template <typename DT>
@@ -603,7 +603,7 @@ void H2Matrix<DT>::matVecUpwardPass(const ColCommMPI& comm) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
+void H2Matrix<DT>::matVecHorizontalandDownwardPass(const H2Matrix& upperA, const ColCommMPI& comm) {
   // from the highest level to the lowest level
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
@@ -629,7 +629,7 @@ void H2Matrix<DT>::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
 
         VectorMap_dt x(X[j], rank_j);
         // skeleton matrix
-        MatrixMap_dt c(C[ij], rank_i, rank_j, Stride_t(UpperStride[i], 1));
+        MatrixMap_dt c(upperA.A[0] + C[ij], rank_i, rank_j, Stride_t(UpperStride[i], 1));
         // multiply with the skeleton matrix
         y.topRows(rank_i).noalias() += c * x;
       }
@@ -703,25 +703,27 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
     MatrixMap_dt V(R[i + ibegin], M, M);
     // the diagonal block for this cell 
     MatrixMap_dt Aii(A[diag], M, M);
+    MatrixMap_dt b(B[i + ibegin], dims_max, M);
     // V = Q^-1 A^T (note that this overwrites R)
-    V.noalias() = Ui.adjoint() * Aii.transpose();
+    b.noalias() = Ui.adjoint() * Aii.transpose();
     // Aii = Q^-1 Aii (Q^-1)^T, so we baically decompose into the skeleton matrix
     //       | Sss Ssr|
     // Aii = | Srs Srr|
-    Aii.noalias() = Ui.adjoint() * V.transpose();
+    Aii.noalias() = Ui.adjoint() * b.transpose();
+    V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
 
-    Eigen::HouseholderQR<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> fac(Aii.bottomRightCorner(Mr, Mr));
-    V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
+    if (0 < Mr) {
+      Eigen::HouseholderQR<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> fac(Aii.bottomRightCorner(Mr, Mr));
+      V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
 
-    // if there is a skeleton part
-    // TODO should always trigger, unless all blocks are dense
-    if (0 < Ms) {
-      Aii.bottomLeftCorner(Mr, Ms) = fac.solve(Aii.bottomLeftCorner(Mr, Ms));
-      Aii.topLeftCorner(Ms, Ms) -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
-      V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
+      // if there is a skeleton part
+      // TODO should always trigger, unless all blocks are dense
+      if (0 < Ms) {
+        Aii.bottomLeftCorner(Mr, Ms).noalias() = V.bottomRows(Mr) * b.topRows(Ms).transpose();
+        Aii.topLeftCorner(Ms, Ms).noalias() -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
+      }
     }
 
-    MatrixMap_dt b(B[i + ibegin], dims_max, M);
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 
       if (ij != diag) {
         long long j = ACols[ij];
@@ -872,7 +874,7 @@ void H2Matrix<DT>::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& low
 
       Matrix_dt Aij(lowerA.A[ij], M, N);
       if (0 < Ms && 0 < Ns) {
-        Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(lowerA.NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.UpperStride[i], 1));
+        Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(A[0] + lowerA.NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.UpperStride[i], 1));
         An = Aij.topLeftCorner(Ms, Ns);
       }
     }

@@ -92,10 +92,10 @@ private:
   // at the upper level
   // this pointer provides a convenient way of accessing them
   // from this level
-  std::vector<DT*> C;
+  std::vector<long long> C;
 
   // pointer to the uper level skeleton matrices
-  std::vector<DT*> NA;
+  std::vector<long long> NA;
   std::vector<long long> LowerX;
   std::vector<long long> NbXoffsets;
 
@@ -161,7 +161,7 @@ public:
   the result is stored in Y
   comm: the communicator for this level
   */
-  void matVecHorizontalandDownwardPass(const ColCommMPI& comm);
+  void matVecHorizontalandDownwardPass(const H2Matrix& upperA, const ColCommMPI& comm);
   /*
   multiplies the dense matrices for the leaf level
   Y and X must be calculated beforehand
