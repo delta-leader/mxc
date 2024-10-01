@@ -10,10 +10,10 @@
 
 /* explicit template instantiation */
 // complex double
-template class H2MatrixSolver<std::complex<double>>;
+//template class H2MatrixSolver<std::complex<double>>;
 template double computeRelErr<double>(const long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 // complex float
-template class H2MatrixSolver<std::complex<float>>;
+//template class H2MatrixSolver<std::complex<float>>;
 template double computeRelErr<float>(const long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
 // double
 template class H2MatrixSolver<double>;
@@ -542,7 +542,7 @@ long long H2MatrixSolver<DT>::solveMyGMRES(double tol, H2MatrixSolver& M, DT x[]
     if (beta / normd < tol) {
       // in this case we have || new d0|| / ||d0|| < tol and we are finished
       // X += R;
-      return iters * inner_iters;
+      return (iters + 1) * inner_iters;
     }
   }
   return outer_iters * inner_iters;
