@@ -29,7 +29,13 @@ int main(int argc, char* argv[]) {
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
   // size of dense blocks
   long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 256;
-  Kernel kfunc = argc > 4 ? (Kernel) std::atoi(argv[4]) : LAPLACE;
+  long long rank = argc > 4 ? std::atoll(argv[4]) : 100;
+   double epi = argc > 5 ? std::atof(argv[5]) : 1e-10;
+  bool fact_basis = argc > 6 ? (bool) std::atoi(argv[6]) : true;
+  Kernel kfunc = argc > 7 ? (Kernel) std::atoi(argv[7]) : LAPLACE;
+  Geometry geom = argc > 8 ? (Geometry) std::atoi(argv[8]) : SPHERE;
+  double alpha = argc > 9 ? std::atof(argv[9]) : 1;
+  
 
   // if N <= leaf_size, we basically have a dense matrix
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -80,88 +86,129 @@ int main(int argc, char* argv[]) {
   Xbody.generate_random(999, -0.5, 0.5);
   // array containing the nodes in the cluster tree
   std::vector<Cell> cell(ncells);
-
-  std::vector<double> ranks = {16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256};
+    
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   if (mpi_rank == 0) {
-    std::cout<<kernel_names[kfunc] << " N = "<< Nbody << ", L = "<< leaf_size << ", Admis = " << theta << std::endl;
+    std::cout<<kernel_names[kfunc] << ", " << geometry_names[geom] << ", N = "<< Nbody << ", L = "<< leaf_size << ", Admis = " << theta << ", ";
+    std::cout << "rank = " << rank << ", epsilon = " << epi << ", fact_basis = " << fact_basis << ", alpha = " << alpha <<std::endl;
   }
-  for (size_t g=0; g<geometry_names.size(); ++g) {
-    if (mpi_rank == 0) {
-      std::cout<<geometry_names[g]<<std::endl;
-    }
-    if (g == SPHERE)
-      //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
-      mesh_sphere(&body[0], Nbody);
-    else
-      if (g == BALL)
-        //uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
-        mesh_ball(&body[0], Nbody, 999);
-      else 
-        if (mpi_rank == 0) {
-          std::cout<<"Unknown Geometry"<<std::endl;
-        }
-    buildBinaryTree(levels, Nbody, &body[0], &cell[0]);
-
-    for (size_t i=0; i<params.size(); ++i) {
-      MatrixAccessor<DT>* eval;
-      switch (kfunc) {
-        case LAPLACE:
-          eval = new Laplace3D<DT>(params[i]);
-          break;
-        case GAUSSIAN:
-          //eval = new Gaussian<DT>(params[i]);
-          eval = new Gaussian<DT>(params[i], 1e-2);
-          break;
-        case IMQ:
-          //eval = new Imq<DT>(params[i]);
-          eval = new Imq<DT>(params[i], 1e-2);
-          break;
-        case MATERN:
-          //eval = new Matern3<DT>(params[i]);
-          eval = new Matern3<DT>(params[i], 1e-2);
-          break;
-        case YUKAWA:
-          eval = new Yukawa3D<DT>(1, params[i]);
-          //eval = new Yukawa3D<DT>(params[i], 0.5);
-          break;
-        case HELMHOLTZ:
-          eval = new Helmholtz3D<DT>(1, params[i]);
-          //eval = new Helmholtz3D<DT>(params[i], 1);
-      }
-      
-  
-      std::vector<double> a_accs(ranks.size());
-      for (size_t j=0; j<ranks.size(); ++j) {
-        H2MatrixSolver<DT> matM = H2MatrixSolver(*eval, 1e-12, ranks[j], cell, theta, &body[0], levels, true, true);
-        long long lenX = matM.local_bodies.second - matM.local_bodies.first;
-        Vector_dt<DT> X1(lenX);
-        std::copy(&Xbody[matM.local_bodies.first], &Xbody[matM.local_bodies.second], &X1[0]);
-        matM.matVecMul(&X1[0]);
-        Vector_dt<DT> X2(lenX);
-        mat_vec_reference(*eval, lenX, Nbody, &X2[0], &Xbody[0], &body[matM.local_bodies.first*3], &body[0]);
-        a_accs[j] = computeRelErr(lenX, &X1[0], &X2[0]);
-        matM.free_all_comms();
-        if (a_accs[j] < 1e-12)
-          break;
-      }
-
-      MPI_Barrier(MPI_COMM_WORLD);
+  if (geom == SPHERE)
+    //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
+    mesh_sphere(&body[0], Nbody);
+  else {
+    if (geom == BALL)
+      //uniform_unit_cube_rnd(&body[0], Nbody, std::pow(Nbody, 1./3.), 3, 999);
+      mesh_ball(&body[0], Nbody, 999);
+    else {
       if (mpi_rank == 0) {
-        std::cout<<params[i]<<", ";
-        //for (size_t j=0; j<ranks.size(); ++j)
-          //std::cout<<ranks[j]<<", ";
-        //std::cout<<std::endl;
-        for (size_t j=0; j<a_accs.size(); ++j)
-          std::cout<<a_accs[j]<<", ";
-        std::cout<<std::endl;
+        std::cout<<"Unknown Geometry"<<std::endl;
       }
     }
-    if (mpi_rank == 0) {
-      std::cout<<std::endl;
-    }
   }
+  buildBinaryTree(levels, Nbody, &body[0], &cell[0]);
+
+  MatrixAccessor<DT>* eval;
+  switch (kfunc) {
+    case LAPLACE:
+      eval = new Laplace3D<DT>(alpha);
+      break;
+    case GAUSSIAN:
+      //eval = new Gaussian<DT>(alpha);
+      eval = new Gaussian<DT>(alpha, 1e-2);
+      break;
+    case IMQ:
+      //eval = new Imq<DT>(alpha);
+      eval = new Imq<DT>(alpha, 1e-2);
+      break;
+    case MATERN:
+      //eval = new Matern3<DT>(alpha);
+      eval = new Matern3<DT>(alpha, 1e-2);
+      break;
+    case YUKAWA:
+      eval = new Yukawa3D<DT>(1, alpha);
+      //eval = new Yukawa3D<DT>(alpha, 0.5);
+      break;
+    case HELMHOLTZ:
+      eval = new Helmholtz3D<DT>(1, alpha);
+      //eval = new Helmholtz3D<DT>(alpha, 1);
+  }
+
+  H2MatrixSolver h2_epi(*eval, epi, rank, cell, theta, &body[0], levels, false, false);
+  long long lenX = h2_epi.local_bodies.second - h2_epi.local_bodies.first;
+  Vector_dt<DT> x(lenX);
+  Vector_dt<DT> b(lenX);
+  mat_vec_reference(*eval, lenX, Nbody, &b[0], &Xbody[0], &body[h2_epi.local_bodies.first * 3], &body[0]);
+  std::copy(b.begin(), b.end(), x.begin());
+  
+  // single process only
+  std::vector<DT> A(Nbody * Nbody);
+  gen_matrix(*eval, Nbody, Nbody, &body[0], &body[0], A.data());
+  Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> Amap(&A[0], Nbody, Nbody);
+  Eigen::JacobiSVD<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> svd(Amap);
+  double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
+    
+  H2MatrixSolver<DT> h2_rank = H2MatrixSolver(*eval, 1e-12, rank, cell, theta, &body[0], levels, true, false, fact_basis);
+  h2_rank.factorizeM();
+
+  /*MPI_Barrier(MPI_COMM_WORLD);
+  double ir_time = MPI_Wtime(), ir_comm_time;
+  long long iters = h2_epi.solveIR(epi, h2_rank, &x[0], &b[0], 50);
+  MPI_Barrier(MPI_COMM_WORLD);
+  ir_time = MPI_Wtime() - ir_time;
+  ir_comm_time = ColCommMPI::get_comm_time();
+
+  std::cout<<"IR: ";
+  for(size_t i = 0; i < iters + 1; ++i) {
+    std::cout<<h2_epi.resid[i]<<", ";
+  }
+  std::cout<<std::endl;
+  */
+  MPI_Barrier(MPI_COMM_WORLD);
+  double gmres_ir_time = MPI_Wtime(), gmres_ir_comm_time;
+  long long gmres_iters = h2_epi.solveGMRESIR(epi, h2_rank, &x[0], &b[0], 10, 100, 1);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  gmres_ir_time = MPI_Wtime() - gmres_ir_time;
+  gmres_ir_comm_time = ColCommMPI::get_comm_time();
+
+  std::cout<<"GMRES-IR: ";
+  for(size_t i = 0; i < gmres_iters + 1; ++i) {
+    std::cout<<h2_epi.resid[i]<<", ";
+  }
+  std::cout<<std::endl;
+
+  MPI_Barrier(MPI_COMM_WORLD);
+  double gmres_time = MPI_Wtime(), gmres_comm_time;
+  h2_epi.GMRES_no_restart_direct(epi, h2_rank, &x[0], &b[0], 100);
+  MPI_Barrier(MPI_COMM_WORLD);
+  gmres_time = MPI_Wtime() - gmres_time;
+  gmres_comm_time = ColCommMPI::get_comm_time();
+
+  std::cout<<"GMRES: ";
+  for(size_t i = 0; i < h2_epi.iters+1; ++i) {
+    std::cout<<h2_epi.resid[i]<<", ";
+  }
+  std::cout<<std::endl;
+
+  x.reset();
+  MPI_Barrier(MPI_COMM_WORLD);
+  gmres_time = MPI_Wtime();
+  h2_epi.solveGMRES(epi, h2_rank, &x[0], &b[0], 10, 50);
+  MPI_Barrier(MPI_COMM_WORLD);
+  gmres_time = MPI_Wtime() - gmres_time;
+  gmres_comm_time = ColCommMPI::get_comm_time();
+
+  std::cout<<"restarted GMRES: ";
+  for(size_t i = 0; i < h2_epi.iters+1; ++i) {
+    std::cout<<h2_epi.resid[i]<<", ";
+  }
+  std::cout<<std::endl;
+  
+
+  h2_rank.free_all_comms();
+  h2_epi.free_all_comms();
+
   MPI_Finalize();
   return 0;
 }

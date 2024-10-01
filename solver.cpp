@@ -42,7 +42,7 @@ H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), l
 }
 
 template <typename DT>
-H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, const bool factorization_basis, MPI_Comm world, double scale) : 
+H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsilon, const long long max_rank, const std::vector<Cell>& cells, const double theta, const double bodies[], const long long max_level, const bool fix_rank, const bool grow_rank, const bool factorization_basis, MPI_Comm world) : 
   levels(max_level), A(max_level + 1), local_bodies(0, 0) {
   
   // stores the indices of the cells in the near field for each cell
@@ -80,16 +80,24 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& kernel, double epsi
   // sample the far field for all cells in each level
   std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++) {
-    // edited so that WSA will always try to match epsilon, unless fix_rank is specified
-    wsa[l].construct(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
+    if (grow_rank) {
+      wsa[l].construct(kernel, epsilon, max_rank * (levels - l + 1), comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
+    } else {
+      // edited so that WSA will always try to match epsilon, unless fix_rank is specified
+      wsa[l].construct(kernel, epsilon, max_rank, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1], fix_rank);
+    }
   }
   // this is an ugly fix to pack the max_rank into epsilon
   epsilon = fix_rank ? (double)max_rank : epsilon;
   // Create an H2 matrix for each level
   // note that fix_rank is now packed into epsilon (if specified) and we pass factorization basis for use_near bodies
-  A[levels].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis, scale);
+  A[levels].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels], factorization_basis);
   for (long long l = levels - 1; l >= 0; l--){
-    A[l].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis, scale);
+    if (fix_rank && grow_rank) {
+      epsilon += max_rank;
+    }
+    //std::cout<<l<<": "<<max_rank<<" "<<epsilon<<std::endl;
+    A[l].construct(kernel, epsilon, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1], factorization_basis);
   }
   // the bodies local to each process
   // TODO confirm if this only references the S or the bodies array
@@ -534,7 +542,7 @@ long long H2MatrixSolver<DT>::solveMyGMRES(double tol, H2MatrixSolver& M, DT x[]
     if (beta / normd < tol) {
       // in this case we have || new d0|| / ||d0|| < tol and we are finished
       // X += R;
-      return iters * inner_iters;
+      return (iters + 1) * inner_iters;
     }
   }
   return outer_iters * inner_iters;
