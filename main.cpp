@@ -87,8 +87,9 @@ int main(int argc, char* argv[]) {
   // array containing the nodes in the cluster tree
   std::vector<Cell> cell(ncells);
     
-  int mpi_rank = 0;
+  int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
   if (mpi_rank == 0) {
     std::cout<<kernel_names[kfunc] << ", " << geometry_names[geom] << ", N = "<< Nbody << ", L = "<< leaf_size << ", Admis = " << theta << ", ";
     std::cout << "rank = " << rank << ", epsilon = " << epi << ", fact_basis = " << fact_basis << ", alpha = " << alpha <<std::endl;
@@ -149,7 +150,8 @@ int main(int argc, char* argv[]) {
   double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
     
   H2MatrixSolver<DT> h2_rank = H2MatrixSolver(*eval, 1e-12, rank, 0, cell, theta, &body[0], levels, true, fact_basis);
-  h2_rank.factorizeM();
+  //h2_rank.factorizeM();
+  h2_rank.factorizeDeviceM(mpi_rank % mpi_size);
 
   /*MPI_Barrier(MPI_COMM_WORLD);
   double ir_time = MPI_Wtime(), ir_comm_time;
