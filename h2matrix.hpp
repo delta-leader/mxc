@@ -42,9 +42,9 @@ private:
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
-  std::vector<std::complex<double>*> C;
+  std::vector<long long> C;
 
-  std::vector<std::complex<double>*> NA;
+  std::vector<long long> NA;
   std::vector<long long> LowerX;
   std::vector<long long> NbXoffsets;
 
@@ -61,13 +61,13 @@ public:
   MatrixDataContainer<std::complex<double>> X;
   MatrixDataContainer<std::complex<double>> Y;
   
-  void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies = false);
+  void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
 
   void upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA);
   void downwardCopyNext(char src, char dst, const H2Matrix& upperA, const ColCommMPI& upperComm);
 
   void matVecUpwardPass(const ColCommMPI& comm);
-  void matVecHorizontalandDownwardPass(const ColCommMPI& comm);
+  void matVecHorizontalandDownwardPass(const H2Matrix& upperA, const ColCommMPI& comm);
   void matVecLeafHorizontalPass(const ColCommMPI& comm);
 
   void factorize(const ColCommMPI& comm);

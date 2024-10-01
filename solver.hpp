@@ -18,7 +18,7 @@ public:
   long long iters;
   
   H2MatrixSolver();
-  H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, bool fix_rank = false, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
 
   void matVecMul(std::complex<double> X[]);
   void factorizeM();

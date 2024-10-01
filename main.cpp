@@ -94,9 +94,9 @@ int main(int argc, char* argv[]) {
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   H2MatrixSolver matM;
   if (mode.compare("h2") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, leveled_rank, cell, theta, &body[0], levels, true);
+    matM = H2MatrixSolver(eval, 0., rank, leveled_rank, cell, theta, &body[0], levels);
   else if (mode.compare("hss") == 0)
-    matM = H2MatrixSolver(eval, epi, rank, leveled_rank, cell, 0., &body[0], levels, true);
+    matM = H2MatrixSolver(eval, 0., rank, leveled_rank, cell, 0., &body[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;

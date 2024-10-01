@@ -152,7 +152,7 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
   return (k < RowIndex[i + 1]) ? k : -1;
 }
 
-void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, bool use_near_bodies) {
+void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -171,14 +171,14 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   long long offset = ARows[0];
   std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  NA.resize(ARows[nodes], nullptr);
+  NA.resize(ARows[nodes], -1);
 
   CRows.insert(CRows.begin(), Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
   CCols.insert(CCols.begin(), Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
   offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  C.resize(CRows[nodes], nullptr);
+  C.resize(CRows[nodes], -1);
 
   if (localChildOffsets.back() == -1)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -259,9 +259,9 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
               long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, py, x);
               std::complex<double>* dp = A[ij] + offset_y + offset_x * M;
               if (0 <= lowN)
-                lowerA.NA[lowN] = dp;
+                lowerA.NA[lowN] = std::distance(A[0], dp);
               else if (0 <= lowC) {
-                lowerA.C[lowC] = dp;
+                lowerA.C[lowC] = std::distance(A[0], dp);
                 Matrix_t Rx(lowerA.R[x], nx, nx, Stride_t(lowerA.Dims[x], 1));
                 Matrix_t Cyx(dp, ny, nx, Stride_t(M, 1));
                 Eigen::MatrixXcd Ayx(ny, nx);
@@ -293,7 +293,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
       long long fsize = wsa.fbodies_size_at_i(i);
       const double* fbodies = wsa.fbodies_at_i(i);
 
-      if (use_near_bodies) {
+      if (1. <= epi) {
         std::vector<long long>::iterator neighbors = ACols.begin() + ARows[i];
         std::vector<long long>::iterator neighbors_end = ACols.begin() + ARows[i + 1];
         long long csize = std::transform_reduce(neighbors, neighbors_end, -Dims[i + ibegin], std::plus<long long>(), [&](long long col) { return Dims[col]; });
@@ -368,7 +368,7 @@ void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
   comm.neighbor_bcast(X[0], NbXoffsets.data());
 }
 
-void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
+void H2Matrix::matVecHorizontalandDownwardPass(const H2Matrix& upperA, const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
   typedef Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t;
@@ -386,7 +386,7 @@ void H2Matrix::matVecHorizontalandDownwardPass(const ColCommMPI& comm) {
         long long N = DimsLr[j];
 
         Vector_t x(X[j], N);
-        Matrix_t c(C[ij], K, N, Stride_t(UpperStride[i], 1));
+        Matrix_t c(upperA.A[0] + C[ij], K, N, Stride_t(UpperStride[i], 1));
         y.topRows(K).noalias() += c * x;
       }
 
@@ -441,19 +441,21 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     Matrix_t Ui(Q[i + ibegin], M, M);
     Matrix_t V(R[i + ibegin], M, M);
     Matrix_t Aii(A[diag], M, M);
-    V.noalias() = Ui.adjoint() * Aii.transpose();
-    Aii.noalias() = Ui.adjoint() * V.transpose();
+    Matrix_t b(B[i + ibegin], dims_max, M);
 
-    Eigen::HouseholderQR<Eigen::MatrixXcd> fac(Aii.bottomRightCorner(Mr, Mr));
-    V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
+    b.noalias() = Ui.adjoint() * Aii.transpose();
+    Aii.noalias() = Ui.adjoint() * b.transpose();
+    V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
 
-    if (0 < Ms) {
-      Aii.bottomLeftCorner(Mr, Ms) = fac.solve(Aii.bottomLeftCorner(Mr, Ms));
-      Aii.topLeftCorner(Ms, Ms) -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
-      V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
+    if (0 < Mr) {
+      Eigen::HouseholderQR<Eigen::MatrixXcd> fac(Aii.bottomRightCorner(Mr, Mr));
+      V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
+      if (0 < Ms) {
+        Aii.bottomLeftCorner(Mr, Ms).noalias() = V.bottomRows(Mr) * b.topRows(Ms).transpose();
+        Aii.topLeftCorner(Ms, Ms).noalias() -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
+      }
     }
 
-    Matrix_t b(B[i + ibegin], dims_max, M);
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 
       if (ij != diag) {
         long long j = ACols[ij];
@@ -509,7 +511,7 @@ void H2Matrix::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA,
 
       Matrix_t Aij(lowerA.A[ij], M, N);
       if (0 < Ms && 0 < Ns) {
-        Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(lowerA.NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.UpperStride[i], 1));
+        Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> An(A[0] + lowerA.NA[ij], Ms, Ns, Eigen::Stride<Eigen::Dynamic, 1>(lowerA.UpperStride[i], 1));
         An = Aij.topLeftCorner(Ms, Ns);
       }
     }
