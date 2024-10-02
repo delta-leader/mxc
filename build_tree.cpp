@@ -57,82 +57,11 @@ CSR::CSR(char NoF, const std::vector<Cell>& ci, const std::vector<Cell>& cj, dou
         [=](const std::pair<long long, long long>& i) { return n <= i.first; }));
 }
 
-CSR::CSR(const CSR& A, const CSR& B) {
-  long long M = A.RowIndex.size() - 1;
-  RowIndex.resize(M + 1);
-  ColIndex.clear();
-  RowIndex[0] = 0;
-
-  for (long long y = 0; y < M; y++) {
-    std::set<long long> cols;
-    cols.insert(A.ColIndex.begin() + A.RowIndex[y], A.ColIndex.begin() + A.RowIndex[y + 1]);
-    cols.insert(B.ColIndex.begin() + B.RowIndex[y], B.ColIndex.begin() + B.RowIndex[y + 1]);
-
-    for (std::set<long long>::iterator i = cols.begin(); i != cols.end(); i = std::next(i))
-      ColIndex.push_back(*i);
-    RowIndex[y + 1] = (long long)ColIndex.size();
-  }
-}
-
 long long CSR::lookupIJ(long long i, long long j) const {
   if (i < 0 || RowIndex.size() <= (1ull + i))
     return -1;
   long long k = std::distance(ColIndex.begin(), std::find(ColIndex.begin() + RowIndex[i], ColIndex.begin() + RowIndex[i + 1], j));
   return (k < RowIndex[i + 1]) ? k : -1;
-}
-
-MatrixDesc::MatrixDesc(long long lbegin, long long lend, long long ubegin, long long uend, const std::pair<long long, long long> Tree[], const CSR& Near, const CSR& Far) : 
-Y(lbegin),
-M(lend - lbegin),
-NZA(Near.RowIndex[lend] - Near.RowIndex[lbegin]),
-NZC(Far.RowIndex[lend] - Far.RowIndex[lbegin]),
-ARowOffsets(&Near.RowIndex[lbegin], &Near.RowIndex[lend + 1]),
-ACoordinatesY(NZA),
-ACoordinatesX(&Near.ColIndex[Near.RowIndex[lbegin]], &Near.ColIndex[Near.RowIndex[lend]]),
-AUpperCoordinates(NZA, -1),
-AUpperIndexY(NZA),
-AUpperIndexX(NZA),
-CRowOffsets(&Far.RowIndex[lbegin], &Far.RowIndex[lend + 1]),
-CCoordinatesY(NZC),
-CCoordinatesX(&Far.ColIndex[Far.RowIndex[lbegin]], &Far.ColIndex[Far.RowIndex[lend]]),
-CUpperCoordinates(NZC, -1),
-CUpperIndexY(NZC),
-CUpperIndexX(NZC),
-XUpperCoordinatesY(uend - ubegin, -1) {
-  
-  long long offsetA = ARowOffsets[0], offsetC = CRowOffsets[0];
-  std::for_each(ARowOffsets.begin(), ARowOffsets.end(), [=](long long& i) { i = i - offsetA; });
-  std::for_each(CRowOffsets.begin(), CRowOffsets.end(), [=](long long& i) { i = i - offsetC; });
-
-  for (long long i = 0; i < M; i++) {
-    long long gi = i + lbegin;
-    std::fill(&ACoordinatesY[ARowOffsets[i]], &ACoordinatesY[ARowOffsets[i + 1]], gi);
-    std::fill(&CCoordinatesY[CRowOffsets[i]], &CCoordinatesY[CRowOffsets[i + 1]], gi);
-  }
-
-  long long offsetU = (0 <= ubegin && ubegin < uend) ? Near.RowIndex[ubegin] : 0;
-  for (long long i = ubegin; i < uend; i++)
-    for (long long ci = Tree[i].first; ci < Tree[i].second; ci++)
-      for (long long ij = Near.RowIndex[i]; ij < Near.RowIndex[i + 1]; ij++) {
-        long long j = Near.ColIndex[ij];
-        for (long long cj = Tree[j].first; cj < Tree[j].second; cj++) {
-          long long iA = Near.lookupIJ(ci, cj) - offsetA;
-          long long iC = Far.lookupIJ(ci, cj) - offsetC;
-          if (0 <= iA && iA < NZA) {
-            AUpperCoordinates[iA] = ij - offsetU;
-            AUpperIndexY[iA] = ci - Tree[i].first;
-            AUpperIndexX[iA] = cj - Tree[j].first;
-          }
-          if (0 <= iC && iC < NZC) {
-            CUpperCoordinates[iC] = ij - offsetU;
-            CUpperIndexY[iC] = ci - Tree[i].first;
-            CUpperIndexX[iC] = cj - Tree[j].first;
-          }
-        }
-      }
-  
-  if (0 <= ubegin && ubegin < uend)
-    std::transform(&Tree[ubegin], &Tree[uend], XUpperCoordinatesY.begin(), [](const std::pair<long long, long long>& c) { return c.first; });
 }
 
 void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long levels) {

@@ -432,6 +432,9 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
   MatrixDataContainer<std::complex<double>> B;
   B.alloc(xlen, Bsizes.data());
 
+  if (nodes == 1)
+    comm.level_merge(A[0], A.size());
+
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
@@ -515,7 +518,6 @@ void H2Matrix::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA,
         An = Aij.topLeftCorner(Ms, Ns);
       }
     }
-  comm.level_merge(A[0], A.size());
 }
 
 void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {

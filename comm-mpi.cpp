@@ -46,7 +46,7 @@ void getNextLevelMapping(std::pair<long long, long long> Mapping[], const std::p
   std::copy(MappingNext.begin(), MappingNext.end(), Mapping);
 }
 
-ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long Rows[], const long long Cols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world) {
+ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long ARows[], const long long ACols[], const long long CRows[], const long long CCols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world) {
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(world, &mpi_rank);
   MPI_Comm_size(world, &mpi_size);
@@ -60,7 +60,8 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
   auto col_to_mpi_rank = [&](long long col) { return std::distance(&Mapping[0], std::find_if(&Mapping[0], &Mapping[mpi_size], 
     [=](std::pair<long long, long long> i) { return i.first <= col && col < i.second; })); };
   std::set<long long> cols;
-  std::for_each(&Cols[Rows[pbegin]], &Cols[Rows[pend]], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
+  std::for_each(&ACols[ARows[pbegin]], &ACols[ARows[pend]], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
+  std::for_each(&CCols[CRows[pbegin]], &CCols[CRows[pend]], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
 
   std::vector<long long> NeighborRanks(cols.begin(), cols.end());
   Proc = std::distance(NeighborRanks.begin(), std::find(NeighborRanks.begin(), NeighborRanks.end(), p));
@@ -73,7 +74,8 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
     long long ibegin = Mapping[NeighborRanks[i]].first;
     long long iend = Mapping[NeighborRanks[i]].second;
     std::set<long long> icols;
-    std::for_each(&Cols[Rows[ibegin]], &Cols[Rows[iend]], [&](long long col) { icols.insert(col_to_mpi_rank(col)); });
+    std::for_each(&ACols[ARows[ibegin]], &ACols[ARows[iend]], [&](long long col) { icols.insert(col_to_mpi_rank(col)); });
+    std::for_each(&CCols[CRows[ibegin]], &CCols[CRows[iend]], [&](long long col) { icols.insert(col_to_mpi_rank(col)); });
 
     Boxes[i] = std::make_pair(ibegin, iend - ibegin);
     BoxOffsets[i + 1] = BoxOffsets[i] + (iend - ibegin);
@@ -94,6 +96,62 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
   MergeComm = MPI_Comm_split_unique(allocedComm, (lenp > 1 && mpi_rank == p_next) ? p : MPI_UNDEFINED, mpi_rank, world);
   AllReduceComm = MPI_Comm_split_unique(allocedComm, mpi_rank == p ? 1 : MPI_UNDEFINED, mpi_rank, world);
   DupComm = MPI_Comm_split_unique(allocedComm, lenp > 1 ? p : MPI_UNDEFINED, mpi_rank, world);
+
+  auto local_col = [&](long long col) {
+    auto iter = std::find_if(Boxes.begin(), Boxes.end(), [=](std::pair<long long, long long> i) { return i.first <= col && col < i.first + i.second; });
+    return col - (*iter).first + BoxOffsets[std::distance(Boxes.begin(), iter)];
+  };
+
+  ARowOffsets.insert(ARowOffsets.begin(), &ARows[pbegin], &ARows[pend + 1]);
+  AColumns.insert(AColumns.begin(), &ACols[ARows[pbegin]], &ACols[ARows[pend]]);
+  long long offset = ARows[pbegin];
+  std::for_each(ARowOffsets.begin(), ARowOffsets.end(), [=](long long& i) { i = i - offset; });
+  std::transform(AColumns.begin(), AColumns.end(), AColumns.begin(), local_col);
+
+  CRowOffsets.insert(CRowOffsets.begin(), &CRows[pbegin], &CRows[pend + 1]);
+  CColumns.insert(CColumns.begin(), &CCols[CRows[pbegin]], &CCols[CRows[pend]]);
+  offset = CRows[pbegin];
+  std::for_each(CRowOffsets.begin(), CRowOffsets.end(), [=](long long& i) { i = i - offset; });
+  std::transform(CColumns.begin(), CColumns.end(), CColumns.begin(), local_col);
+
+  long long lbegin = Mapping[p_next].first;
+  long long lend = Mapping[p_next].second;
+  if (0 <= lbegin && lbegin <= lend) {
+    long long lenAl = ARows[lend] - ARows[lbegin];
+    long long lenCl = CRows[lend] - CRows[lbegin];
+    long long startXl = Tree[pbegin].first;
+    long long lenXl = Tree[pend - 1].second - startXl;
+
+    LowerX = startXl - pbegin;
+    LowerIndA.resize(lenAl);
+    LowerIndC.resize(lenCl);
+    LowerIndX.resize(lenXl);
+
+    for (long long i = pbegin; i < pend; i++) {
+      long long childi = Tree[i].first;
+      long long cendi = Tree[i].second;
+
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        long long j = ACols[ij];
+        long long childj = Tree[j].first;
+        long long cendj = Tree[j].second;
+
+        for (long long y = std::max(lbegin, childi); y < std::min(lend, cendi); y++)
+          for (long long x = childj; x < cendj; x++) {
+            long long A_yx = std::distance(&ACols[ARows[lbegin]], std::find(&ACols[ARows[y]], &ACols[ARows[y + 1]], x));
+            long long C_yx = std::distance(&CCols[CRows[lbegin]], std::find(&CCols[CRows[y]], &CCols[CRows[y + 1]], x));
+
+            if (A_yx < (ARows[y + 1] - ARows[lbegin]))
+              LowerIndA[A_yx] = std::make_tuple(ij - ARows[pbegin], y - childi, x - childj);
+            else if (C_yx < (CRows[y + 1] - CRows[lbegin]))
+              LowerIndC[C_yx] = std::make_tuple(ij - ARows[pbegin], y - childi, x - childj);
+          }
+      }
+
+      for (long long y = childi; y < cendi; y++)
+        LowerIndX[y - startXl] = std::make_pair(i - pbegin, y - childi);
+    }
+  }
 }
 
 long long ColCommMPI::iLocal(long long iglobal) const {

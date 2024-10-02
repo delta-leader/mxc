@@ -16,7 +16,6 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
-  CSR Neighbor(Near, Far);
   int mpi_size = 1;
   MPI_Comm_size(world, &mpi_size);
 
@@ -25,18 +24,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
   for (long long i = 0; i <= levels; i++)
-    comm.emplace_back(&tree[0], &mapping[0], Neighbor.RowIndex.data(), Neighbor.ColIndex.data(), allocedComm, world);
-
-  std::vector<MatrixDesc> desc;
-  desc.reserve(levels + 1);
-  desc.emplace_back(0, 1, -1, -1, &tree[0], Near, Far);
-  for (long long i = 1; i <= levels; i++) {
-    long long lbegin = comm[i].oGlobal();
-    long long lend = lbegin + comm[i].lenLocal();
-    long long ubegin = comm[i - 1].oGlobal();
-    long long uend = ubegin + comm[i - 1].lenLocal();
-    desc.emplace_back(lbegin, lend, ubegin, uend, &tree[0], Near, Far);
-  }
+    comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
 
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
@@ -113,13 +101,10 @@ void H2MatrixSolver::factorizeDeviceM(int device) {
     cublasSetStream(cublasH, stream);
 
     for (long long l = levels; l >= 0; l--) {
-      long long ibegin = comm[l].oLocal();
-      long long nodes = comm[l].lenLocal();
-      long long xlen = comm[l].lenNeighbors();
       long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
       long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
 
-      compute_factorize(cublasH, dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0], comm[l]);
+      compute_factorize(cublasH, dim, rank, A[l].A[0], A[l].R[0], A[l].Q[0], comm[l]);
       
       if (0 < l)
         A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
