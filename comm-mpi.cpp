@@ -142,14 +142,14 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
             long long C_yx = std::distance(&CCols[CRows[lbegin]], std::find(&CCols[CRows[y]], &CCols[CRows[y + 1]], x));
 
             if (A_yx < (ARows[y + 1] - ARows[lbegin]))
-              LowerIndA[A_yx] = std::make_tuple(ij - ARows[pbegin], y - childi, x - childj);
+              LowerIndA[A_yx] = std::make_tuple(y - childi, x - childj, ij - ARows[pbegin]);
             else if (C_yx < (CRows[y + 1] - CRows[lbegin]))
-              LowerIndC[C_yx] = std::make_tuple(ij - ARows[pbegin], y - childi, x - childj);
+              LowerIndC[C_yx] = std::make_tuple(y - childi, x - childj, ij - ARows[pbegin]);
           }
       }
 
       for (long long y = childi; y < cendi; y++)
-        LowerIndX[y - startXl] = std::make_pair(i - pbegin, y - childi);
+        LowerIndX[y - startXl] = std::make_pair(y - childi, i - pbegin);
     }
   }
 }

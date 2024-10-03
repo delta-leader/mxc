@@ -99,15 +99,15 @@ void H2MatrixSolver::factorizeDeviceM(int device) {
     cublasHandle_t cublasH;
     cublasCreate(&cublasH);
     cublasSetStream(cublasH, stream);
+    long long ldim = 0, lrank = 0;
 
     for (long long l = levels; l >= 0; l--) {
       long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
       long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
 
-      compute_factorize(cublasH, dim, rank, A[l].A[0], A[l].R[0], A[l].Q[0], comm[l]);
-      
-      if (0 < l)
-        A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+      compute_factorize(cublasH, dim, rank, A[l].A[0], A[l].R[0], A[l].Q[0], ldim, lrank, l == levels ? nullptr : A[l + 1].A[0], comm[l]);
+      ldim = dim;
+      lrank = rank;
     }
 
     cudaStreamSynchronize(stream);
