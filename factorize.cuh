@@ -2,51 +2,62 @@
 
 #include <complex>
 #include <map>
+#include <vector>
 #include <cuda_runtime_api.h>
 #include <cublas_v2.h>
-#include <thrust/device_vector.h>
-#include <thrust/complex.h>
+#include <cuComplex.h>
 #include <mpi.h>
 #include <nccl.h>
 
-/*template <typename T> class deviceMatrixDesc_t {
-public:
-  cublasHandle_t cublasH;
-  cudaStream_t stream;
-
-  thrust::device_vector<long long> ARowOffset_vec;
-  thrust::device_vector<long long> ARows_vec;
-  thrust::device_vector<long long> ACols_vec;
-  thrust::device_vector<long long> ADistCols_vec;
-  thrust::device_vector<long long> AInd_vec;
-
-  thrust::device_vector<T*> A_ss_vec;
-  thrust::device_vector<T*> A_sr_vec;
-  thrust::device_vector<T*> A_rs_vec;
-  thrust::device_vector<T*> A_rr_vec;
-  thrust::device_vector<T*> A_sr_rows_vec;
-  thrust::device_vector<T*> U_cols_vec;
-  thrust::device_vector<T*> U_R_vec;
-  thrust::device_vector<T*> V_rows_vec;
-  thrust::device_vector<T*> V_R_vec;
-  thrust::device_vector<T*> B_ind_vec;
-  thrust::device_vector<T*> B_cols_vec;
-  thrust::device_vector<T*> B_R_vec;
-  thrust::device_vector<T*> AC_ind_vec;
-
-  thrust::device_vector<T> Avec;
-  thrust::device_vector<T> Uvec;
-  thrust::device_vector<T> Vvec;
-  thrust::device_vector<T> Bvec;
-  thrust::device_vector<T> ACvec;
-  
-  thrust::device_vector<int> Ipiv;
-  thrust::device_vector<int> Info;
-};*/
+#define STD_CTYPE std::complex<double>
+#define THRUST_CTYPE thrust::complex<double>
+#define CUDA_CTYPE cuDoubleComplex
 
 class ColCommMPI;
+class deviceMatrixDesc_t {
+public:
+  long long bdim;
+  long long rank;
+  long long lenA;
+  long long M;
+  long long N;
+  long long diag_offset;
+  long long ReducLen;
+
+  CUDA_CTYPE** A_ss;
+  CUDA_CTYPE** A_sr;
+  CUDA_CTYPE** A_rs;
+  CUDA_CTYPE** A_rr;
+  CUDA_CTYPE** A_sr_rows;
+
+  CUDA_CTYPE** U_cols;
+  CUDA_CTYPE** U_R;
+  CUDA_CTYPE** V_rows;
+  CUDA_CTYPE** V_R;
+
+  CUDA_CTYPE** B_ind;
+  CUDA_CTYPE** B_cols;
+  CUDA_CTYPE** B_R;
+  CUDA_CTYPE** AC_ind;
+  CUDA_CTYPE** L_dst;
+
+  CUDA_CTYPE* Adata;
+  CUDA_CTYPE* Udata;
+  CUDA_CTYPE* Vdata;
+  CUDA_CTYPE* Bdata;
+  CUDA_CTYPE* ACdata;
+  
+  int* Ipiv;
+  int* Info;
+};
 
 void init_gpu_envs(cudaStream_t* stream, cublasHandle_t* cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world = MPI_COMM_WORLD);
 void finalize_gpu_envs(cudaStream_t stream, cublasHandle_t cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
 
-void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, std::complex<double>* A, std::complex<double>* R, const std::complex<double>* Q, long long ldim, long long lrank, const std::complex<double>* L, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, long long lower_rank, const ColCommMPI& comm);
+void destroyMatrixDesc(deviceMatrixDesc_t desc);
+
+void copyDataInMatrixDesc(deviceMatrixDesc_t desc, const STD_CTYPE* A, const STD_CTYPE* U, cudaStream_t stream);
+void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, STD_CTYPE* A, STD_CTYPE* R, cudaStream_t stream);
+
+void compute_factorize(cudaStream_t stream, cublasHandle_t cublasH, long long bdim, long long rank, CUDA_CTYPE* A, CUDA_CTYPE* R, const CUDA_CTYPE* Q, long long ldim, long long lrank, const CUDA_CTYPE* L, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);

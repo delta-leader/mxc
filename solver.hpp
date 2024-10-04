@@ -16,6 +16,7 @@ private:
   cudaStream_t stream;
   cublasHandle_t cublasH;
   std::map<const MPI_Comm, ncclComm_t> nccl_comms;
+  std::vector<deviceMatrixDesc_t> desc;
 
 public:
   std::pair<long long, long long> local_bodies;
@@ -25,6 +26,7 @@ public:
   H2MatrixSolver();
   H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
   void init_gpu_handles(MPI_Comm world = MPI_COMM_WORLD);
+  void move_data_gpu();
 
   void matVecMul(std::complex<double> X[]);
   void factorizeM();
