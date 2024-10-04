@@ -19,6 +19,7 @@ public:
   long long bdim;
   long long rank;
   long long reducLen;
+  long long lowerTriLen;
 
   CUDA_CTYPE** A_ss;
   CUDA_CTYPE** A_sr;
@@ -31,6 +32,11 @@ public:
   CUDA_CTYPE** U_R;
   CUDA_CTYPE** V_rows;
   CUDA_CTYPE** V_R;
+
+  CUDA_CTYPE** X_rows;
+  CUDA_CTYPE** X_R_rows;
+  CUDA_CTYPE** Y_cols;
+  CUDA_CTYPE** Y_R_cols;
 
   CUDA_CTYPE** B_ind;
   CUDA_CTYPE** B_cols;

@@ -9,12 +9,15 @@
 #include <thrust/iterator/constant_iterator.h>
 
 struct keysDLU {
-  long long D, M, N;
-  keysDLU(long long D, long long M, long long N) : D(D), M(M), N(N) {}
+  long long D, M, N, U;
+  keysDLU(long long D, long long M, long long N) : D(D), M(M), N(N), U(2 * M * N) {}
   __host__ __device__ long long operator()(long long y, long long x) const {
     long long diff = D + y - x;
     long long pred = (diff != 0) + (diff < 0);
     return (pred * M + y) * N + x;
+  }
+  __host__ __device__ bool operator()(long long i) const {
+    return U <= i;
   }
 };
 
@@ -54,11 +57,13 @@ void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long ra
   thrust::inclusive_scan(ARows.begin(), ARows.end(), ARows.begin());
   thrust::exclusive_scan_by_key(ARows.begin(), ARows.end(), one_iter, ADistCols.begin(), 0ll);
 
-  thrust::transform(ARows.begin(), ARows.end(), ACols.begin(), keys.begin(), keysDLU(diag_offset, M, N));
+  keysDLU key(diag_offset, M, N);
+  thrust::transform(ARows.begin(), ARows.end(), ACols.begin(), keys.begin(), key);
   thrust::sequence(AInd.begin(), AInd.end(), 0);
   thrust::sort_by_key(keys.begin(), keys.end(), thrust::make_zip_iterator(ARows.begin(), ACols.begin(), ADistCols.begin(), AInd.begin()));
 
   desc->reducLen = 1ll + thrust::reduce(ADistCols.begin(), ADistCols.end(), 0ll, thrust::maximum<long long>());
+  desc->lowerTriLen = thrust::distance(keys.begin(), thrust::find_if(keys.begin(), keys.end(), key));
   long long lenL = comm.LowerIndA.size();
   const thrust::tuple<long long, long long, long long>* commL = reinterpret_cast<const thrust::tuple<long long, long long, long long>*>(comm.LowerIndA.data());
   thrust::device_vector<thrust::tuple<long long, long long, long long>> LInd(commL, commL + lenL);
@@ -75,6 +80,11 @@ void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long ra
   cudaMalloc(reinterpret_cast<void**>(&desc->V_rows), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->V_R), M * sizeof(CUDA_CTYPE*));
 
+  cudaMalloc(reinterpret_cast<void**>(&desc->X_rows), lenA * sizeof(CUDA_CTYPE*));
+  cudaMalloc(reinterpret_cast<void**>(&desc->X_R_rows), lenA * sizeof(CUDA_CTYPE*));
+  cudaMalloc(reinterpret_cast<void**>(&desc->Y_cols), lenA * sizeof(CUDA_CTYPE*));
+  cudaMalloc(reinterpret_cast<void**>(&desc->Y_R_cols), lenA * sizeof(CUDA_CTYPE*));
+
   cudaMalloc(reinterpret_cast<void**>(&desc->B_ind), M * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->B_cols), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->B_R), lenA * sizeof(CUDA_CTYPE*));
@@ -83,15 +93,16 @@ void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long ra
 
   long long block = bdim * bdim;
   long long rblock = rank * rank;
+  long long acc_len = desc->reducLen * std::max(M * rblock, N * bdim);
 
   cudaMalloc(reinterpret_cast<void**>(&desc->Adata), lenA * block * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Udata), N * block * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Vdata), M * block * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Bdata), N * block * sizeof(CUDA_CTYPE));
-  cudaMalloc(reinterpret_cast<void**>(&desc->ACdata), desc->reducLen * M * rblock* sizeof(CUDA_CTYPE));
+  cudaMalloc(reinterpret_cast<void**>(&desc->ACdata), desc->reducLen * acc_len * sizeof(CUDA_CTYPE));
 
-  cudaMalloc(reinterpret_cast<void**>(&desc->Xdata), N * sizeof(CUDA_CTYPE));
-  cudaMalloc(reinterpret_cast<void**>(&desc->Ydata), N * sizeof(CUDA_CTYPE));
+  cudaMalloc(reinterpret_cast<void**>(&desc->Xdata), N * bdim * sizeof(CUDA_CTYPE));
+  cudaMalloc(reinterpret_cast<void**>(&desc->Ydata), N * bdim * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Ipiv), M * bdim * sizeof(int));
   cudaMalloc(reinterpret_cast<void**>(&desc->Info), M * sizeof(int));
 
@@ -109,6 +120,11 @@ void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long ra
   thrust::transform(ACols.begin(), ACols.begin() + M, thrust::device_ptr<CUDA_CTYPE*>(desc->U_R), setDevicePtr(&(desc->Udata)[offset_SR], block));
   thrust::transform(ARows.begin(), ARows.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->V_rows), setDevicePtr(desc->Vdata, block));
   thrust::transform(inc_iter, inc_iter + M, thrust::device_ptr<CUDA_CTYPE*>(desc->V_R), setDevicePtr(&(desc->Vdata)[offset_RS], block));
+
+  thrust::transform(ARows.begin(), ARows.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->X_rows), setDevicePtr(&(desc->Xdata)[diag_offset * bdim], bdim));
+  thrust::transform(ARows.begin(), ARows.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->X_R_rows), setDevicePtr(&(desc->Xdata)[diag_offset * bdim + offset_RS], bdim));
+  thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->Y_cols), setDevicePtr(desc->Ydata, bdim));
+  thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->Y_R_cols), setDevicePtr(&(desc->Ydata)[offset_RS], bdim));
 
   thrust::transform(inc_iter, inc_iter + N, thrust::device_ptr<CUDA_CTYPE*>(desc->B_ind), setDevicePtr(desc->Bdata, block));
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->B_cols), setDevicePtr(desc->Bdata, block));

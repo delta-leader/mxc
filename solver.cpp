@@ -186,12 +186,9 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
       matVecMul(w.data());
       M.solvePrecondition(w.data());
 
-      for (long long k = 0; k <= i; k++)
-        H(k, i) = v.col(k).adjoint() * w;
+      H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * w;
       comm[levels].level_sum(H.col(i).data(), i + 1);
-
-      for (long long k = 0; k <= i; k++)
-        w -= H(k, i) * v.col(k);
+      w.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
 
       std::complex<double> normw = w.adjoint() * w;
       comm[levels].level_sum(&normw, 1);
