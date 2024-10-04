@@ -18,17 +18,14 @@ class deviceMatrixDesc_t {
 public:
   long long bdim;
   long long rank;
-  long long lenA;
-  long long M;
-  long long N;
-  long long diag_offset;
-  long long ReducLen;
+  long long reducLen;
 
   CUDA_CTYPE** A_ss;
   CUDA_CTYPE** A_sr;
   CUDA_CTYPE** A_rs;
   CUDA_CTYPE** A_rr;
   CUDA_CTYPE** A_sr_rows;
+  const CUDA_CTYPE** A_unsort;
 
   CUDA_CTYPE** U_cols;
   CUDA_CTYPE** U_R;
@@ -51,13 +48,13 @@ public:
   int* Info;
 };
 
-void init_gpu_envs(cudaStream_t* stream, cublasHandle_t* cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world = MPI_COMM_WORLD);
-void finalize_gpu_envs(cudaStream_t stream, cublasHandle_t cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void initGpuEnvs(cudaStream_t* memory_stream, cudaStream_t* compute_stream, cublasHandle_t* cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world = MPI_COMM_WORLD);
+void finalizeGpuEnvs(cudaStream_t memory_stream, cudaStream_t compute_stream, cublasHandle_t cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
 
 void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, long long lower_rank, const ColCommMPI& comm);
 void destroyMatrixDesc(deviceMatrixDesc_t desc);
 
-void copyDataInMatrixDesc(deviceMatrixDesc_t desc, const STD_CTYPE* A, const STD_CTYPE* U, cudaStream_t stream);
-void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, STD_CTYPE* A, STD_CTYPE* R, cudaStream_t stream);
+void copyDataInMatrixDesc(deviceMatrixDesc_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream);
+void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream);
 
-void compute_factorize(cudaStream_t stream, cublasHandle_t cublasH, long long bdim, long long rank, CUDA_CTYPE* A, CUDA_CTYPE* R, const CUDA_CTYPE* Q, long long ldim, long long lrank, const CUDA_CTYPE* L, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);

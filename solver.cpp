@@ -40,7 +40,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
 }
 
 void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
-  init_gpu_envs(&stream, &cublasH, nccl_comms, allocedComm, world);
+  initGpuEnvs(&memory_stream, &compute_stream, &cublasH, nccl_comms, allocedComm, world);
   
   desc.resize(levels + 1);
   long long rank = 0;
@@ -96,24 +96,18 @@ void H2MatrixSolver::factorizeM() {
 }
 
 void H2MatrixSolver::factorizeDeviceM() {
-  long long ldim = 0, lrank = 0;
-  cuDoubleComplex* L = nullptr;
-  copyDataInMatrixDesc(desc[levels], A[levels].A[0], A[levels].Q[0], 0);
-  cudaDeviceSynchronize();
+  copyDataInMatrixDesc(desc[levels], comm[levels].ARowOffsets.back(), A[levels].A[0], comm[levels].lenNeighbors(), A[levels].Q[0], compute_stream);
+  compute_factorize(desc[levels], desc[levels], compute_stream, cublasH, comm[levels], nccl_comms);
 
-  for (long long l = levels; l > 0; l--) {
-    copyDataInMatrixDesc(desc[l - 1], A[l - 1].A[0], A[l - 1].Q[0], 0);
-    compute_factorize(stream, cublasH, desc[l].bdim, desc[l].rank, desc[l].Adata, desc[l].Vdata, desc[l].Udata, ldim, lrank, L, comm[l], nccl_comms);
+  for (long long l = levels - 1; l >= 0; l--) {
+    copyDataInMatrixDesc(desc[l], comm[l].ARowOffsets.back(), A[l].A[0], comm[l].lenNeighbors(), A[l].Q[0], memory_stream);
     cudaDeviceSynchronize();
-    copyDataOutMatrixDesc(desc[l], A[l].A[0], A[l].R[desc[l].diag_offset], 0);
-
-    ldim = desc[l].bdim;
-    lrank = desc[l].rank;
-    L = desc[l].Adata;
+    long long diag_offset = comm[l + 1].oLocal();
+    copyDataOutMatrixDesc(desc[l + 1], comm[l + 1].ARowOffsets.back(), A[l + 1].A[0], comm[l + 1].lenLocal(), A[l + 1].R[diag_offset], memory_stream);
+    compute_factorize(desc[l], desc[l + 1], compute_stream, cublasH, comm[l], nccl_comms);
   }
 
-  compute_factorize(stream, cublasH, desc[0].bdim, desc[0].rank, desc[0].Adata, desc[0].Vdata, desc[0].Udata, ldim, lrank, L, comm[0], nccl_comms);
-  copyDataOutMatrixDesc(desc[0], A[0].A[0], A[0].R[0], stream);
+  copyDataOutMatrixDesc(desc[0], 1, A[0].A[0], 1, A[0].R[0], compute_stream);
   cudaDeviceSynchronize();
 }
 
@@ -227,7 +221,7 @@ void H2MatrixSolver::free_all_comms() {
 }
 
 void H2MatrixSolver::free_gpu_handles() {
-  finalize_gpu_envs(stream, cublasH, nccl_comms);
+  finalizeGpuEnvs(memory_stream, compute_stream, cublasH, nccl_comms);
   for (long long l = levels; l >= 0; l--)
     destroyMatrixDesc(desc[l]);
   desc.clear();
