@@ -419,3 +419,6 @@ Out:
 */
 template <typename DT>
 void mat_vec_reference(const MatrixAccessor<DT>& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]);
+
+template <typename DT>
+double mat_vec_reference_norm(const MatrixAccessor<DT>& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]);

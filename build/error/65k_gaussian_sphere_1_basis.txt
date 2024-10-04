@@ -1,0 +1,1 @@
+Gaussian, Sphere, N = 65536, L = 512, Admis = 1, fact_basis = 1, alpha = 0.001

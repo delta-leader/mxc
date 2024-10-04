@@ -24,10 +24,12 @@ template void mat_vec_reference<std::complex<float>> (const MatrixAccessor<std::
 template void gen_matrix<double>(const MatrixAccessor<double>&, const long long, const long long, const double* const, const double* const, double[], double);
 template long long adaptive_cross_approximation<double>(const MatrixAccessor<double>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
 template void mat_vec_reference<double> (const MatrixAccessor<double>&, const long long, const long long, double B[], const double X[], const double[], const double[]);
+template double mat_vec_reference_norm<double> (const MatrixAccessor<double>&, const long long, const long long, double B[], const double X[], const double[], const double[]);
 // float
 template void gen_matrix<float>(const MatrixAccessor<float>&, const long long, const long long, const double* const, const double* const, float[], double);
 template long long adaptive_cross_approximation<float>(const MatrixAccessor<float>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
 template void mat_vec_reference<float> (const MatrixAccessor<float>&, const long long, const long long, float B[], const float X[], const double[], const double[]);
+template double mat_vec_reference_norm<float> (const MatrixAccessor<float>&, const long long, const long long, float B[], const float X[], const double[], const double[]);
 // half
 template void gen_matrix<Eigen::half>(const MatrixAccessor<Eigen::half>&, const long long, const long long, const double* const, const double* const, Eigen::half[], double);
 template long long adaptive_cross_approximation<Eigen::half>(const MatrixAccessor<Eigen::half>&, const double, const long long, const long long, const long long, const double[], const double[], long long[], long long[]);
@@ -187,6 +189,50 @@ void mat_vec_reference(const MatrixAccessor<DT>& kernel, const long long nrows, 
       B_ref.segment(i, brows) += A_block.leftCols(bcols) * X_ref.segment(j, bcols);
     }
   }
+  //std::cout<<"Max: "<<max<<std::endl;
+  //std::cout<<"Min: "<<min<<std::endl;
+}
+
+template <typename DT>
+double mat_vec_reference_norm(const MatrixAccessor<DT>& kernel, const long long nrows, const long long ncols, DT B[], const DT X[], const double row_bodies[], const double col_bodies[]) {
+  // calculate in blocks  (to prevent memory issues?)
+  constexpr long long block_size = 256;
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
+  Eigen::Map<const Vector_dt> X_ref(X, ncols);
+  Eigen::Map<Vector_dt> B_ref(B, nrows);
+  double min, max;
+  bool min_init, max_init;
+  min_init = max_init = true;
+  double ssq = 0;
+  
+  for (long long i = 0; i < nrows; i += block_size) {
+    const long long brows = std::min(nrows - i, block_size);
+    const double* const bi_bodies = &row_bodies[i * 3];
+    Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> A_block(brows, block_size);
+
+    for (long long j = 0; j < ncols; j += block_size) {
+      const double* const bj_bodies = &col_bodies[j * 3];
+      const long long bcols = std::min(ncols - j, block_size);
+      gen_matrix(kernel, brows, bcols, bi_bodies, bj_bodies, A_block.data());
+      ssq += A_block.squaredNorm();
+      double block_max = A_block.cwiseAbs().maxCoeff();
+      if (max_init) {
+        max = block_max;
+        max_init = false;
+      }
+      if (block_max > max)
+        max = block_max;
+      double block_min = A_block.cwiseAbs().minCoeff();
+      if (min_init) {
+        min = block_min;
+        min_init = false;
+      }
+      if (block_min < min)
+        min = block_min;
+      B_ref.segment(i, brows) += A_block.leftCols(bcols) * X_ref.segment(j, bcols);
+    }
+  }
+  return std::sqrt(ssq);
   //std::cout<<"Max: "<<max<<std::endl;
   //std::cout<<"Min: "<<min<<std::endl;
 }
