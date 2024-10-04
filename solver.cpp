@@ -6,8 +6,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include <factorize.cuh>
-
 H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
 }
 
@@ -39,6 +37,10 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
+}
+
+void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
+  init_gpu_envs(&stream, &cublasH, nccl_comms, allocedComm, world);
 }
 
 void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
@@ -82,7 +84,7 @@ void H2MatrixSolver::factorizeM() {
   }
 }
 
-void H2MatrixSolver::factorizeDeviceM(int device) {
+void H2MatrixSolver::factorizeDeviceM() {
   long long dims_max = 0, lenA = 0, lenQ = 0;
   for (long long l = levels; l >= 0; l--) {
     dims_max = std::max(dims_max, *std::max_element(A[l].Dims.begin(), A[l].Dims.end()));
@@ -90,30 +92,17 @@ void H2MatrixSolver::factorizeDeviceM(int device) {
     lenQ = std::max(lenQ, comm[l].lenNeighbors());
   }
 
-  int num_device;
-  cudaGetDeviceCount(&num_device);
-  if (cudaGetDeviceCount(&num_device) == cudaSuccess) {
-    cudaSetDevice(device % num_device);
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
-    cublasHandle_t cublasH;
-    cublasCreate(&cublasH);
-    cublasSetStream(cublasH, stream);
-    long long ldim = 0, lrank = 0;
+  long long ldim = 0, lrank = 0;
+  for (long long l = levels; l >= 0; l--) {
+    long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
+    long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
 
-    for (long long l = levels; l >= 0; l--) {
-      long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
-      long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
-
-      compute_factorize(cublasH, dim, rank, A[l].A[0], A[l].R[0], A[l].Q[0], ldim, lrank, l == levels ? nullptr : A[l + 1].A[0], comm[l]);
-      ldim = dim;
-      lrank = rank;
-    }
-
-    cudaStreamSynchronize(stream);
-    cublasDestroy(cublasH);
-    cudaStreamDestroy(stream);
+    compute_factorize(cublasH, dim, rank, A[l].A[0], A[l].R[0], A[l].Q[0], ldim, lrank, l == levels ? nullptr : A[l + 1].A[0], comm[l], nccl_comms);
+    ldim = dim;
+    lrank = rank;
   }
+
+  cudaStreamSynchronize(stream);
 }
 
 void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
@@ -223,6 +212,10 @@ void H2MatrixSolver::free_all_comms() {
   for (MPI_Comm& c : allocedComm)
     MPI_Comm_free(&c);
   allocedComm.clear();
+}
+
+void H2MatrixSolver::free_gpu_handles() {
+  finalize_gpu_envs(stream, cublasH, nccl_comms);
 }
 
 double H2MatrixSolver::solveRelErr(long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world) {

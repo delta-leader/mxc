@@ -101,6 +101,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
+  matM.init_gpu_handles();
 
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
   matM.matVecMul(&X1[0]);
@@ -110,7 +111,7 @@ int main(int argc, char* argv[]) {
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
   //matM.factorizeM();
-  matM.factorizeDeviceM(mpi_rank % mpi_size);
+  matM.factorizeDeviceM();
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -159,6 +160,7 @@ int main(int argc, char* argv[]) {
 
   matA.free_all_comms();
   matM.free_all_comms();
+  matM.free_gpu_handles();
   MPI_Finalize();
   return 0;
 }

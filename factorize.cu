@@ -19,6 +19,47 @@
 #include <thrust/for_each.h>
 #include <thrust/scan.h>
 
+void init_gpu_envs(cudaStream_t* stream, cublasHandle_t* cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world) {
+  int mpi_rank, num_device;
+  if (cudaGetDeviceCount(&num_device) != cudaSuccess)
+    return;
+
+  MPI_Comm_rank(world, &mpi_rank);
+  cudaSetDevice(mpi_rank % num_device);
+  cudaStreamCreate(stream);
+  cublasCreate(cublasH);
+  cublasSetStream(*cublasH, *stream);
+
+  long long len = comms.size();
+  std::vector<ncclUniqueId> ids(len);
+  std::vector<ncclComm_t> nccl_alloc(len);
+
+  ncclGroupStart();
+  for (long long i = 0; i < len; i++) {
+    int rank, size;
+    MPI_Comm_rank(comms[i], &rank);
+    MPI_Comm_size(comms[i], &size);
+    if (rank == 0)
+      ncclGetUniqueId(&ids[i]);
+    MPI_Bcast(reinterpret_cast<void*>(&ids[i]), sizeof(ncclUniqueId), MPI_BYTE, 0, comms[i]);
+    ncclCommInitRank(&nccl_alloc[i], size, ids[i], rank);
+  }
+  ncclGroupEnd();
+
+  for (long long i = 0; i < len; i++)
+    nccl_comms.insert(std::make_pair(comms[i], nccl_alloc[i]));
+}
+
+void finalize_gpu_envs(cudaStream_t stream, cublasHandle_t cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
+  cudaDeviceSynchronize();
+  cudaStreamDestroy(stream);
+  cublasDestroy(cublasH);
+  for (auto& c : nccl_comms)
+    ncclCommDestroy(c.second);
+  nccl_comms.clear();
+  cudaDeviceReset();
+}
+
 struct keysDLU {
   long long D, M, N;
   keysDLU(long long D, long long M, long long N) : D(D), M(M), N(N) {}
@@ -86,7 +127,7 @@ template<class T> struct copyFunc {
   }
 };
 
-void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, std::complex<double>* A, std::complex<double>* R, const std::complex<double>* Q, long long ldim, long long lrank, const std::complex<double>* L, const ColCommMPI& comm) {
+void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, std::complex<double>* A, std::complex<double>* R, const std::complex<double>* Q, long long ldim, long long lrank, const std::complex<double>* L, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
   long long block = bdim * bdim;
   long long rblock = rank * rank;
   long long D = comm.oLocal();
@@ -192,20 +233,24 @@ void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, s
   auto mapV = thrust::make_transform_iterator(thrust::make_counting_iterator(0ll), swapXY(bdim, block));
   auto mapD = thrust::make_transform_iterator(thrust::make_counting_iterator(0ll), StridedBlock(rank, rank, bdim, reinterpret_cast<thrust::complex<double>**>(A_SS)));
 
+  cudaMemcpyAsync(Adata, A, block * lenA * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(Udata, Q, block * N * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
+  thrust::gather(thrust::cuda::par.on(stream), mapV, mapV + block * M, thrust::make_transform_iterator(Uvec.begin() + (D * block), conjugateDouble()), Vvec.begin());
+
   if (0 < lenL) {
-    cudaMemcpyAsync(Adata, A, block * lenA * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
     cudaMemcpyAsync(Ldata, L, ldim * ldim * lenL * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (lrank * lrank * lenL), copyFunc(lrank, lrank, const_cast<const cuDoubleComplex**>(L_SS), ldim, L_DST, bdim));
-    cudaMemcpy(A, Adata, block * lenA * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost);
   }
 
-  if (M == 1)
-    comm.level_merge(A, block * lenA);
+  auto dup = nccl_comms.find(comm.DupComm);
+  if (M == 1) {
+    auto merge = nccl_comms.find(comm.MergeComm);
+    if (comm.MergeComm != MPI_COMM_NULL)
+      ncclAllReduce((const void*)Adata, Adata, block * lenA * 2, ncclDouble, ncclSum, (*merge).second, stream);
+    if (comm.DupComm != MPI_COMM_NULL)
+      ncclBroadcast((const void*)Adata, Adata, block * lenA * 2, ncclDouble, 0, (*dup).second, stream);
+  }
 
-  cudaMemcpyAsync(Udata, Q, block * N * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
-  cudaMemcpyAsync(Adata, A, block * lenA * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
-
-  thrust::gather(thrust::cuda::par.on(stream), mapV, mapV + block * M, thrust::make_transform_iterator(Uvec.begin() + (D * block), conjugateDouble()), Vvec.begin());
   cublasZgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, U, bdim, A_SS, bdim, &zero, B, bdim, M);
   cublasZgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, U, bdim, B, bdim, &zero, A_SS, bdim, M);
 
@@ -224,11 +269,18 @@ void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, s
 
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const cuDoubleComplex**>(A_RS), bdim, &B[D], bdim));
     cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, rdim, bdim, &one, V_R, bdim, U_R, bdim, &zero, B_I_Cols, bdim, M);
-    cudaMemcpyAsync(&R[D * block], &Bdata[D * block], M * block * sizeof(cuDoubleComplex), cudaMemcpyDeviceToHost, stream);
-    cudaStreamSynchronize(stream);
 
-    comm.neighbor_bcast(R, Bsizes.data());
-    cudaMemcpyAsync(Bdata, R, N * block * sizeof(cuDoubleComplex), cudaMemcpyHostToDevice, stream);
+    ncclGroupStart();
+    for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
+      long long start = 0 < p ? Bsizes[p - 1] : 0;
+      long long len = Bsizes[p] - start;
+      auto neighbor = nccl_comms.find(comm.NeighborComm[p].second);
+      ncclBroadcast((const void*)&Bdata[start], &Bdata[start], len * 2, ncclDouble, comm.NeighborComm[p].first, (*neighbor).second, stream);
+    }
+    ncclGroupEnd();
+
+    if (comm.DupComm != MPI_COMM_NULL)
+      ncclBroadcast((const void*)Bdata, Bdata, block * N * 2, ncclDouble, 0, (*dup).second, stream);
 
     if (M < lenA)
       cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &A_SR[M], bdim, &B_Cols[M], bdim, &one, &A_SS[M], bdim, lenA - M);
