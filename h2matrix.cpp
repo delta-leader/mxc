@@ -50,47 +50,6 @@ const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].data() : nullptr;
 }
 
-template <class T>
-void MatrixDataContainer<T>::alloc(long long len, const long long* dims) {
-  offsets.resize(len + 1);
-  std::inclusive_scan(dims, &dims[len], offsets.begin() + 1);
-  offsets[0] = 0;
-  long long data_len = offsets.back();
-
-  if (0 < data_len) {
-    data = (T*)std::realloc(data, offsets.back() * sizeof(T));
-    std::fill(data, data + offsets.back(), static_cast<T>(0));
-  }
-  else {
-    if (data)
-      std::free(data);
-    data = nullptr;
-  }
-}
-
-template <class T>
-T* MatrixDataContainer<T>::operator[](long long index) {
-  return data + offsets[index];
-}
-
-template <class T>
-const T* MatrixDataContainer<T>::operator[](long long index) const {
-  return data + offsets[index];
-}
-
-template <class T>
-long long MatrixDataContainer<T>::size() const {
-  return offsets.back();
-}
-
-template <class T>
-void MatrixDataContainer<T>::reset() {
-  std::fill(data, data + offsets.back(), static_cast<T>(0));
-}
-
-template class MatrixDataContainer<double>;
-template class MatrixDataContainer<std::complex<double>>;
-
 template<class T>
 inline void vector_gather(const long long* map_begin, const long long* map_end, const T* input_first, T* result) {
   std::transform(map_begin, map_end, result, [&](long long i) { return input_first[i]; });
@@ -557,9 +516,9 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
         long long Nr = N - Ns;
 
         if (0 < Nr) {
-          Vector_t xj(Y[j], N);
+          Vector_t yj(Y[j], N);
           Matrix_t Aij(A[ij], M, N);
-          x.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+          x.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * yj.bottomRows(Nr);
         }
       }
 
@@ -571,9 +530,9 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
         long long Nr = N - Ns;
 
         if (0 < Nr) {
-          Vector_t xj(Y[j], N);
+          Vector_t yj(Y[j], N);
           Matrix_t Aij(A[ij], M, N);
-          x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * xj.bottomRows(Nr);
+          x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * yj.bottomRows(Nr);
         }
       }
     }
@@ -588,7 +547,7 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
   
-  comm.neighbor_bcast(X[0], NbXoffsets.data());
+  comm.neighbor_bcast(Y[0], NbXoffsets.data());
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
@@ -597,7 +556,7 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
 
     Vector_t x(X[i + ibegin], M);
     Vector_t y(Y[i + ibegin], M);
-    y = x;
+    x = y;
 
     if (0 < Mr) {
       for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
@@ -607,9 +566,9 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
         long long Nr = N - Ns;
         
         if (0 < Nr) {
-          Vector_t xj(X[j], N);
+          Vector_t yj(Y[j], N);
           Matrix_t Aij(A[ij], M, N);
-          y.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * xj.bottomRows(Nr);
+          x.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * yj.bottomRows(Nr);
         }
       }
 
@@ -619,9 +578,9 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
         long long Ns = DimsLr[j];
 
         if (0 < Ns) {
-          Vector_t xj(X[j], N);
+          Vector_t yj(Y[j], N);
           Matrix_t Aij(A[ij], M, N);
-          y.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * xj.topRows(Ns);
+          x.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * yj.topRows(Ns);
         }
       }
     }
@@ -633,7 +592,7 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
       Vector_t x(X[i + ibegin], M);
       Vector_t y(Y[i + ibegin], M);
       Matrix_t q(Q[i + ibegin], M, M);
-      x.noalias() = q.conjugate() * y;
+      y.noalias() = q.conjugate() * x;
     }
   }
 }

@@ -34,7 +34,7 @@ template<class T> struct setDevicePtr {
   }
 };
 
-void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, long long lower_rank, const ColCommMPI& comm) {
+void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long rank, long long lower_rank, const ColCommMPI& comm) {
   desc->bdim = bdim;
   desc->rank = rank;
   long long lenA = comm.ARowOffsets.back();
@@ -89,6 +89,9 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   cudaMalloc(reinterpret_cast<void**>(&desc->Vdata), M * block * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Bdata), N * block * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->ACdata), desc->reducLen * M * rblock* sizeof(CUDA_CTYPE));
+
+  cudaMalloc(reinterpret_cast<void**>(&desc->Xdata), N * sizeof(CUDA_CTYPE));
+  cudaMalloc(reinterpret_cast<void**>(&desc->Ydata), N * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Ipiv), M * bdim * sizeof(int));
   cudaMalloc(reinterpret_cast<void**>(&desc->Info), M * sizeof(int));
 
@@ -114,7 +117,7 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   thrust::transform(LInd.begin(), LInd.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->L_dst), setDevicePtr(desc->Adata, block, bdim * lower_rank, lower_rank));
 }
 
-void destroyMatrixDesc(deviceMatrixDesc_t desc) {
+void destroyMatrixDesc(devicePreconditioner_t desc) {
   cudaFree(desc.A_ss);
   cudaFree(desc.A_sr);
   cudaFree(desc.A_rs);
@@ -142,13 +145,23 @@ void destroyMatrixDesc(deviceMatrixDesc_t desc) {
   cudaFree(desc.Info);
 }
 
-void copyDataInMatrixDesc(deviceMatrixDesc_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream) {
+void createHostMatrix(hostMatrix_t* h, long long bdim, long long lenA) {
+  long long block = bdim * bdim * sizeof(CUDA_CTYPE);
+  h->lenA = lenA;
+  cudaMallocHost(reinterpret_cast<void**>(&h->Adata), h->lenA * block);
+}
+
+void destroyHostMatrix(hostMatrix_t h) {
+  cudaFreeHost(h.Adata);
+}
+
+void copyDataInMatrixDesc(devicePreconditioner_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream) {
   long long block = desc.bdim * desc.bdim * sizeof(CUDA_CTYPE);
   cudaMemcpyAsync(desc.Adata, A, block * lenA, cudaMemcpyHostToDevice, stream);
   cudaMemcpyAsync(desc.Udata, U, block * lenU, cudaMemcpyHostToDevice, stream);
 }
 
-void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream) {
+void copyDataOutMatrixDesc(devicePreconditioner_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream) {
   long long block = desc.bdim * desc.bdim * sizeof(CUDA_CTYPE);
   cudaMemcpyAsync(A, desc.Adata, block * lenA, cudaMemcpyDeviceToHost, stream);
   cudaMemcpyAsync(V, desc.Vdata, block * lenV, cudaMemcpyDeviceToHost, stream);

@@ -122,6 +122,7 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   
   Vector_t X_in(X, lenX);
   Vector_t X_leaf(A[levels].X[lbegin], lenX);
+  Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
 
   for (long long l = levels; l >= 0; l--)
   { A[l].X.reset(); A[l].Y.reset(); }
@@ -134,10 +135,10 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   }
   for (long long l = 0; l <= levels; l++) {
     if (0 < l)
-      A[l].downwardCopyNext('X', 'X', A[l - 1], comm[l - 1]);
+      A[l].downwardCopyNext('Y', 'Y', A[l - 1], comm[l - 1]);
     A[l].backwardSubstitute(comm[l]);
   }
-  X_in = X_leaf;
+  X_in = Y_leaf;
 }
 
 void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
@@ -222,8 +223,9 @@ void H2MatrixSolver::free_all_comms() {
 
 void H2MatrixSolver::free_gpu_handles() {
   finalizeGpuEnvs(memory_stream, compute_stream, cublasH, nccl_comms);
-  for (long long l = levels; l >= 0; l--)
+  for (long long l = levels; l >= 0; l--) {
     destroyMatrixDesc(desc[l]);
+  }
   desc.clear();
 }
 

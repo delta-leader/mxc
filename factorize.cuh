@@ -14,7 +14,7 @@
 #define CUDA_CTYPE cuDoubleComplex
 
 class ColCommMPI;
-class deviceMatrixDesc_t {
+class devicePreconditioner_t {
 public:
   long long bdim;
   long long rank;
@@ -43,18 +43,31 @@ public:
   CUDA_CTYPE* Vdata;
   CUDA_CTYPE* Bdata;
   CUDA_CTYPE* ACdata;
+
+  CUDA_CTYPE* Xdata;
+  CUDA_CTYPE* Ydata;
   
   int* Ipiv;
   int* Info;
 };
 
+class hostMatrix_t {
+public:
+  long long lenA;
+  CUDA_CTYPE* Adata;
+};
+
 void initGpuEnvs(cudaStream_t* memory_stream, cudaStream_t* compute_stream, cublasHandle_t* cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world = MPI_COMM_WORLD);
 void finalizeGpuEnvs(cudaStream_t memory_stream, cudaStream_t compute_stream, cublasHandle_t cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
 
-void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, long long lower_rank, const ColCommMPI& comm);
-void destroyMatrixDesc(deviceMatrixDesc_t desc);
+void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long rank, long long lower_rank, const ColCommMPI& comm);
+void destroyMatrixDesc(devicePreconditioner_t desc);
 
-void copyDataInMatrixDesc(deviceMatrixDesc_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream);
-void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream);
+void createHostMatrix(hostMatrix_t* h, long long bdim, long long lenA);
+void destroyHostMatrix(hostMatrix_t h);
 
-void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void copyDataInMatrixDesc(devicePreconditioner_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream);
+void copyDataOutMatrixDesc(devicePreconditioner_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream);
+
+void compute_factorize(devicePreconditioner_t A, devicePreconditioner_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void compute_forward_substitution(devicePreconditioner_t A, devicePreconditioner_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);

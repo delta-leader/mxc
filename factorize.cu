@@ -54,7 +54,7 @@ template<class T> struct copyFunc {
   }
 };
 
-void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
+void compute_factorize(devicePreconditioner_t A, devicePreconditioner_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
   long long bdim = A.bdim;
   long long rank = A.rank;
   long long block = bdim * bdim;
@@ -67,6 +67,7 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
   long long lenL = comm.LowerIndA.size();
 
   long long rdim = bdim - rank;
+  long long reduc_len = A.reducLen;
   int info_host = 0;
   STD_CTYPE constants[3] = { 1., 0., -1. };
   CUDA_CTYPE& one = reinterpret_cast<CUDA_CTYPE&>(constants[0]);
@@ -101,6 +102,7 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
 
   if (0 < rank) {
     cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, bdim, &one, A.V_R, bdim, A.B_ind, bdim, &zero, A.A_rs, bdim, M);
+    cudaMemsetAsync(A.ACdata, 0, reduc_len * M * rblock * sizeof(CUDA_CTYPE), stream);
 
     for (long long i = M; i < lenA; i += N) {
       long long len = std::min(lenA - i, N);
@@ -133,7 +135,6 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
       cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &(A.A_sr)[i], bdim, A.B_ind, bdim, &zero, &A.AC_ind[i], rank, len);
     }
 
-    long long reduc_len = A.reducLen;
     while (1 < reduc_len) {
       long long len = reduc_len * rblock * M;
       reduc_len = (reduc_len + 1) / 2;

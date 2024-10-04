@@ -17,7 +17,7 @@ private:
   cudaStream_t memory_stream;
   cublasHandle_t cublasH;
   std::map<const MPI_Comm, ncclComm_t> nccl_comms;
-  std::vector<deviceMatrixDesc_t> desc;
+  std::vector<devicePreconditioner_t> desc;
 
 public:
   std::pair<long long, long long> local_bodies;
