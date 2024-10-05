@@ -1008,6 +1008,165 @@ void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, l
   cudaMemcpy(A, Adata, block * lenA * sizeof(float), cudaMemcpyDeviceToHost);
   cudaMemcpy(&R[block * D], Vdata, block * M * sizeof(float), cudaMemcpyDeviceToHost);
 }
+
+void compute_factorize(const cublasComputeType_t COMP, cublasHandle_t cublasH, long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], float* A, float* R, const float* Q, const ColCommMPI& comm) {
+  std::cout<<"COMP"<<std::endl;
+  long long block = bdim * bdim;
+  long long lenA = ARows[M];
+  
+  cudaStream_t stream;
+  cublasGetStream(cublasH, &stream);
+
+  thrust::device_vector<long long> row_offsets(ARows, ARows + M);
+  thrust::device_vector<long long> rows(lenA, 0ll);
+  thrust::device_vector<long long> cols(ACols, ACols + lenA);
+  thrust::device_vector<long long> dist_cols(lenA);
+  thrust::device_vector<long long> keys(lenA);
+  thrust::device_vector<long long> indices(lenA);
+  thrust::device_vector<float*> a_ss(lenA), a_sr(lenA), a_rs(lenA), a_rr(lenA);
+  thrust::device_vector<float*> u(lenA), v(lenA), u_r(M), v_r(M), b(N), b_cols(lenA), b_i_cols(lenA);
+  thrust::device_vector<float*> a_sr_rows(lenA), acc(lenA), acc_final(M);
+
+  thrust::device_vector<float> Avec(lenA * block);
+  thrust::device_vector<float> Bvec(N * block);
+  thrust::device_vector<float> Uvec(N * block);
+  thrust::device_vector<float> Vvec(M * block);
+  
+  thrust::device_vector<int> Ipiv(M * bdim);
+  thrust::device_vector<int> Info(M);
+  std::vector<long long> Bsizes(N, block);
+  comm.dataSizesToNeighborOffsets(Bsizes.data());
+
+  auto inc_iter = thrust::make_counting_iterator(0ll);
+  auto one_iter = thrust::make_constant_iterator(1ll);
+  auto rwise_diag_iter = thrust::make_permutation_iterator(indices.begin(), rows.begin());
+
+  float* Adata = thrust::raw_pointer_cast(Avec.data());
+  float* Udata = thrust::raw_pointer_cast(Uvec.data());
+  float* Vdata = thrust::raw_pointer_cast(Vvec.data());
+  float* Bdata = thrust::raw_pointer_cast(Bvec.data());
+
+  cudaMemcpyAsync(Udata, Q, block * N * sizeof(float), cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(Adata, A, block * lenA * sizeof(float), cudaMemcpyHostToDevice, stream);
+
+  thrust::scatter(one_iter, one_iter + (M - 1), row_offsets.begin() + 1, rows.begin()); 
+  thrust::inclusive_scan(rows.begin(), rows.end(), rows.begin());
+  thrust::exclusive_scan_by_key(rows.begin(), rows.end(), one_iter, dist_cols.begin(), 0ll);
+
+  thrust::transform(rows.begin(), rows.end(), cols.begin(), keys.begin(), keysDLU(D, M, N));
+  thrust::sequence(indices.begin(), indices.end(), 0);
+  thrust::sort_by_key(keys.begin(), keys.end(), thrust::make_zip_iterator(rows.begin(), cols.begin(), dist_cols.begin(), indices.begin()));
+
+  long long reduc_len = 1ll + thrust::reduce(dist_cols.begin(), dist_cols.end(), 0ll, thrust::maximum<long long>());
+  thrust::device_vector<float> ACvec(reduc_len * M * rank * rank, 0.);
+  float* ACdata = thrust::raw_pointer_cast(ACvec.data());
+
+  long long offset_SR = rank * bdim, offset_RS = rank, offset_RR = rank * (bdim + 1);
+  thrust::transform(indices.begin(), indices.end(), a_ss.begin(), setDevicePtr(Adata, block));
+  thrust::transform(indices.begin(), indices.end(), a_sr.begin(), setDevicePtr(Adata + offset_SR, block));
+  thrust::transform(indices.begin(), indices.end(), a_rs.begin(), setDevicePtr(Adata + offset_RS, block));
+  thrust::transform(indices.begin(), indices.end(), a_rr.begin(), setDevicePtr(Adata + offset_RR, block));
+  thrust::transform(cols.begin(), cols.end(), u.begin(), setDevicePtr(Udata, block));
+  thrust::transform(cols.begin(), cols.begin() + M, u_r.begin(), setDevicePtr(Udata + offset_SR, block));
+  thrust::transform(rows.begin(), rows.end(), v.begin(), setDevicePtr(Vdata, block));
+  thrust::transform(inc_iter, inc_iter + M, v_r.begin(), setDevicePtr(Vdata + offset_RS, block));
+
+  thrust::transform(inc_iter, inc_iter + N, b.begin(), setDevicePtr(Bdata, block));
+  thrust::transform(cols.begin(), cols.end(), b_cols.begin(), setDevicePtr(Bdata, block));
+  thrust::transform(cols.begin(), cols.end(), b_i_cols.begin(), setDevicePtr(Bdata + offset_SR, block));
+  thrust::transform(rwise_diag_iter, rwise_diag_iter + lenA, a_sr_rows.begin(), setDevicePtr(Adata + offset_SR, block));
+  thrust::transform(rows.begin(), rows.end(), dist_cols.begin(), acc.begin(), setDevicePtr(ACdata, rank * rank, M));
+  thrust::transform(inc_iter, inc_iter + M, acc_final.begin(), setDevicePtr(ACdata, rank * rank));
+
+  float** A_SS = thrust::raw_pointer_cast(a_ss.data());
+  float** A_SR = thrust::raw_pointer_cast(a_sr.data());
+  float** A_RS = thrust::raw_pointer_cast(a_rs.data());
+  float** A_RR = thrust::raw_pointer_cast(a_rr.data());
+  float** U = thrust::raw_pointer_cast(u.data());
+  float** U_R = thrust::raw_pointer_cast(u_r.data());
+  float** V = thrust::raw_pointer_cast(v.data());
+  float** V_R = thrust::raw_pointer_cast(v_r.data());
+  float** B = thrust::raw_pointer_cast(b.data());
+  float** B_Cols = thrust::raw_pointer_cast(b_cols.data());
+  float** B_I_Cols = thrust::raw_pointer_cast(b_i_cols.data());
+  float** A_SR_Rows = thrust::raw_pointer_cast(a_sr_rows.data());
+  float** ACC = thrust::raw_pointer_cast(acc.data());
+  float** ACC_Final = thrust::raw_pointer_cast(acc_final.data());
+
+  int* ipiv = thrust::raw_pointer_cast(Ipiv.data());
+  int* info = thrust::raw_pointer_cast(Info.data());
+
+  long long rdim = bdim - rank;
+  int info_host = 0;
+  float one = 1, zero = 0, minus_one = -1;
+
+  thrust::device_ptr<const float> u_ptr = thrust::device_ptr<const float>(reinterpret_cast<const float*>(&Udata[D * block]));
+  thrust::device_ptr<float> v_ptr = thrust::device_ptr<float>(reinterpret_cast<float*>(Vdata));
+
+  auto mapV = thrust::make_transform_iterator(thrust::make_counting_iterator(0ll), swapXY(bdim, block));
+  auto mapD = thrust::make_transform_iterator(thrust::make_counting_iterator(0ll), StridedBlock(rank, rank, bdim, reinterpret_cast<float**>(A_SS)));
+  thrust::gather(thrust::cuda::par.on(stream), mapV, mapV + block * M, u_ptr, v_ptr);
+
+  const auto ALGO = CUBLAS_GEMM_DEFAULT;
+  std::cout<<"GemmBatcvhedEs"<<std::endl;
+  //cublasSgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, U, bdim, A_SS, bdim, &zero, B, bdim, M);
+  cublasGemmBatchedEx(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(U), CUDA_R_32F, bdim, reinterpret_cast<void**>(A_SS), CUDA_R_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(B), CUDA_R_32F, bdim, M, COMP, ALGO);
+  //cublasSgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, U, bdim, B, bdim, &zero, A_SS, bdim, M);
+  cublasGemmBatchedEx(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(U), CUDA_R_32F, bdim, reinterpret_cast<void**>(B), CUDA_R_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(A_SS), CUDA_R_32F, bdim, M, COMP, ALGO);
+
+  cublasSgetrfBatched(cublasH, rdim, A_RR, bdim, ipiv, info, M);
+  cublasSgetrsBatched(cublasH, CUBLAS_OP_N, rdim, bdim, A_RR, bdim, ipiv, V_R, bdim, &info_host, M);
+
+  if (0 < rank) {
+    //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, bdim, &one, V_R, bdim, B, bdim, &zero, A_RS, bdim, M);
+    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(V_R), CUDA_R_32F, bdim, reinterpret_cast<void**>(B), CUDA_R_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(A_RS), CUDA_R_32F, bdim, M, COMP, ALGO);
+
+    for (long long i = M; i < lenA; i += N) {
+      long long len = std::min(lenA - i, N);
+      //cublasSgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, &U[i], bdim, &A_SS[i], bdim, &zero, B, bdim, len);
+      cublasGemmBatchedEx(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(&U[i]), CUDA_R_32F, bdim, reinterpret_cast<void**>(&A_SS[i]), CUDA_R_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(B), CUDA_R_32F, bdim, len, COMP, ALGO);
+      //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, &V[i], bdim, B, bdim, &zero, &A_SS[i], bdim, len);
+      cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(&V[i]), CUDA_R_32F, bdim, reinterpret_cast<void**>(B), CUDA_R_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(&A_SS[i]), CUDA_R_32F, bdim, len, COMP, ALGO);
+    }
+    //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, A_SR_Rows, bdim, A_RS, bdim, &one, A_SS, bdim, lenA);
+    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, bdim, reinterpret_cast<void*>(&minus_one), reinterpret_cast<void**>(A_SR_Rows), CUDA_R_32F, bdim, reinterpret_cast<void**>(A_RS), CUDA_R_32F, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(A_SS), CUDA_R_32F, bdim, lenA, COMP, ALGO);
+
+    thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const float**>(A_RS), bdim, &B[D], bdim));
+    //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, rdim, bdim, &one, V_R, bdim, U_R, bdim, &zero, B_I_Cols, bdim, M);
+    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, rdim, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(V_R), CUDA_R_32F, bdim, reinterpret_cast<void**>(U_R), CUDA_R_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(B_I_Cols), CUDA_R_32F, bdim, M, COMP, ALGO);
+    cudaMemcpyAsync(&R[D * block], &Bdata[D * block], M * block * sizeof(float), cudaMemcpyDeviceToHost, stream);
+    cudaStreamSynchronize(stream);
+
+    comm.neighbor_bcast(R, Bsizes.data());
+    cudaMemcpyAsync(Bdata, R, N * block * sizeof(float), cudaMemcpyHostToDevice, stream);
+
+    if (M < lenA) {
+      //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &A_SR[M], bdim, &B_Cols[M], bdim, &one, &A_SS[M], bdim, lenA - M);
+      cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, reinterpret_cast<void*>(&minus_one), reinterpret_cast<void**>(&A_SR[M]), CUDA_R_32F, bdim, reinterpret_cast<void**>(&B_Cols[M]), CUDA_R_32F, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(A_SS[M]), CUDA_R_32F, bdim, lenA-M, COMP, ALGO);
+    }
+
+    for (long long i = M; i < lenA; i += N) {
+      long long len = std::min(lenA - i, N);
+      //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, rdim, &one, &B_I_Cols[i], bdim, &A_SR[i], bdim, &zero, B, bdim, len);
+      cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, rdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(&B_I_Cols[i]), CUDA_R_32F, bdim, reinterpret_cast<void**>(&A_SR[i]), CUDA_R_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(B), CUDA_R_32F, bdim, len, COMP, ALGO);
+      //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &A_SR[i], bdim, B, bdim, &zero, &ACC[i], rank, len);
+      cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, reinterpret_cast<void*>(&minus_one), reinterpret_cast<void**>(&A_SR[i]), CUDA_R_32F, bdim, reinterpret_cast<void**>(B), CUDA_R_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(&ACC[i]), CUDA_R_32F, rank, len, COMP, ALGO);
+    }
+
+    while (1 < reduc_len) {
+      long long len = reduc_len * rank * rank * M;
+      reduc_len = (reduc_len + 1) / 2;
+      long long tail_start = reduc_len * rank * rank * M;
+      long long tail_len = len - tail_start;
+      cublasSaxpy(cublasH, tail_len, &one, &ACdata[tail_start], 1, ACdata, 1);
+    }
+    thrust::transform(thrust::cuda::par.on(stream), mapD, mapD + (rank * rank * M), reinterpret_cast<const float*>(ACdata), mapD, thrust::plus<float>());
+  }
+  cudaStreamSynchronize(stream);
+
+  cudaMemcpy(A, Adata, block * lenA * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(&R[block * D], Vdata, block * M * sizeof(float), cudaMemcpyDeviceToHost);
+}
 /*
 template <>
 void H2Factorize<cuComplex>::compute(const cublasComputeType_t COMP) {
