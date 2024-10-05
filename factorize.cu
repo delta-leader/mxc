@@ -78,7 +78,7 @@ void compute_factorize(devicePreconditioner_t A, devicePreconditioner_t Al, cuda
   auto mapV = thrust::make_transform_iterator(inc_iter, swapXY(bdim, bdim));
   thrust::device_ptr<THRUST_CTYPE> Uptr(reinterpret_cast<THRUST_CTYPE*>(&(A.Udata)[D * block]));
   thrust::device_ptr<THRUST_CTYPE> Vptr(reinterpret_cast<THRUST_CTYPE*>(A.Vdata));
-  thrust::gather(thrust::cuda::par.on(stream), mapV, mapV + block * M, thrust::make_transform_iterator(Uptr, conjugateFunc()), Vptr);
+  thrust::gather(thrust::cuda::par.on(stream), mapV, mapV + (block * M), thrust::make_transform_iterator(Uptr, conjugateFunc()), Vptr);
   
   if (0 < lenL) {
     long long len = Al.rank * Al.rank * lenL;

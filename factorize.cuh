@@ -33,16 +33,15 @@ public:
   CUDA_CTYPE** V_rows = nullptr;
   CUDA_CTYPE** V_R = nullptr;
 
-  CUDA_CTYPE** X_rows = nullptr;
-  CUDA_CTYPE** X_R_rows = nullptr;
-  CUDA_CTYPE** Y_cols = nullptr;
-  CUDA_CTYPE** Y_R_cols = nullptr;
-
   CUDA_CTYPE** B_ind = nullptr;
   CUDA_CTYPE** B_cols = nullptr;
   CUDA_CTYPE** B_R = nullptr;
   CUDA_CTYPE** AC_ind = nullptr;
+
+  CUDA_CTYPE** Y_cols = nullptr;
+  CUDA_CTYPE** Y_R_cols = nullptr;
   CUDA_CTYPE** AC_X = nullptr;
+  CUDA_CTYPE** AC_X_R = nullptr;
   CUDA_CTYPE** L_dst = nullptr;
   long long* Xlocs = nullptr;
 
@@ -79,3 +78,4 @@ void copyDataOutMatrixDesc(devicePreconditioner_t desc, long long lenA, STD_CTYP
 
 void compute_factorize(devicePreconditioner_t A, devicePreconditioner_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
 void compute_forward_substitution(devicePreconditioner_t A, const CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void compute_backward_substitution(devicePreconditioner_t A, CUDA_CTYPE* Y, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);

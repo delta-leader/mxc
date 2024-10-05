@@ -145,46 +145,21 @@ void H2MatrixSolver::solvePreconditionDevice(std::complex<double> X[]) {
   if (levels < 0)
     return;
   
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   long long lbegin = comm[levels].oLocal();
   long long llen = comm[levels].lenLocal();
   long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
   
-  Vector_t X_in(X, lenX);
-  Vector_t X_leaf(A[levels].X[lbegin], lenX);
-  Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
   cudaMemcpy(X_dev, X, lenX * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
-  //X_leaf = X_in;
 
   compute_forward_substitution(desc[levels], X_dev, compute_stream, cublasH, comm[levels], nccl_comms);
   for (long long l = levels - 1; l >= 0; l--)
     compute_forward_substitution(desc[l], desc[l + 1].Xdata, compute_stream, cublasH, comm[l], nccl_comms);
 
-  for (long long l = 0; l <= levels; l++) {
-    long long len = desc[l].bdim * comm[l].lenNeighbors() * sizeof(std::complex<double>);
-    cudaMemcpy(A[l].X[0], desc[l].Xdata, len, cudaMemcpyDeviceToHost);
-    cudaMemcpy(A[l].Y[0], desc[l].Ydata, len, cudaMemcpyDeviceToHost);
-  }
-
-  /*Eigen::VectorXcd test(desc[levels].bdim * comm[levels].lenNeighbors());
-  Vector_t ref(A[levels].X[0], desc[levels].bdim * comm[levels].lenNeighbors());*/
-
-
-  //cudaMemcpy(test.data(), desc[levels].Xdata, len, cudaMemcpyDeviceToHost);
-
-  //A[levels].forwardSubstitute(comm[levels]);
-  //std::cout << (test - ref).norm() << std::endl;
-  /*for (long long l = levels - 1; l >= 0; l--) {
-    A[l].upwardCopyNext('X', 'X', comm[l], A[l + 1]);
-    A[l].forwardSubstitute(comm[l]);
-  }*/
-
-  for (long long l = 0; l < levels; l++) {
-    A[l].backwardSubstitute(comm[l]);
-    A[l + 1].downwardCopyNext('Y', 'Y', A[l], comm[l]);
-  }
-  A[levels].backwardSubstitute(comm[levels]);
-  X_in = Y_leaf;
+  for (long long l = 0; l < levels; l++)
+    compute_backward_substitution(desc[l], desc[l + 1].Ydata, compute_stream, cublasH, comm[l], nccl_comms);
+  compute_backward_substitution(desc[levels], X_dev, compute_stream, cublasH, comm[levels], nccl_comms);
+  
+  cudaMemcpy(X, X_dev, lenX * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
 }
 
 void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
