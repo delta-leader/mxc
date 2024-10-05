@@ -1129,7 +1129,7 @@ void compute_factorize(const cublasComputeType_t COMP, cublasHandle_t cublasH, l
     }
 
     //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, A_SR_Rows, bdim, A_RS, bdim, &one, A_SS, bdim, lenA);
-    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, bdim, reinterpret_cast<void*>(&minus_one), reinterpret_cast<void**>(A_SR_Rows), CUDA_R_32F, bdim, reinterpret_cast<void**>(A_RS), CUDA_R_32F, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(A_SS), CUDA_R_32F, bdim, lenA, COMP, ALGO);
+    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, reinterpret_cast<void*>(&minus_one), reinterpret_cast<void**>(A_SR_Rows), CUDA_R_32F, bdim, reinterpret_cast<void**>(A_RS), CUDA_R_32F, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(A_SS), CUDA_R_32F, bdim, lenA, COMP, ALGO);
 
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const float**>(A_RS), bdim, &B[D], bdim));
     //cublasSgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, rdim, bdim, &one, V_R, bdim, U_R, bdim, &zero, B_I_Cols, bdim, M);
@@ -1287,7 +1287,7 @@ void compute_factorize(const cublasComputeType_t COMP, cublasHandle_t cublasH, l
       cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(&V[i]), CUDA_C_32F, bdim, reinterpret_cast<void**>(B), CUDA_C_32F, bdim, reinterpret_cast<void*>(&zero), reinterpret_cast<void**>(&A_SS[i]), CUDA_C_32F, bdim, len, COMP, ALGO);     
     }
     //cublasCgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, A_SR_Rows, bdim, A_RS, bdim, &one, A_SS, bdim, lenA);
-    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, bdim, reinterpret_cast<void*>(&minus_one), reinterpret_cast<void**>(A_SR_Rows), CUDA_C_32F, bdim, reinterpret_cast<void**>(A_RS), CUDA_C_32F, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(A_SS), CUDA_C_32F, bdim, lenA, COMP, ALGO);
+    cublasGemmBatchedEx(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, reinterpret_cast<void*>(&minus_one), reinterpret_cast<void**>(A_SR_Rows), CUDA_C_32F, bdim, reinterpret_cast<void**>(A_RS), CUDA_C_32F, bdim, reinterpret_cast<void*>(&one), reinterpret_cast<void**>(A_SS), CUDA_C_32F, bdim, lenA, COMP, ALGO);
 
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const cuComplex**>(A_RS), bdim, &B[D], bdim));
     //cublasCgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, rdim, bdim, &one, V_R, bdim, U_R, bdim, &zero, B_I_Cols, bdim, M);
