@@ -116,6 +116,7 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
 
   long long lbegin = Mapping[p_next].first;
   long long lend = Mapping[p_next].second;
+  LowerX = 0;
   if (0 <= lbegin && lbegin <= lend) {
     long long lenAl = ARows[lend] - ARows[lbegin];
     long long lenCl = CRows[lend] - CRows[lbegin];

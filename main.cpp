@@ -121,7 +121,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  matM.solvePrecondition(&X1[0]);
+  //matM.solvePrecondition(&X1[0]);
+  matM.solvePreconditionDevice(&X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;

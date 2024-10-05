@@ -52,6 +52,9 @@ void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
     long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
     createMatrixDesc(&desc[l], bdim, rank, desc[l + 1], comm[l]);
   }
+
+  long long lenX = bdim * comm[levels].lenLocal();
+  cudaMalloc(reinterpret_cast<void**>(&X_dev), lenX * sizeof(CUDA_CTYPE));
 }
 
 void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
@@ -124,17 +127,63 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
 
   X_leaf = X_in;
-
-  for (long long l = levels; l >= 0; l--) {
+  A[levels].forwardSubstitute(comm[levels]);
+  for (long long l = levels - 1; l >= 0; l--) {
+    A[l].upwardCopyNext('X', 'X', comm[l], A[l + 1]);
     A[l].forwardSubstitute(comm[l]);
-    if (0 < l)
-      A[l - 1].upwardCopyNext('X', 'X', comm[l - 1], A[l]);
   }
-  for (long long l = 0; l <= levels; l++) {
-    if (0 < l)
-      A[l].downwardCopyNext('Y', 'Y', A[l - 1], comm[l - 1]);
+
+  for (long long l = 0; l < levels; l++) {
     A[l].backwardSubstitute(comm[l]);
+    A[l + 1].downwardCopyNext('Y', 'Y', A[l], comm[l]);
   }
+  A[levels].backwardSubstitute(comm[levels]);
+  X_in = Y_leaf;
+}
+
+void H2MatrixSolver::solvePreconditionDevice(std::complex<double> X[]) {
+  if (levels < 0)
+    return;
+  
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  long long lbegin = comm[levels].oLocal();
+  long long llen = comm[levels].lenLocal();
+  long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
+  
+  Vector_t X_in(X, lenX);
+  Vector_t X_leaf(A[levels].X[lbegin], lenX);
+  Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
+  cudaMemcpy(X_dev, X, lenX * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
+  //X_leaf = X_in;
+
+  compute_forward_substitution(desc[levels], X_dev, compute_stream, cublasH, comm[levels], nccl_comms);
+  for (long long l = levels - 1; l >= 0; l--)
+    compute_forward_substitution(desc[l], desc[l + 1].Xdata, compute_stream, cublasH, comm[l], nccl_comms);
+
+  for (long long l = 0; l <= levels; l++) {
+    long long len = desc[l].bdim * comm[l].lenNeighbors() * sizeof(std::complex<double>);
+    cudaMemcpy(A[l].X[0], desc[l].Xdata, len, cudaMemcpyDeviceToHost);
+    cudaMemcpy(A[l].Y[0], desc[l].Ydata, len, cudaMemcpyDeviceToHost);
+  }
+
+  /*Eigen::VectorXcd test(desc[levels].bdim * comm[levels].lenNeighbors());
+  Vector_t ref(A[levels].X[0], desc[levels].bdim * comm[levels].lenNeighbors());*/
+
+
+  //cudaMemcpy(test.data(), desc[levels].Xdata, len, cudaMemcpyDeviceToHost);
+
+  //A[levels].forwardSubstitute(comm[levels]);
+  //std::cout << (test - ref).norm() << std::endl;
+  /*for (long long l = levels - 1; l >= 0; l--) {
+    A[l].upwardCopyNext('X', 'X', comm[l], A[l + 1]);
+    A[l].forwardSubstitute(comm[l]);
+  }*/
+
+  for (long long l = 0; l < levels; l++) {
+    A[l].backwardSubstitute(comm[l]);
+    A[l + 1].downwardCopyNext('Y', 'Y', A[l], comm[l]);
+  }
+  A[levels].backwardSubstitute(comm[levels]);
   X_in = Y_leaf;
 }
 
@@ -221,6 +270,7 @@ void H2MatrixSolver::free_gpu_handles() {
     destroyMatrixDesc(desc[l]);
   }
   desc.clear();
+  cudaFree(X_dev);
 }
 
 double H2MatrixSolver::solveRelErr(long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world) {

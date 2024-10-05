@@ -499,30 +499,14 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
 
   comm.neighbor_bcast(Y[0], NbXoffsets.data());
   for (long long i = 0; i < nodes; i++) {
-    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
     long long Ms = DimsLr[i + ibegin];
-    long long Mr = M - Ms;
 
     Vector_t x(X[i + ibegin], M);
     Vector_t y(Y[i + ibegin], M);
     x = y;
 
-    if (0 < Mr)
-      for (long long ij = ARows[i]; ij < diag; ij++) {
-        long long j = ACols[ij];
-        long long N = Dims[j];
-        long long Ns = DimsLr[j];
-        long long Nr = N - Ns;
-
-        if (0 < Nr) {
-          Vector_t yj(Y[j], N);
-          Matrix_t Aij(A[ij], M, N);
-          x.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * yj.bottomRows(Nr);
-        }
-      }
-
-    if (0 < Ms) {
+    if (0 < Ms)
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
         long long N = Dims[j];
@@ -535,7 +519,6 @@ void H2Matrix::forwardSubstitute(const ColCommMPI& comm) {
           x.topRows(Ms).noalias() -= Aij.topRightCorner(Ms, Nr) * yj.bottomRows(Nr);
         }
       }
-    }
   }
   comm.neighbor_bcast(X[0], NbXoffsets.data());
 }
@@ -546,10 +529,10 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
 
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
-  
+
   comm.neighbor_bcast(Y[0], NbXoffsets.data());
+
   for (long long i = 0; i < nodes; i++) {
-    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];
     long long Ms = DimsLr[i + ibegin];
     long long Mr = M - Ms;
@@ -558,20 +541,7 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
     Vector_t y(Y[i + ibegin], M);
     x = y;
 
-    if (0 < Mr) {
-      for (long long ij = diag + 1; ij < ARows[i + 1]; ij++) {
-        long long j = ACols[ij];
-        long long N = Dims[j];
-        long long Ns = DimsLr[j];
-        long long Nr = N - Ns;
-        
-        if (0 < Nr) {
-          Vector_t yj(Y[j], N);
-          Matrix_t Aij(A[ij], M, N);
-          x.bottomRows(Mr).noalias() -= Aij.bottomRightCorner(Mr, Nr) * yj.bottomRows(Nr);
-        }
-      }
-
+    if (0 < Mr)
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
         long long N = Dims[j];
@@ -583,7 +553,6 @@ void H2Matrix::backwardSubstitute(const ColCommMPI& comm) {
           x.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * yj.topRows(Ns);
         }
       }
-    }
   }
 
   for (long long i = 0; i < nodes; i++) {

@@ -20,7 +20,6 @@ public:
   long long rank = 0;
   long long diag_offset = 0;
   long long reducLen = 0;
-  long long lowerTriLen = 0;
 
   CUDA_CTYPE** A_ss = nullptr;
   CUDA_CTYPE** A_sr = nullptr;
@@ -79,4 +78,4 @@ void copyDataInMatrixDesc(devicePreconditioner_t desc, long long lenA, const STD
 void copyDataOutMatrixDesc(devicePreconditioner_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream);
 
 void compute_factorize(devicePreconditioner_t A, devicePreconditioner_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
-void compute_forward_substitution(devicePreconditioner_t A, devicePreconditioner_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void compute_forward_substitution(devicePreconditioner_t A, const CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);

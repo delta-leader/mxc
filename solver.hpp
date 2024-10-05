@@ -18,6 +18,7 @@ private:
   cublasHandle_t cublasH;
   std::map<const MPI_Comm, ncclComm_t> nccl_comms;
   std::vector<devicePreconditioner_t> desc;
+  CUDA_CTYPE* X_dev;
 
 public:
   std::pair<long long, long long> local_bodies;
@@ -33,6 +34,7 @@ public:
   void factorizeM();
   void factorizeDeviceM();
   void solvePrecondition(std::complex<double> X[]);
+  void solvePreconditionDevice(std::complex<double> X[]);
   void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
