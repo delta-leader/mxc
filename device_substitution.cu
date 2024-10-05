@@ -12,6 +12,4 @@ void compute_forward_substitution(devicePreconditioner_t A, devicePreconditioner
   long long M = comm.lenLocal();
   long long N = comm.lenNeighbors();
   long long lenA = comm.ARowOffsets[M];
-  long long lenL = comm.LowerIndA.size();
-  
 }

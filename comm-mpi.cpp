@@ -119,13 +119,10 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
   if (0 <= lbegin && lbegin <= lend) {
     long long lenAl = ARows[lend] - ARows[lbegin];
     long long lenCl = CRows[lend] - CRows[lbegin];
-    long long startXl = Tree[pbegin].first;
-    long long lenXl = Tree[pend - 1].second - startXl;
 
-    LowerX = startXl - pbegin;
+    LowerX = Tree[pbegin].first - lbegin;
     LowerIndA.resize(lenAl);
     LowerIndC.resize(lenCl);
-    LowerIndX.resize(lenXl);
 
     for (long long i = pbegin; i < pend; i++) {
       long long childi = Tree[i].first;
@@ -147,9 +144,6 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
               LowerIndC[C_yx] = std::make_tuple(y - childi, x - childj, ij - ARows[pbegin]);
           }
       }
-
-      for (long long y = childi; y < cendi; y++)
-        LowerIndX[y - startXl] = std::make_pair(y - childi, i - pbegin);
     }
   }
 }

@@ -25,7 +25,6 @@ public:
   long long LowerX;
   std::vector<std::tuple<long long, long long, long long>> LowerIndA;
   std::vector<std::tuple<long long, long long, long long>> LowerIndC;
-  std::vector<std::pair<long long, long long>> LowerIndX;
 
   ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long ARows[], const long long ACols[], const long long CRows[], const long long CCols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world = MPI_COMM_WORLD);
   

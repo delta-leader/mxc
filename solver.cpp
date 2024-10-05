@@ -43,15 +43,15 @@ void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
   initGpuEnvs(&memory_stream, &compute_stream, &cublasH, nccl_comms, allocedComm, world);
   
   desc.resize(levels + 1);
-  long long rank = 0;
-  for (long long l = 0; l < levels; l++) {
-    long long bdim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
-    long long lower_rank = *std::max_element(A[l + 1].DimsLr.begin(), A[l + 1].DimsLr.end());
-    createMatrixDesc(&desc[l], bdim, rank, lower_rank, comm[l]);
-    rank = lower_rank;
-  }
   long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
-  createMatrixDesc(&desc[levels], bdim, rank, 0, comm[levels]);
+  long long rank = *std::max_element(A[levels].DimsLr.begin(), A[levels].DimsLr.end());
+  createMatrixDesc(&desc[levels], bdim, rank, devicePreconditioner_t(), comm[levels]);
+
+  for (long long l = levels - 1; l >= 0; l--) {
+    long long bdim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
+    long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
+    createMatrixDesc(&desc[l], bdim, rank, desc[l + 1], comm[l]);
+  }
 }
 
 void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
@@ -97,13 +97,12 @@ void H2MatrixSolver::factorizeM() {
 
 void H2MatrixSolver::factorizeDeviceM() {
   copyDataInMatrixDesc(desc[levels], comm[levels].ARowOffsets.back(), A[levels].A[0], comm[levels].lenNeighbors(), A[levels].Q[0], compute_stream);
-  compute_factorize(desc[levels], desc[levels], compute_stream, cublasH, comm[levels], nccl_comms);
+  compute_factorize(desc[levels], devicePreconditioner_t(), compute_stream, cublasH, comm[levels], nccl_comms);
 
   for (long long l = levels - 1; l >= 0; l--) {
     copyDataInMatrixDesc(desc[l], comm[l].ARowOffsets.back(), A[l].A[0], comm[l].lenNeighbors(), A[l].Q[0], memory_stream);
     cudaDeviceSynchronize();
-    long long diag_offset = comm[l + 1].oLocal();
-    copyDataOutMatrixDesc(desc[l + 1], comm[l + 1].ARowOffsets.back(), A[l + 1].A[0], comm[l + 1].lenLocal(), A[l + 1].R[diag_offset], memory_stream);
+    copyDataOutMatrixDesc(desc[l + 1], comm[l + 1].ARowOffsets.back(), A[l + 1].A[0], comm[l + 1].lenLocal(), A[l + 1].R[desc[l + 1].diag_offset], memory_stream);
     compute_factorize(desc[l], desc[l + 1], compute_stream, cublasH, comm[l], nccl_comms);
   }
 
@@ -124,8 +123,6 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   Vector_t X_leaf(A[levels].X[lbegin], lenX);
   Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
 
-  for (long long l = levels; l >= 0; l--)
-  { A[l].X.reset(); A[l].Y.reset(); }
   X_leaf = X_in;
 
   for (long long l = levels; l >= 0; l--) {

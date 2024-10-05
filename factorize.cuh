@@ -16,45 +16,48 @@
 class ColCommMPI;
 class devicePreconditioner_t {
 public:
-  long long bdim;
-  long long rank;
-  long long reducLen;
-  long long lowerTriLen;
+  long long bdim = 0;
+  long long rank = 0;
+  long long diag_offset = 0;
+  long long reducLen = 0;
+  long long lowerTriLen = 0;
 
-  CUDA_CTYPE** A_ss;
-  CUDA_CTYPE** A_sr;
-  CUDA_CTYPE** A_rs;
-  CUDA_CTYPE** A_rr;
-  CUDA_CTYPE** A_sr_rows;
-  const CUDA_CTYPE** A_unsort;
+  CUDA_CTYPE** A_ss = nullptr;
+  CUDA_CTYPE** A_sr = nullptr;
+  CUDA_CTYPE** A_rs = nullptr;
+  CUDA_CTYPE** A_rr = nullptr;
+  CUDA_CTYPE** A_sr_rows = nullptr;
+  const CUDA_CTYPE** A_unsort = nullptr;
 
-  CUDA_CTYPE** U_cols;
-  CUDA_CTYPE** U_R;
-  CUDA_CTYPE** V_rows;
-  CUDA_CTYPE** V_R;
+  CUDA_CTYPE** U_cols = nullptr;
+  CUDA_CTYPE** U_R = nullptr;
+  CUDA_CTYPE** V_rows = nullptr;
+  CUDA_CTYPE** V_R = nullptr;
 
-  CUDA_CTYPE** X_rows;
-  CUDA_CTYPE** X_R_rows;
-  CUDA_CTYPE** Y_cols;
-  CUDA_CTYPE** Y_R_cols;
+  CUDA_CTYPE** X_rows = nullptr;
+  CUDA_CTYPE** X_R_rows = nullptr;
+  CUDA_CTYPE** Y_cols = nullptr;
+  CUDA_CTYPE** Y_R_cols = nullptr;
 
-  CUDA_CTYPE** B_ind;
-  CUDA_CTYPE** B_cols;
-  CUDA_CTYPE** B_R;
-  CUDA_CTYPE** AC_ind;
-  CUDA_CTYPE** L_dst;
+  CUDA_CTYPE** B_ind = nullptr;
+  CUDA_CTYPE** B_cols = nullptr;
+  CUDA_CTYPE** B_R = nullptr;
+  CUDA_CTYPE** AC_ind = nullptr;
+  CUDA_CTYPE** AC_X = nullptr;
+  CUDA_CTYPE** L_dst = nullptr;
+  long long* Xlocs = nullptr;
 
-  CUDA_CTYPE* Adata;
-  CUDA_CTYPE* Udata;
-  CUDA_CTYPE* Vdata;
-  CUDA_CTYPE* Bdata;
-  CUDA_CTYPE* ACdata;
+  CUDA_CTYPE* Adata = nullptr;
+  CUDA_CTYPE* Udata = nullptr;
+  CUDA_CTYPE* Vdata = nullptr;
+  CUDA_CTYPE* Bdata = nullptr;
+  CUDA_CTYPE* ACdata = nullptr;
 
-  CUDA_CTYPE* Xdata;
-  CUDA_CTYPE* Ydata;
+  CUDA_CTYPE* Xdata = nullptr;
+  CUDA_CTYPE* Ydata = nullptr;
   
-  int* Ipiv;
-  int* Info;
+  int* Ipiv = nullptr;
+  int* Info = nullptr;
 };
 
 class hostMatrix_t {
@@ -66,7 +69,7 @@ public:
 void initGpuEnvs(cudaStream_t* memory_stream, cudaStream_t* compute_stream, cublasHandle_t* cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world = MPI_COMM_WORLD);
 void finalizeGpuEnvs(cudaStream_t memory_stream, cudaStream_t compute_stream, cublasHandle_t cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
 
-void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long rank, long long lower_rank, const ColCommMPI& comm);
+void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long rank, devicePreconditioner_t lower, const ColCommMPI& comm);
 void destroyMatrixDesc(devicePreconditioner_t desc);
 
 void createHostMatrix(hostMatrix_t* h, long long bdim, long long lenA);
