@@ -301,6 +301,46 @@ void H2MatrixSolver<float>::factorizeDeviceM(int device, const cublasComputeType
   }
 }
 
+template <>
+void H2MatrixSolver<std::complex<float>>::factorizeDeviceM(int device, const cublasComputeType_t COMP) {
+  long long dims_max = 0, lenA = 0, lenQ = 0;
+  for (long long l = levels; l >= 0; l--) {
+    dims_max = std::max(dims_max, *std::max_element(A[l].Dims.begin(), A[l].Dims.end()));
+    lenA = std::max(lenA, (long long)A[l].ACols.size());
+    lenQ = std::max(lenQ, comm[l].lenNeighbors());
+  }
+
+  int num_device;
+  cudaGetDeviceCount(&num_device);
+  if (cudaGetDeviceCount(&num_device) == cudaSuccess) {
+    cudaSetDevice(device % num_device);
+    cudaStream_t stream;
+    cudaStreamCreate(&stream);
+    cublasHandle_t cublasH;
+    cublasCreate(&cublasH);
+    cublasSetStream(cublasH, stream);
+
+    for (long long l = levels; l >= 0; l--) {
+      long long ibegin = comm[l].oLocal();
+      long long nodes = comm[l].lenLocal();
+      long long xlen = comm[l].lenNeighbors();
+      long long dim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
+      long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
+
+      //TODO template
+      compute_factorize(COMP, cublasH, dim, rank, ibegin, nodes, xlen, A[l].ARows.data(), A[l].ACols.data(), A[l].A[0], A[l].R[0], A[l].Q[0], comm[l]);
+      
+      if (0 < l)
+        A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+    }
+
+    cudaStreamSynchronize(stream);
+    cublasDestroy(cublasH);
+    cudaStreamDestroy(stream);
+  }
+}
+
+
 // explicit instantiations to deal with complex values
 /*template <>
 void H2MatrixSolver<std::complex<double>>::factorizeDeviceM(int device) {

@@ -44,3 +44,4 @@ template <typename DT>
 void compute_factorize(cublasHandle_t cublasH, long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], DT* const A, DT* const R, const DT* const Q, const ColCommMPI& comm);
 
 void compute_factorize(const cublasComputeType_t COMP, cublasHandle_t cublasH, long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], float* A, float* R, const float* Q, const ColCommMPI& comm);
+void compute_factorize(const cublasComputeType_t COMP, cublasHandle_t cublasH, long long bdim, long long rank, long long D, long long M, long long N, const long long ARows[], const long long ACols[], std::complex<float>* A, std::complex<float>* R, const std::complex<float>* Q, const ColCommMPI& comm);
