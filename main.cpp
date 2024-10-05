@@ -13,6 +13,8 @@ int main(int argc, char* argv[]) {
   std::vector<std::string> kernel_names = {"Laplace", "Gaussian", "IMQ", "Matern", "Yukawa", "Helmholtz"};
   enum Geometry {SPHERE, BALL};
   std::vector<std::string> geometry_names = {"Sphere", "Ball"};
+  std::vector<cublasComputeType_t> comp = {CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_COMPUTE_32F_FAST_16BF};
+  std::vector<std::string> ctype_names = {"Single", "TF32", "Half", "Bfloat"};
 
   MPI_Init(&argc, &argv);
   //typedef std::complex<double> DT; typedef std::complex<float> DT_low;
@@ -35,6 +37,7 @@ int main(int argc, char* argv[]) {
   Kernel kfunc = argc > 7 ? (Kernel) std::atoi(argv[7]) : LAPLACE;
   Geometry geom = argc > 8 ? (Geometry) std::atoi(argv[8]) : SPHERE;
   double alpha = argc > 9 ? std::atof(argv[9]) : 1;
+  int ctype = argc > 10 ? std::atof(argv[10]) : 0;
   
 
   // if N <= leaf_size, we basically have a dense matrix
@@ -92,7 +95,8 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
   if (mpi_rank == 0) {
     std::cout<<kernel_names[kfunc] << ", " << geometry_names[geom] << ", N = "<< Nbody << ", L = "<< leaf_size << ", Admis = " << theta << ", ";
-    std::cout << "rank = " << rank << ", epsilon = " << epi << ", fact_basis = " << fact_basis << ", alpha = " << alpha <<std::endl;
+    std::cout << "rank = " << rank << ", epsilon = " << epi << ", fact_basis = " << fact_basis << ", alpha = " << alpha << ", ";
+    std::cout << "precision = " << ctype_names[ctype]<<std::endl;
   }
   if (geom == SPHERE)
     //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
@@ -149,13 +153,13 @@ int main(int argc, char* argv[]) {
   Eigen::JacobiSVD<Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> svd(Amap);
   double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
     
-  H2MatrixSolver<DT> h2_rank = H2MatrixSolver(*eval, 1e-12, rank, 0, cell, theta, &body[0], levels, true, fact_basis);
+  H2MatrixSolver<DT_low> h2_rank_low = H2MatrixSolver(*eval, 1e-12, rank, 0, cell, theta, &body[0], levels, true, fact_basis);
   //h2_rank.factorizeM();
-  h2_rank.factorizeDeviceM(mpi_rank % mpi_size);
+  h2_rank_low.factorizeDeviceM(mpi_rank % mpi_size, comp[ctype]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double ir_time = MPI_Wtime(), ir_comm_time;
-  long long iters = h2_epi.solveIR(epi, h2_rank, &x[0], &b[0], 50);
+  long long iters = h2_epi.solveIR(epi, h2_rank_low, &x[0], &b[0], 200);
   MPI_Barrier(MPI_COMM_WORLD);
   ir_time = MPI_Wtime() - ir_time;
   ir_comm_time = ColCommMPI::get_comm_time();
@@ -166,9 +170,10 @@ int main(int argc, char* argv[]) {
   }
   std::cout<<std::endl;
   
+  H2MatrixSolver<DT> h2_rank(h2_rank_low);
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_ir_time = MPI_Wtime(), gmres_ir_comm_time;
-  long long gmres_iters = h2_epi.solveGMRESIR(epi, h2_rank, &x[0], &b[0], 10, 50, 1);
+  long long gmres_iters = h2_epi.solveGMRESIR(epi, h2_rank, &x[0], &b[0], 10, 500, 1);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_ir_time = MPI_Wtime() - gmres_ir_time;
@@ -182,7 +187,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  h2_epi.GMRES_no_restart_direct(epi, h2_rank, &x[0], &b[0], 100);
+  h2_epi.GMRES_no_restart_direct(epi, h2_rank, &x[0], &b[0], 200);
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
   gmres_comm_time = ColCommMPI::get_comm_time();
@@ -196,7 +201,7 @@ int main(int argc, char* argv[]) {
   x.reset();
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime();
-  h2_epi.solveGMRES(epi, h2_rank, &x[0], &b[0], 10, 50);
+  h2_epi.solveGMRES(epi, h2_rank, &x[0], &b[0], 50, 10);
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
   gmres_comm_time = ColCommMPI::get_comm_time();

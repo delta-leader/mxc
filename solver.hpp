@@ -86,6 +86,7 @@ public:
   void factorizeM();
   //void factorizeM(const cublasComputeType_t COMP);
   void factorizeDeviceM(int device);
+  void factorizeDeviceM(int device, const cublasComputeType_t COMP);
   /*
   solve the system LUx = b
   after the matrix has been factorized
@@ -131,10 +132,10 @@ public:
       comm[levels].level_sum(&norm_local, 1);
       norm = std::sqrt(get_real(norm_local));
       resid[iter] = norm / normb;
-      if (iter && resid[iter] > resid[iter-1]) {
+      //if (iter && resid[iter] > resid[iter-1]) {
         //std::cout << "Divergence detected (" << resid[iter-1] << " followed by " << resid[iter] << ")" << std::endl;
-        return iter-1;
-      }
+        //return iter-1;
+      //}
       if (resid[iter]<tol) {
         return iter;
       }
@@ -181,6 +182,10 @@ public:
       comm[levels].level_sum(&norm_local, 1);
       norm = std::sqrt(get_real(norm_local));
       resid[iter] = norm / normb;
+      //if (iter && resid[iter] > resid[iter-1]) {
+        //std::cout << "Divergence detected (" << resid[iter-1] << " followed by " << resid[iter] << ")" << std::endl;
+        //return iter-1;
+      //}
       if (resid[iter]<tol) {
         return iter;
       }
@@ -235,9 +240,9 @@ public:
       std::cout<<"Gmres iterations: "<< gmres_iters<<std::endl;
       x += d;
     }
-    r = x;
+    r = -x;
     matVecMul(r.data());
-    r -= b;
+    r += b;
     norm_local = r.squaredNorm();
     comm[levels].level_sum(&norm_local, 1);
     norm = std::sqrt(get_real(norm_local));
