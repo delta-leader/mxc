@@ -117,35 +117,22 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   long long nodes = comm.lenLocal();
   long long ybegin = comm.oGlobal();
 
-  std::vector<long long> localChildOffsets(nodes + 1);
-  localChildOffsets[0] = lowerComm.iLocal(cells[ybegin].Child[0]);
-  long long localChildIndex = localChildOffsets[0] - cells[ybegin].Child[0];
-  std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
-  Dims.resize(xlen, 0);
+    Dims.resize(xlen, 0);
   DimsLr.resize(xlen, 0);
   UpperStride.resize(nodes, 0);
 
-  ARows.insert(ARows.begin(), Near.RowIndex.begin() + ybegin, Near.RowIndex.begin() + ybegin + nodes + 1);
-  ACols.insert(ACols.begin(), Near.ColIndex.begin() + ARows[0], Near.ColIndex.begin() + ARows[nodes]);
-  long long offset = ARows[0];
-  std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
-  std::for_each(ACols.begin(), ACols.end(), [&](long long& col) { col = comm.iLocal(col); });
+  ARows.insert(ARows.begin(), comm.ARowOffsets.begin(), comm.ARowOffsets.end());
+  ACols.insert(ACols.begin(), comm.AColumns.begin(), comm.AColumns.end());
+  CRows.insert(CRows.begin(), comm.CRowOffsets.begin(), comm.CRowOffsets.end());
+  CCols.insert(CCols.begin(), comm.CColumns.begin(), comm.CColumns.end());
   NA.resize(ARows[nodes], -1);
 
-  CRows.insert(CRows.begin(), Far.RowIndex.begin() + ybegin, Far.RowIndex.begin() + ybegin + nodes + 1);
-  CCols.insert(CCols.begin(), Far.ColIndex.begin() + CRows[0], Far.ColIndex.begin() + CRows[nodes]);
-  offset = CRows[0];
-  std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
-  std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
+  std::vector<long long> localChildOffsets(nodes + 1, -1);
+  if (cells[ybegin].Child[0] < cells[ybegin + nodes - 1].Child[1]) {
+    localChildOffsets[0] = lowerComm.oLocal() + comm.LowerX;
+    long long localChildIndex = localChildOffsets[0] - cells[ybegin].Child[0];
+    std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
 
-  if (localChildOffsets.back() == -1) {
-    std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
-    long long sdim = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
-
-    LowerX.resize(sdim);
-    std::iota(LowerX.begin(), LowerX.end(), 0);
-  }
-  else {
     long long lowerBegin = localChildOffsets[0];
     long long lowerLen = localChildOffsets[nodes] - lowerBegin;
     long long copyOffset = std::reduce(lowerA.Dims.begin(), lowerA.Dims.begin() + lowerBegin);
@@ -161,6 +148,13 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
     LowerX.resize(ranks_offsets.back());
     for (long long i = 0; i < lowerLen; i++)
       std::iota(LowerX.begin() + ranks_offsets[i], LowerX.begin() + ranks_offsets[i + 1], dims_offsets[i]);
+  }
+  else {
+    std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
+    long long sdim = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
+
+    LowerX.resize(sdim);
+    std::iota(LowerX.begin(), LowerX.end(), 0);
   }
 
   std::vector<long long> neighbor_ones(xlen, 1ll);
