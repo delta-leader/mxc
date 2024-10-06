@@ -13,6 +13,5 @@ public:
   T* operator[](long long index);
   const T* operator[](long long index) const;
   long long size() const;
-  void reset();
 };
 

@@ -30,7 +30,6 @@ private:
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
-  std::vector<long long> C;
 
   std::vector<long long> NA;
   std::vector<long long> LowerX;
@@ -45,6 +44,7 @@ public:
   MatrixDataContainer<std::complex<double>> Q;
   MatrixDataContainer<std::complex<double>> R;
   MatrixDataContainer<std::complex<double>> A;
+  MatrixDataContainer<std::complex<double>> C;
 
   MatrixDataContainer<std::complex<double>> X;
   MatrixDataContainer<std::complex<double>> Y;
@@ -54,9 +54,9 @@ public:
   void upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA);
   void downwardCopyNext(char src, char dst, const H2Matrix& upperA, const ColCommMPI& upperComm);
 
-  void matVecUpwardPass(const ColCommMPI& comm);
-  void matVecHorizontalandDownwardPass(const H2Matrix& upperA, const ColCommMPI& comm);
-  void matVecLeafHorizontalPass(const ColCommMPI& comm);
+  void matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm);
+  void matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm);
+  void matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCommMPI& comm);
 
   void factorize(const ColCommMPI& comm);
   void factorizeCopyNext(const H2Matrix& lowerA, const ColCommMPI& lowerComm);

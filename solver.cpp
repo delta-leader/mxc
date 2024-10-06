@@ -60,34 +60,15 @@ void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
 void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
   if (levels < 0)
     return;
-  
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  long long lbegin = comm[levels].oLocal();
-  long long llen = comm[levels].lenLocal();
-  long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
-  
-  Vector_t X_in(X, lenX);
-  Vector_t X_leaf(A[levels].X[lbegin], lenX);
-  Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
 
-  for (long long l = levels; l >= 0; l--)
-  { A[l].X.reset(); A[l].Y.reset(); }
-  X_leaf = X_in;
+  A[levels].matVecUpwardPass(X, comm[levels]);
+  for (long long l = levels - 1; l >= 0; l--)
+    A[l].matVecUpwardPass(A[l + 1].X[0], comm[l]);
 
-  for (long long l = levels; l >= 0; l--) {
-    A[l].matVecUpwardPass(comm[l]);
-    if (0 < l)
-      A[l - 1].upwardCopyNext('X', 'X', comm[l - 1], A[l]);
-  }
-  for (long long l = 1; l <= levels; l++) {
-    A[l].downwardCopyNext('Y', 'Y', A[l - 1], comm[l - 1]);
-    A[l].matVecHorizontalandDownwardPass(A[l - 1], comm[l]);
-  }
+  for (long long l = 0; l < levels; l++)
+    A[l].matVecHorizontalandDownwardPass(A[l + 1].Y[0], comm[l]);
 
-  X_leaf = X_in;
-  A[levels].matVecLeafHorizontalPass(comm[levels]);
-
-  X_in = Y_leaf;
+  A[levels].matVecLeafHorizontalPass(X, comm[levels]);
 }
 
 void H2MatrixSolver::factorizeM() {

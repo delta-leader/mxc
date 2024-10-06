@@ -35,10 +35,5 @@ long long MatrixDataContainer<T>::size() const {
   return offsets.back();
 }
 
-template <class T>
-void MatrixDataContainer<T>::reset() {
-  std::fill(data, data + offsets.back(), static_cast<T>(0));
-}
-
 template class MatrixDataContainer<double>;
 template class MatrixDataContainer<std::complex<double>>;

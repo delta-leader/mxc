@@ -137,10 +137,14 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   offset = CRows[0];
   std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
   std::for_each(CCols.begin(), CCols.end(), [&](long long& col) { col = comm.iLocal(col); });
-  C.resize(CRows[nodes], -1);
 
-  if (localChildOffsets.back() == -1)
+  if (localChildOffsets.back() == -1) {
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
+    long long sdim = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
+
+    LowerX.resize(sdim);
+    std::iota(LowerX.begin(), LowerX.end(), 0);
+  }
   else {
     long long lowerBegin = localChildOffsets[0];
     long long lowerLen = localChildOffsets[nodes] - lowerBegin;
@@ -182,9 +186,10 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   A.alloc(ARows[nodes], Asizes.data());
 
+  typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
+  typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
+
   if (std::reduce(Dims.begin(), Dims.end())) {
-    typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
-    typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
     long long pbegin = lowerComm.oLocal();
     long long pend = pbegin + lowerComm.lenLocal();
 
@@ -219,14 +224,8 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
               std::complex<double>* dp = A[ij] + offset_y + offset_x * M;
               if (0 <= lowN)
                 lowerA.NA[lowN] = std::distance(A[0], dp);
-              else if (0 <= lowC) {
-                lowerA.C[lowC] = std::distance(A[0], dp);
-                Matrix_t Rx(lowerA.R[x], nx, nx, Stride_t(lowerA.Dims[x], 1));
-                Matrix_t Cyx(dp, ny, nx, Stride_t(M, 1));
-                Eigen::MatrixXcd Ayx(ny, nx);
-                gen_matrix(eval, ny, nx, lowerA.S[y], lowerA.S[x], Ayx.data());
-                Cyx.noalias() = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
-              }
+              else if (0 <= lowC)
+                Matrix_t(dp, ny, nx, Stride_t(M, 1)) = Eigen::Map<Eigen::MatrixXcd>(lowerA.C[lowC], ny, nx);
             }
           }
         }
@@ -288,6 +287,31 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
     comm.neighbor_bcast(Q[0], Qsizes.data());
     comm.neighbor_bcast(R[0], Qsizes.data());
   }
+
+  if (std::reduce(DimsLr.begin(), DimsLr.end())) {
+    std::vector<long long> Csizes(CRows[nodes]);
+    for (long long i = 0; i < nodes; i++)
+      std::transform(CCols.begin() + CRows[i], CCols.begin() + CRows[i + 1], Csizes.begin() + CRows[i],
+        [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
+    C.alloc(CRows[nodes], Csizes.data());
+
+    for (long long i = 0; i < nodes; i++) {
+      long long y = i + ibegin;
+      long long M = DimsLr[y];
+      Matrix_t Ry(R[y], M, M, Stride_t(Dims[y], 1));
+
+      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+        long long x = CCols[ij];
+        long long N = DimsLr[CCols[ij]];
+        Matrix_t Rx(R[x], N, N, Stride_t(Dims[x], 1));
+
+        Eigen::Map<Eigen::MatrixXcd> Cyx(C[ij], M, N);
+        Eigen::MatrixXcd Ayx(M, N);
+        gen_matrix(eval, M, N, S[y], S[x], Ayx.data());
+        Cyx.noalias() = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
+      }
+    }
+  }
 }
 
 void H2Matrix::upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA) {
@@ -308,29 +332,32 @@ void H2Matrix::downwardCopyNext(char src, char dst, const H2Matrix& upperA, cons
   vector_scatter(input, input + NZ, upperA.LowerX.data(), output);
 }
 
-void H2Matrix::matVecUpwardPass(const ColCommMPI& comm) {
+void H2Matrix::matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
+  vector_gather(&LowerX[0], &LowerX[LowerX.size()], X_in, Y[ibegin]);
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
     long long N = DimsLr[i + ibegin];
+    Vector_t x(X[i + ibegin], M);
+    Vector_t y(Y[i + ibegin], M);
     if (0 < N) {
-      Vector_t x(X[i + ibegin], M);
       Matrix_t q(Q[i + ibegin], M, N);
-      x.topRows(N) = q.transpose() * x;
+      x.topRows(N).noalias() = q.transpose() * y;
     }
+    y.setZero();
   }
+
   comm.neighbor_bcast(X[0], NbXoffsets.data());
 }
 
-void H2Matrix::matVecHorizontalandDownwardPass(const H2Matrix& upperA, const ColCommMPI& comm) {
+void H2Matrix::matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
-  typedef Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -340,27 +367,53 @@ void H2Matrix::matVecHorizontalandDownwardPass(const H2Matrix& upperA, const Col
     long long K = DimsLr[i + ibegin];
     if (0 < K) {
       Vector_t y(Y[i + ibegin], M);
+      Eigen::VectorXcd ac = y.topRows(K);
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         long long j = CCols[ij];
         long long N = DimsLr[j];
 
         Vector_t x(X[j], N);
-        Matrix_t c(upperA.A[0] + C[ij], K, N, Stride_t(UpperStride[i], 1));
-        y.topRows(K).noalias() += c * x;
+        Matrix_t c(C[ij], K, N);
+        ac.noalias() += c * x;
       }
 
-      Matrix_t q(Q[i + ibegin], M, K, Stride_t(M, 1));
-      y = q * y.topRows(K);
+      Matrix_t q(Q[i + ibegin], M, K);
+      y.noalias() = q * ac;
     }
   }
+
+  vector_scatter(Y[ibegin], Y[ibegin + nodes], LowerX.data(), Y_out);
 }
 
-void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
+void H2Matrix::matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
+  long long lenX = LowerX.size();
+
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    long long K = DimsLr[i + ibegin];
+    if (0 < K) {
+      Vector_t y(Y[i + ibegin], M);
+      Eigen::VectorXcd ac = y.topRows(K);
+      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+        long long j = CCols[ij];
+        long long N = DimsLr[j];
+
+        Vector_t x(X[j], N);
+        Matrix_t c(C[ij], K, N);
+        ac.noalias() += c * x;
+      }
+
+      Matrix_t q(Q[i + ibegin], M, K);
+      y.noalias() = q * ac;
+    }
+  }
+
+  std::copy(&X_io[0], &X_io[lenX], X[ibegin]);
   comm.neighbor_bcast(X[0], NbXoffsets.data());
 
   for (long long i = 0; i < nodes; i++) {
@@ -377,6 +430,8 @@ void H2Matrix::matVecLeafHorizontalPass(const ColCommMPI& comm) {
         y.noalias() += c * x;
       }
   }
+
+  std::copy(Y[ibegin], Y[ibegin + nodes], X_io);
 }
 
 void H2Matrix::factorize(const ColCommMPI& comm) {
