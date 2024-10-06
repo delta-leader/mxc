@@ -45,7 +45,7 @@ void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
   desc.resize(levels + 1);
   long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
   long long rank = *std::max_element(A[levels].DimsLr.begin(), A[levels].DimsLr.end());
-  createMatrixDesc(&desc[levels], bdim, rank, devicePreconditioner_t(), comm[levels]);
+  createMatrixDesc(&desc[levels], bdim, rank, deviceMatrixDesc_t(), comm[levels]);
 
   for (long long l = levels - 1; l >= 0; l--) {
     long long bdim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
@@ -94,13 +94,13 @@ void H2MatrixSolver::factorizeM() {
   for (long long l = levels; l >= 0; l--) {
     A[l].factorize(comm[l]);
     if (0 < l)
-      A[l - 1].factorizeCopyNext(comm[l - 1], A[l], comm[l]);
+      A[l - 1].factorizeCopyNext(A[l], comm[l]);
   }
 }
 
 void H2MatrixSolver::factorizeDeviceM() {
   copyDataInMatrixDesc(desc[levels], comm[levels].ARowOffsets.back(), A[levels].A[0], comm[levels].lenNeighbors(), A[levels].Q[0], compute_stream);
-  compute_factorize(desc[levels], devicePreconditioner_t(), compute_stream, cublasH, comm[levels], nccl_comms);
+  compute_factorize(desc[levels], deviceMatrixDesc_t(), compute_stream, cublasH, comm[levels], nccl_comms);
 
   for (long long l = levels - 1; l >= 0; l--) {
     copyDataInMatrixDesc(desc[l], comm[l].ARowOffsets.back(), A[l].A[0], comm[l].lenNeighbors(), A[l].Q[0], memory_stream);

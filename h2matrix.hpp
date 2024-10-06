@@ -59,7 +59,7 @@ public:
   void matVecLeafHorizontalPass(const ColCommMPI& comm);
 
   void factorize(const ColCommMPI& comm);
-  void factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm);
+  void factorizeCopyNext(const H2Matrix& lowerA, const ColCommMPI& lowerComm);
   void forwardSubstitute(const ColCommMPI& comm);
   void backwardSubstitute(const ColCommMPI& comm);
 };

@@ -46,7 +46,7 @@ struct StridedSequence {
   }
 };
 
-void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long rank, devicePreconditioner_t lower, const ColCommMPI& comm) {
+void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm) {
   desc->bdim = bdim;
   desc->rank = rank;
   desc->diag_offset = comm.oLocal();
@@ -91,12 +91,13 @@ void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long ra
   cudaMalloc(reinterpret_cast<void**>(&desc->B_ind), M * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->B_cols), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->B_R), lenA * sizeof(CUDA_CTYPE*));
-  cudaMalloc(reinterpret_cast<void**>(&desc->AC_ind), lenA * sizeof(CUDA_CTYPE*));
 
   cudaMalloc(reinterpret_cast<void**>(&desc->Y_cols), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->Y_R_cols), lenA * sizeof(CUDA_CTYPE*));
+
   cudaMalloc(reinterpret_cast<void**>(&desc->AC_X), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->AC_X_R), lenA * sizeof(CUDA_CTYPE*));
+  cudaMalloc(reinterpret_cast<void**>(&desc->AC_ind), lenA * sizeof(CUDA_CTYPE*));
 
   cudaMalloc(reinterpret_cast<void**>(&desc->L_dst), lenLA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->Xlocs), M * bdim * sizeof(long long));
@@ -135,19 +136,20 @@ void createMatrixDesc(devicePreconditioner_t* desc, long long bdim, long long ra
   thrust::transform(inc_iter, inc_iter + N, thrust::device_ptr<CUDA_CTYPE*>(desc->B_ind), setDevicePtr(desc->Bdata, block));
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->B_cols), setDevicePtr(desc->Bdata, block));
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->B_R), setDevicePtr(&(desc->Bdata)[offset_SR], block));
-  thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_ind), setDevicePtr(desc->ACdata, M * rblock, rblock));
 
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->Y_cols), setDevicePtr(desc->Ydata, bdim));
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->Y_R_cols), setDevicePtr(&(desc->Ydata)[offset_RS], bdim));
+
   thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_X), setDevicePtr(desc->ACdata, M * bdim, bdim));
   thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_X_R), setDevicePtr(&(desc->ACdata)[offset_RS], M * bdim, bdim));
+  thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_ind), setDevicePtr(desc->ACdata, M * rblock, rblock));
   
   long long startLX = (lower.diag_offset + comm.LowerX) * lower.bdim;
   thrust::transform(LInd.begin(), LInd.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->L_dst), setDevicePtr(desc->Adata, block, bdim * lower.rank, lower.rank));
   thrust::transform(inc_iter, inc_iter + (M * bdim), thrust::device_ptr<long long>(desc->Xlocs), StridedSequence(startLX, std::max(lower.rank, 1ll), std::max(lower.bdim, 1ll)));
 }
 
-void destroyMatrixDesc(devicePreconditioner_t desc) {
+void destroyMatrixDesc(deviceMatrixDesc_t desc) {
   cudaFree(desc.A_ss);
   cudaFree(desc.A_sr);
   cudaFree(desc.A_rs);
@@ -195,13 +197,13 @@ void destroyHostMatrix(hostMatrix_t h) {
   cudaFreeHost(h.Adata);
 }
 
-void copyDataInMatrixDesc(devicePreconditioner_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream) {
+void copyDataInMatrixDesc(deviceMatrixDesc_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream) {
   long long block = desc.bdim * desc.bdim * sizeof(CUDA_CTYPE);
   cudaMemcpyAsync(desc.Adata, A, block * lenA, cudaMemcpyHostToDevice, stream);
   cudaMemcpyAsync(desc.Udata, U, block * lenU, cudaMemcpyHostToDevice, stream);
 }
 
-void copyDataOutMatrixDesc(devicePreconditioner_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream) {
+void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream) {
   long long block = desc.bdim * desc.bdim * sizeof(CUDA_CTYPE);
   cudaMemcpyAsync(A, desc.Adata, block * lenA, cudaMemcpyDeviceToHost, stream);
   cudaMemcpyAsync(V, desc.Vdata, block * lenV, cudaMemcpyDeviceToHost, stream);

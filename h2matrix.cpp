@@ -458,7 +458,7 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
   }
 }
 
-void H2Matrix::factorizeCopyNext(const ColCommMPI& comm, const H2Matrix& lowerA, const ColCommMPI& lowerComm) {
+void H2Matrix::factorizeCopyNext(const H2Matrix& lowerA, const ColCommMPI& lowerComm) {
   long long ibegin = lowerComm.oLocal();
   long long nodes = lowerComm.lenLocal();
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;

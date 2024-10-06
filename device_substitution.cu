@@ -6,7 +6,7 @@
 #include <thrust/gather.h>
 #include <thrust/scatter.h>
 
-void compute_forward_substitution(devicePreconditioner_t A, const CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
+void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
   long long bdim = A.bdim;
   long long rank = A.rank;
   long long rdim = bdim - rank;
@@ -74,7 +74,7 @@ void compute_forward_substitution(devicePreconditioner_t A, const CUDA_CTYPE* X,
   }
 }
 
-void compute_backward_substitution(devicePreconditioner_t A, CUDA_CTYPE* Y, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
+void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* Y, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
   long long bdim = A.bdim;
   long long rank = A.rank;
   long long rdim = bdim - rank;

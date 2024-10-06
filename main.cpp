@@ -25,14 +25,14 @@ int main(int argc, char* argv[]) {
   
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
-  //Gaussian eval(0.03);
+  //Gaussian eval(0.005);
   Helmholtz3D eval(4., .1);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
 
-  //mesh_sphere(&body[0], Nbody, std::pow(Nbody, 1./2.));
+  //mesh_sphere(&body[0], Nbody, std::sqrt(Nbody / (4 * M_PI)));
   uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 20, 50);
+  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
