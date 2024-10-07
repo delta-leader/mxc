@@ -10,6 +10,7 @@
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/LU>
+#include <Eigen/SparseCore>
 
 void WellSeparatedApproximation::construct(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) {
   WellSeparatedApproximation::lbegin = lbegin;
@@ -50,7 +51,7 @@ const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
   return 0 <= i && i < (long long)M.size() ? M[i].data() : nullptr;
 }
 
-long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> a[], std::complex<double> c[]) {
+long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> a[], std::complex<double> c[], bool orth) {
   long long K = std::min(M, N), rank = 0;
   if (0 < K) {
     Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(K, M);
@@ -80,11 +81,19 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
       Eigen::Map<Eigen::MatrixXd> body(Xbodies, 3, M);
       body = body * rrqr.colsPermutation();
 
-      RX = A.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * C.topRows(rank).transpose());
-      Eigen::HouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> qr(RX);
-      A = qr.householderQ();
-      C = Eigen::MatrixXcd::Zero(M, M);
-      C.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
+      if (orth) {
+        RX = A.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * C.topRows(rank).transpose());
+        Eigen::HouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> qr(RX);
+        A = qr.householderQ();
+        C.setZero();
+        C.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
+      }
+      else {
+        A.setZero();
+        A.leftCols(rank) = rrqr.colsPermutation() * C.topRows(rank).transpose();
+        C.setZero();
+        C.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
+      }
     }
     else {
       C = A.triangularView<Eigen::Upper>();
@@ -254,7 +263,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
     for (long long i = 0; i < nodes; i++) {
       long long fsize = cbodies[i].size() / 3;
       const double* fbodies = cbodies[i].data();
-      long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, Q[i + ibegin], R[i + ibegin]);
+      long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, Q[i + ibegin], R[i + ibegin], 1. <= epi);
       DimsLr[i + ibegin] = rank;
     }
 
@@ -285,9 +294,13 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
         Matrix_t Rx(R[x], N, N, Stride_t(Dims[x], 1));
 
         Eigen::Map<Eigen::MatrixXcd> Cyx(C[ij], M, N);
-        Eigen::MatrixXcd Ayx(M, N);
-        gen_matrix(eval, M, N, S[y], S[x], Ayx.data());
-        Cyx.noalias() = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
+        if (1. <= epi) {
+          Eigen::MatrixXcd Ayx(M, N);
+          gen_matrix(eval, M, N, S[y], S[x], Ayx.data());
+          Cyx.noalias() = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
+        }
+        else
+          gen_matrix(eval, M, N, S[y], S[x], Cyx.data());
       }
     }
   }
@@ -296,6 +309,49 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
   NbZoffsets.insert(NbZoffsets.begin(), DimsLr.begin(), DimsLr.end());
   NbZoffsets.erase(NbZoffsets.begin() + comm.dataSizesToNeighborOffsets(NbZoffsets.data()), NbZoffsets.end());
+}
+
+void H2Matrix::constructCsrV(long long* M, long long* N, long long* NNZ, long long RowIndex[], long long ColIndex[], std::complex<double> values[], const ColCommMPI& comm) const {
+  long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
+
+  std::vector<long long> Asizes(nodes), Aoffsets(nodes + 1);
+  std::transform(&Dims[ibegin], &Dims[ibegin + nodes], &DimsLr[ibegin], Asizes.begin(), std::multiplies<long long>());
+  std::inclusive_scan(Asizes.begin(), Asizes.end(), Aoffsets.begin() + 1);
+  Aoffsets[0] = 0;
+  
+  *M = lenX;
+  *N = std::reduce(&DimsLr[ibegin], &DimsLr[ibegin + nodes]);
+  *NNZ = Aoffsets.back();
+
+  if (RowIndex && ColIndex && values) {
+    std::vector<Eigen::Triplet<std::complex<double>>> A(*NNZ);
+    A.reserve(*NNZ);
+  
+    std::vector<long long> y_offsets(nodes), x_offsets(nodes);
+    std::exclusive_scan(&Dims[ibegin], &Dims[ibegin + nodes], y_offsets.begin(), 0ll);
+    std::exclusive_scan(&DimsLr[ibegin], &DimsLr[ibegin + nodes], x_offsets.begin(), 0ll);
+
+    for (long long i = 0; i < nodes; i++) {
+      long long m = Dims[i + ibegin];
+      long long n = DimsLr[i + ibegin];
+      long long ybegin = y_offsets[i];
+      long long xbegin = x_offsets[i];
+      const std::complex<double>* dp = Q[i + ibegin];
+
+      for (long long x = 0; x < n; x++)
+        for (long long y = 0; y < m; y++)
+          A.emplace_back(ybegin + y, xbegin + x, dp[y + x * m]);
+    }
+
+    Eigen::SparseMatrix<std::complex<double>, Eigen::ColMajor, long long> spA(*M, *N);
+    spA.setFromTriplets(A.begin(), A.end());
+    spA.makeCompressed();
+
+    std::copy(spA.outerIndexPtr(), spA.outerIndexPtr() + (*M), RowIndex);
+    std::copy(spA.innerIndexPtr(), spA.innerIndexPtr() + (*NNZ), ColIndex);
+    std::copy(spA.valuePtr(), spA.valuePtr() + (*NNZ), values);
+  }  
 }
 
 void H2Matrix::matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm) {
@@ -563,9 +619,9 @@ void H2Matrix::backwardSubstitute(std::complex<double>* Y_out, const ColCommMPI&
         long long Ns = DimsLr[j];
 
         if (0 < Ns) {
-          Vector_t wj(W[j], N);
+          Vector_t wj(W[j], Ns);
           Matrix_t Aij(A[ij], M, N);
-          x.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * wj.topRows(Ns);
+          x.bottomRows(Mr).noalias() -= Aij.bottomLeftCorner(Mr, Ns) * wj;
         }
       }
     }

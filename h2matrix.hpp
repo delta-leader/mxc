@@ -56,6 +56,8 @@ public:
   
   void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
 
+  void constructCsrV(long long* M, long long* N, long long* NNZ, long long RowIndex[], long long ColIndex[], std::complex<double> values[], const ColCommMPI& comm) const;
+
   void matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm);
   void matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm);
   void matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCommMPI& comm);
