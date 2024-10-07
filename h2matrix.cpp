@@ -117,7 +117,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   long long nodes = comm.lenLocal();
   long long ybegin = comm.oGlobal();
 
-    Dims.resize(xlen, 0);
+  Dims.resize(xlen, 0);
   DimsLr.resize(xlen, 0);
   UpperStride.resize(nodes, 0);
 
@@ -127,8 +127,10 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   CCols.insert(CCols.begin(), comm.CColumns.begin(), comm.CColumns.end());
   NA.resize(ARows[nodes], -1);
 
+  long long localChildLen = cells[ybegin + nodes - 1].Child[1] - cells[ybegin].Child[0];
   std::vector<long long> localChildOffsets(nodes + 1, -1);
-  if (cells[ybegin].Child[0] < cells[ybegin + nodes - 1].Child[1]) {
+  
+  if (0 < localChildLen) {
     localChildOffsets[0] = lowerComm.oLocal() + comm.LowerX;
     long long localChildIndex = localChildOffsets[0] - cells[ybegin].Child[0];
     std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
@@ -148,6 +150,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
     LowerX.resize(ranks_offsets.back());
     for (long long i = 0; i < lowerLen; i++)
       std::iota(LowerX.begin() + ranks_offsets[i], LowerX.begin() + ranks_offsets[i + 1], dims_offsets[i]);
+    LowerZ = std::reduce(lowerA.DimsLr.begin(), lowerA.DimsLr.begin() + lowerBegin, 0ll);
   }
   else {
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
@@ -155,6 +158,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
 
     LowerX.resize(sdim);
     std::iota(LowerX.begin(), LowerX.end(), 0);
+    LowerZ = 0;
   }
 
   std::vector<long long> neighbor_ones(xlen, 1ll);
@@ -162,8 +166,6 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
   X.alloc(xlen, Dims.data());
   Y.alloc(xlen, Dims.data());
-  NbXoffsets.insert(NbXoffsets.begin(), Dims.begin(), Dims.end());
-  NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
 
   std::vector<long long> Qsizes(xlen, 0);
   std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
@@ -288,6 +290,8 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
       std::transform(CCols.begin() + CRows[i], CCols.begin() + CRows[i + 1], Csizes.begin() + CRows[i],
         [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
     C.alloc(CRows[nodes], Csizes.data());
+    Z.alloc(xlen, DimsLr.data());
+    W.alloc(xlen, DimsLr.data());
 
     for (long long i = 0; i < nodes; i++) {
       long long y = i + ibegin;
@@ -306,6 +310,11 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
       }
     }
   }
+
+  NbXoffsets.insert(NbXoffsets.begin(), Dims.begin(), Dims.end());
+  NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
+  NbZoffsets.insert(NbZoffsets.begin(), DimsLr.begin(), DimsLr.end());
+  NbZoffsets.erase(NbZoffsets.begin() + comm.dataSizesToNeighborOffsets(NbZoffsets.data()), NbZoffsets.end());
 }
 
 void H2Matrix::upwardCopyNext(char src, char dst, const ColCommMPI& comm, const H2Matrix& lowerA) {
@@ -332,21 +341,22 @@ void H2Matrix::matVecUpwardPass(const std::complex<double>* X_in, const ColCommM
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
-  vector_gather(&LowerX[0], &LowerX[LowerX.size()], X_in, Y[ibegin]);
+  long long lenX = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
+  std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], X[ibegin]);
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
     long long N = DimsLr[i + ibegin];
     Vector_t x(X[i + ibegin], M);
-    Vector_t y(Y[i + ibegin], M);
     if (0 < N) {
+      Vector_t z(Z[i + ibegin], N);
       Matrix_t q(Q[i + ibegin], M, N);
-      x.topRows(N).noalias() = q.transpose() * y;
+      z = q.transpose() * x;
     }
-    y.setZero();
   }
 
-  comm.neighbor_bcast(X[0], NbXoffsets.data());
+  if (0 < NbZoffsets.back())
+    comm.neighbor_bcast(Z[0], NbZoffsets.data());
 }
 
 void H2Matrix::matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm) {
@@ -360,23 +370,23 @@ void H2Matrix::matVecHorizontalandDownwardPass(std::complex<double>* Y_out, cons
     long long M = Dims[i + ibegin];
     long long K = DimsLr[i + ibegin];
     if (0 < K) {
-      Vector_t y(Y[i + ibegin], M);
-      Eigen::VectorXcd ac = y.topRows(K);
+      Vector_t w(W[i + ibegin], K);
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         long long j = CCols[ij];
         long long N = DimsLr[j];
 
-        Vector_t x(X[j], N);
+        Vector_t z(Z[j], N);
         Matrix_t c(C[ij], K, N);
-        ac.noalias() += c * x;
+        w.noalias() += c * z;
       }
 
       Matrix_t q(Q[i + ibegin], M, K);
-      y.noalias() = q * ac;
+      Vector_t y(Y[i + ibegin], M);
+      y.noalias() = q * w;
     }
   }
 
-  vector_scatter(Y[ibegin], Y[ibegin + nodes], LowerX.data(), Y_out);
+  std::copy(Y[ibegin], Y[ibegin + nodes], &Y_out[LowerZ]);
 }
 
 void H2Matrix::matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCommMPI& comm) {
@@ -385,44 +395,39 @@ void H2Matrix::matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCom
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
-  long long lenX = LowerX.size();
-
-  for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long K = DimsLr[i + ibegin];
-    if (0 < K) {
-      Vector_t y(Y[i + ibegin], M);
-      Eigen::VectorXcd ac = y.topRows(K);
-      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
-        long long j = CCols[ij];
-        long long N = DimsLr[j];
-
-        Vector_t x(X[j], N);
-        Matrix_t c(C[ij], K, N);
-        ac.noalias() += c * x;
-      }
-
-      Matrix_t q(Q[i + ibegin], M, K);
-      y.noalias() = q * ac;
-    }
-  }
-
+  long long lenX = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
   std::copy(&X_io[0], &X_io[lenX], X[ibegin]);
   comm.neighbor_bcast(X[0], NbXoffsets.data());
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
+    long long K = DimsLr[i + ibegin];
     Vector_t y(Y[i + ibegin], M);
+    y.setZero();
 
-    if (0 < M)
-      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        long long j = ACols[ij];
-        long long N = Dims[j];
+    if (0 < K) {
+      Vector_t w(W[i + ibegin], K);
+      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+        long long j = CCols[ij];
+        long long N = DimsLr[j];
 
-        Vector_t x(X[j], N);
-        Matrix_t c(A[ij], M, N);
-        y.noalias() += c * x;
+        Vector_t z(Z[j], N);
+        Matrix_t c(C[ij], K, N);
+        w.noalias() += c * z;
       }
+
+      Matrix_t q(Q[i + ibegin], M, K);
+      y.noalias() += q * w;
+    }
+
+    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+      long long j = ACols[ij];
+      long long N = Dims[j];
+
+      Vector_t x(X[j], N);
+      Matrix_t c(A[ij], M, N);
+      y.noalias() += c * x;
+    }
   }
 
   std::copy(Y[ibegin], Y[ibegin + nodes], X_io);

@@ -63,10 +63,10 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
 
   A[levels].matVecUpwardPass(X, comm[levels]);
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].matVecUpwardPass(A[l + 1].X[0], comm[l]);
+    A[l].matVecUpwardPass(A[l + 1].Z[0], comm[l]);
 
   for (long long l = 0; l < levels; l++)
-    A[l].matVecHorizontalandDownwardPass(A[l + 1].Y[0], comm[l]);
+    A[l].matVecHorizontalandDownwardPass(A[l + 1].W[0], comm[l]);
 
   A[levels].matVecLeafHorizontalPass(X, comm[levels]);
 }

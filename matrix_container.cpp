@@ -22,12 +22,12 @@ void MatrixDataContainer<T>::alloc(long long len, const long long* dims) {
 
 template <class T>
 T* MatrixDataContainer<T>::operator[](long long index) {
-  return data + offsets[index];
+  return (0 <= index && index < (long long)offsets.size()) ? data + offsets[index] : nullptr;
 }
 
 template <class T>
 const T* MatrixDataContainer<T>::operator[](long long index) const {
-  return data + offsets[index];
+  return (0 <= index && index < (long long)offsets.size()) ? data + offsets[index] : nullptr;
 }
 
 template <class T>

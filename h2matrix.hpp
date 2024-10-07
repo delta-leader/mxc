@@ -34,6 +34,8 @@ private:
   std::vector<long long> NA;
   std::vector<long long> LowerX;
   std::vector<long long> NbXoffsets;
+  std::vector<long long> NbZoffsets;
+  long long LowerZ;
 
 public:
   std::vector<long long> Dims;
@@ -48,6 +50,8 @@ public:
 
   MatrixDataContainer<std::complex<double>> X;
   MatrixDataContainer<std::complex<double>> Y;
+  MatrixDataContainer<std::complex<double>> Z;
+  MatrixDataContainer<std::complex<double>> W;
   
   void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
 
