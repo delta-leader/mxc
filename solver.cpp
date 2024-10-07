@@ -97,39 +97,21 @@ void H2MatrixSolver::factorizeDeviceM() {
 void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   if (levels < 0)
     return;
-  
-  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  long long lbegin = comm[levels].oLocal();
-  long long llen = comm[levels].lenLocal();
-  long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
-  
-  Vector_t X_in(X, lenX);
-  Vector_t X_leaf(A[levels].X[lbegin], lenX);
-  Vector_t Y_leaf(A[levels].Y[lbegin], lenX);
 
-  X_leaf = X_in;
-  A[levels].forwardSubstitute(comm[levels]);
-  for (long long l = levels - 1; l >= 0; l--) {
-    A[l].upwardCopyNext('X', 'X', comm[l], A[l + 1]);
-    A[l].forwardSubstitute(comm[l]);
-  }
+  A[levels].forwardSubstitute(X, comm[levels]);
+  for (long long l = levels - 1; l >= 0; l--)
+    A[l].forwardSubstitute(A[l + 1].Z[0], comm[l]);
 
-  for (long long l = 0; l < levels; l++) {
-    A[l].backwardSubstitute(comm[l]);
-    A[l + 1].downwardCopyNext('Y', 'Y', A[l], comm[l]);
-  }
-  A[levels].backwardSubstitute(comm[levels]);
-  X_in = Y_leaf;
+  for (long long l = 0; l < levels; l++)
+    A[l].backwardSubstitute(A[l + 1].W[0], comm[l]);
+  A[levels].backwardSubstitute(X, comm[levels]);
 }
 
 void H2MatrixSolver::solvePreconditionDevice(std::complex<double> X[]) {
   if (levels < 0)
     return;
   
-  long long lbegin = comm[levels].oLocal();
-  long long llen = comm[levels].lenLocal();
-  long long lenX = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
-  
+  long long lenX = A[levels].lenX;
   cudaMemcpy(X_dev, X, lenX * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
   compute_forward_substitution(desc[levels], X_dev, compute_stream, cublasH, comm[levels], nccl_comms);
@@ -144,11 +126,7 @@ void H2MatrixSolver::solvePreconditionDevice(std::complex<double> X[]) {
 }
 
 void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
-  using Eigen::VectorXcd, Eigen::MatrixXcd;
-
-  long long lbegin = comm[levels].oLocal();
-  long long llen = comm[levels].lenLocal();
-  long long N = std::reduce(A[levels].Dims.begin() + lbegin, A[levels].Dims.begin() + (lbegin + llen));
+  long long N = A[levels].lenX;
   long long ld = inner_iters + 1;
 
   Eigen::Map<const Eigen::VectorXcd> B(b, N);
@@ -160,7 +138,7 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
   if (normb == 0.)
     normb = 1.;
 
-  VectorXcd R(N);
+  Eigen::VectorXcd R(N);
   resid = std::vector<double>(outer_iters + 1, 0.);
 
   for (iters = 0; iters < outer_iters; iters++) {
@@ -179,12 +157,12 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
       return;
 
     double beta = std::sqrt(normr_sum.second.real());
-    MatrixXcd H = MatrixXcd::Zero(ld, inner_iters);
-    MatrixXcd v = MatrixXcd::Zero(N, ld);
+    Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(ld, inner_iters);
+    Eigen::MatrixXcd v = Eigen::MatrixXcd::Zero(N, ld);
     v.col(0) = R * (1. / beta);
     
     for (long long i = 0; i < inner_iters; i++) {
-      VectorXcd w = v.col(i);
+      Eigen::VectorXcd w = v.col(i);
       matVecMul(w.data());
       M.solvePrecondition(w.data());
 
@@ -198,10 +176,10 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
       v.col(i + 1) = w * (1. / H(i + 1, i));
     }
 
-    VectorXcd s = VectorXcd::Zero(ld);
+    Eigen::VectorXcd s = Eigen::VectorXcd::Zero(ld);
     s(0) = beta;
 
-    VectorXcd y = H.colPivHouseholderQr().solve(s);
+    Eigen::VectorXcd y = H.colPivHouseholderQr().solve(s);
     X += v.leftCols(inner_iters) * y;
   }
 
