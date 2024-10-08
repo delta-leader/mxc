@@ -11,7 +11,6 @@
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/LU>
-#include <Eigen/SparseCore>
 
 void WellSeparatedApproximation::construct(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) {
   WellSeparatedApproximation::lbegin = lbegin;
@@ -110,7 +109,7 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
   long long k = std::distance(ColIndex.begin(), std::find(ColIndex.begin() + RowIndex[i], ColIndex.begin() + RowIndex[i + 1], j));
   return (k < RowIndex[i + 1]) ? k : -1;
 }
-#include <iostream>
+
 void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
@@ -273,13 +272,6 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
     comm.neighbor_bcast(S[0], Ssizes.data());
     comm.neighbor_bcast(Q[0], Qsizes.data());
     comm.neighbor_bcast(R[0], Qsizes.data());
-
-    if (localChildLen <= 0) {
-      std::vector<const std::complex<double>*> Aptr(ARows.back()); 
-      for (long long i = 0; i < ARows.back(); i++)
-        Aptr[i] = A[i];
-      csrA.construct(nodes, xlen, &Dims[ibegin], &Dims[0], &ARows[0], &ACols[0], &Aptr[0]);
-    }
   }
 
   if (std::reduce(DimsLr.begin(), DimsLr.end())) {
@@ -311,21 +303,6 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
           gen_matrix(eval, M, N, S[y], S[x], Cyx.data());
       }
     }
-
-    std::vector<long long> seq(nodes + 1);
-    std::vector<const std::complex<double>*> Uptr(nodes); 
-    std::iota(seq.begin(), seq.end(), 0ll);
-    for (long long i = 0; i < nodes; i++)
-      Uptr[i] = Q[i + ibegin];
-    csrU.construct(nodes, nodes, &Dims[ibegin], &DimsLr[ibegin], &seq[0], &seq[0], &Uptr[0]);
-
-    long long lenC = CRows.back();
-    if (0 < lenC) {
-      std::vector<const std::complex<double>*> Cptr(lenC);
-      for (long long i = 0; i < lenC; i++)
-        Cptr[i] = C[i];
-      csrC.construct(nodes, xlen, &DimsLr[ibegin], &DimsLr[0], &CRows[0], &CCols[0], &Cptr[0]);
-    }
   }
 
   NbXoffsets.insert(NbXoffsets.begin(), Dims.begin(), Dims.end());
@@ -334,48 +311,97 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   NbZoffsets.erase(NbZoffsets.begin() + comm.dataSizesToNeighborOffsets(NbZoffsets.data()), NbZoffsets.end());
 }
 
-
 void H2Matrix::matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm) {
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+
   long long ibegin = comm.oLocal();
+  long long nodes = comm.lenLocal();
   std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], X[ibegin]);
 
-  if (0 < csrU.M && 0 < csrU.N) {
-    matrix_descr desc;
-    desc.type = SPARSE_MATRIX_TYPE_GENERAL;
-    mkl_sparse_z_mv(SPARSE_OPERATION_TRANSPOSE, std::complex<double>(1., 0.), csrU.handle, desc, X[ibegin], std::complex<double>(0., 0.), Z[ibegin]);
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    long long N = DimsLr[i + ibegin];
+    Vector_t x(X[i + ibegin], M);
+    if (0 < N) {
+      Vector_t z(Z[i + ibegin], N);
+      Matrix_t q(Q[i + ibegin], M, N);
+      z = q.transpose() * x;
+    }
   }
+
   comm.neighbor_bcast(Z[0], NbZoffsets.data());
 }
 
 void H2Matrix::matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm) {
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
-  matrix_descr desc;
-  desc.type = SPARSE_MATRIX_TYPE_GENERAL;
 
-  if (0 < csrC.M && 0 < csrC.N)
-    mkl_sparse_z_mv(SPARSE_OPERATION_NON_TRANSPOSE, std::complex<double>(1., 0.), csrC.handle, desc, Z[0], std::complex<double>(1., 0.), W[ibegin]);
-  if (0 < csrU.M && 0 < csrU.N)
-    mkl_sparse_z_mv(SPARSE_OPERATION_NON_TRANSPOSE, std::complex<double>(1., 0.), csrU.handle, desc, W[ibegin], std::complex<double>(0., 0.), Y[ibegin]);
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    long long K = DimsLr[i + ibegin];
+    if (0 < K) {
+      Vector_t w(W[i + ibegin], K);
+      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+        long long j = CCols[ij];
+        long long N = DimsLr[j];
+
+        Vector_t z(Z[j], N);
+        Matrix_t c(C[ij], K, N);
+        w.noalias() += c * z;
+      }
+
+      Matrix_t q(Q[i + ibegin], M, K);
+      Vector_t y(Y[i + ibegin], M);
+      y.noalias() = q * w;
+    }
+  }
+
   std::copy(Y[ibegin], Y[ibegin + nodes], &Y_out[LowerZ]);
 }
 
 void H2Matrix::matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCommMPI& comm) {
+  typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
+  typedef Eigen::Map<Eigen::MatrixXcd> Matrix_t;
+
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   std::copy(&X_io[0], &X_io[lenX], X[ibegin]);
   comm.neighbor_bcast(X[0], NbXoffsets.data());
 
-  matrix_descr desc;
-  desc.type = SPARSE_MATRIX_TYPE_GENERAL;
-  std::fill(Y[ibegin], Y[ibegin + nodes], std::complex<double>(0., 0.));
+  for (long long i = 0; i < nodes; i++) {
+    long long M = Dims[i + ibegin];
+    long long K = DimsLr[i + ibegin];
+    Vector_t y(Y[i + ibegin], M);
+    y.setZero();
 
-  if (0 < csrC.M && 0 < csrC.N)
-    mkl_sparse_z_mv(SPARSE_OPERATION_NON_TRANSPOSE, std::complex<double>(1., 0.), csrC.handle, desc, Z[0], std::complex<double>(1., 0.), W[ibegin]);
-  if (0 < csrU.M && 0 < csrU.N)
-    mkl_sparse_z_mv(SPARSE_OPERATION_NON_TRANSPOSE, std::complex<double>(1., 0.), csrU.handle, desc, W[ibegin], std::complex<double>(1., 0.), Y[ibegin]);
-  if (0 < csrA.M && 0 < csrA.N)
-    mkl_sparse_z_mv(SPARSE_OPERATION_NON_TRANSPOSE, std::complex<double>(1., 0.), csrA.handle, desc, X[0], std::complex<double>(1., 0.), Y[ibegin]);
+    if (0 < K) {
+      Vector_t w(W[i + ibegin], K);
+      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+        long long j = CCols[ij];
+        long long N = DimsLr[j];
+
+        Vector_t z(Z[j], N);
+        Matrix_t c(C[ij], K, N);
+        w.noalias() += c * z;
+      }
+
+      Matrix_t q(Q[i + ibegin], M, K);
+      y.noalias() += q * w;
+    }
+
+    for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+      long long j = ACols[ij];
+      long long N = Dims[j];
+
+      Vector_t x(X[j], N);
+      Matrix_t c(A[ij], M, N);
+      y.noalias() += c * x;
+    }
+  }
 
   std::copy(Y[ibegin], Y[ibegin + nodes], X_io);
 }

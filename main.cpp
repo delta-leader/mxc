@@ -26,14 +26,14 @@ int main(int argc, char* argv[]) {
   //Laplace3D eval(1.);
   //Yukawa3D eval(1, 1.);
   //Gaussian eval(0.005);
-  Helmholtz3D eval(4., .1);
+  Helmholtz3D eval(4., 1e-1);
   
   std::vector<double> body(Nbody * 3);
   std::vector<std::complex<double>> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
 
   //mesh_sphere(&body[0], Nbody, std::sqrt(Nbody / (4 * M_PI)));
-  uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
+  uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 1999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
 
@@ -54,6 +54,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
+
+  //matA.allocSparseMV();
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
@@ -101,17 +103,17 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
-  //matM.init_gpu_handles();
+  matM.init_gpu_handles();
 
-  std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
+  std::copy(&Xbody[matM.local_bodies.first], &Xbody[matM.local_bodies.second], &X1[0]);
   matM.matVecMul(&X1[0]);
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
-  matM.factorizeM();
-  //matM.factorizeDeviceM();
+  //matM.factorizeM();
+  matM.factorizeDeviceM();
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -127,7 +129,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[matA.local_bodies.first]);
+  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[matM.local_bodies.first]);
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
@@ -160,8 +162,9 @@ int main(int argc, char* argv[]) {
   }
 
   matA.free_all_comms();
+  //matA.freeSparseMV();
   matM.free_all_comms();
-  //matM.free_gpu_handles();
+  matM.free_gpu_handles();
   MPI_Finalize();
   return 0;
 }

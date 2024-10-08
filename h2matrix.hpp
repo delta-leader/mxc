@@ -1,7 +1,6 @@
 #pragma once
 
 #include <matrix_container.hpp>
-#include <csr_matrix.hpp>
 
 class MatrixAccessor;
 class CSR;
@@ -32,10 +31,10 @@ private:
   std::vector<long long> NA;
   std::vector<long long> NbXoffsets;
   std::vector<long long> NbZoffsets;
-  long long LowerZ;
 
 public:
   long long lenX;
+  long long LowerZ;
 
   std::vector<long long> Dims;
   std::vector<long long> DimsLr;
@@ -51,10 +50,6 @@ public:
   MatrixDataContainer<std::complex<double>> Y;
   MatrixDataContainer<std::complex<double>> Z;
   MatrixDataContainer<std::complex<double>> W;
-
-  CSRMatrix csrU;
-  CSRMatrix csrC;
-  CSRMatrix csrA;
   
   void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
 

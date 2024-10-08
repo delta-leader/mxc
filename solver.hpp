@@ -3,6 +3,7 @@
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
 #include <h2matrix.hpp>
+#include <csr_matrix.hpp>
 #include <kernel.hpp>
 #include <factorize.cuh>
 
@@ -12,6 +13,8 @@ private:
   std::vector<H2Matrix> A;
   std::vector<ColCommMPI> comm;
   std::vector<MPI_Comm> allocedComm;
+
+  std::vector<CsrMatVecDesc_t> A_mv;
 
   cudaStream_t compute_stream;
   cudaStream_t memory_stream;
@@ -30,6 +33,9 @@ public:
   void init_gpu_handles(MPI_Comm world = MPI_COMM_WORLD);
   void move_data_gpu();
 
+  void allocSparseMV();
+  void matVecMulSp(std::complex<double> X[]);
+
   void matVecMul(std::complex<double> X[]);
   void factorizeM();
   void factorizeDeviceM();
@@ -38,6 +44,7 @@ public:
   void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
+  void freeSparseMV();
   void free_gpu_handles();
   static double solveRelErr(long long lenX, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm world = MPI_COMM_WORLD);
 };

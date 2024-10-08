@@ -9,6 +9,7 @@
 #include <thrust/for_each.h>
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/iterator/transform_iterator.h>
+#include <thrust/inner_product.h>
 
 struct swapXY {
   long long M, B;
@@ -147,4 +148,11 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
     auto Aiter = thrust::make_transform_iterator(inc_iter, StridedBlock(rank, rank, bdim, reinterpret_cast<THRUST_CTYPE**>(A.A_ss)));
     thrust::transform(thrust::cuda::par.on(stream), Aiter, Aiter + (rblock * M), ACptr, Aiter, thrust::plus<THRUST_CTYPE>());
   }
+}
+
+int check_info(deviceMatrixDesc_t A, const ColCommMPI& comm) {
+  long long M = comm.lenLocal();
+  thrust::device_ptr<int> info_ptr(A.Info);
+  int sum = thrust::inner_product(info_ptr, info_ptr + M, info_ptr, 0);
+  return 0 < sum;
 }

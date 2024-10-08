@@ -5,6 +5,7 @@
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 
 H2MatrixSolver::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
 }
@@ -57,6 +58,38 @@ void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
   cudaMalloc(reinterpret_cast<void**>(&X_dev), lenX * sizeof(CUDA_CTYPE));
 }
 
+void H2MatrixSolver::allocSparseMV() {
+  A_mv.resize(levels + 1);
+  for (long long l = 0; l <= levels; l++) {
+    long long lenC = comm[l].CRowOffsets.back();
+    long long lenA = comm[l].ARowOffsets.back();
+
+    std::vector<const std::complex<double>*> Uptr(comm[l].lenLocal());
+    std::vector<const std::complex<double>*> Cptr(lenC);
+    std::vector<const std::complex<double>*> Aptr(lenA);
+
+    for (long long i = 0; i < (long long)Uptr.size(); i++)
+      Uptr[i] = A[l].Q[i + comm[l].oLocal()];
+    for (long long i = 0; i < (long long)Cptr.size(); i++)
+      Cptr[i] = A[l].C[i];
+    for (long long i = 0; i < (long long)Aptr.size(); i++)
+      Aptr[i] = A[l].A[i];
+
+    createSpMatrixDesc(&A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), &Uptr[0], &Cptr[0], &Aptr[0], comm[l]);
+  }
+}
+
+void H2MatrixSolver::matVecMulSp(std::complex<double> X[]) {
+  matVecUpwardPass(A_mv[levels], X, comm[levels]);
+  for (long long l = levels - 1; l >= 0; l--)
+   matVecUpwardPass(A_mv[l], A_mv[l + 1].Z, comm[l]);
+
+  for (long long l = 0; l < levels; l++)
+    matVecHorizontalandDownwardPass(A_mv[l], A_mv[l + 1].W);
+
+  matVecLeafHorizontalPass(A_mv[levels], X, comm[levels]);
+}
+
 void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
   if (levels < 0)
     return;
@@ -92,6 +125,10 @@ void H2MatrixSolver::factorizeDeviceM() {
 
   copyDataOutMatrixDesc(desc[0], 1, A[0].A[0], 1, A[0].R[0], compute_stream);
   cudaDeviceSynchronize();
+
+  for (long long l = levels; l >= 0; l--)
+    if (check_info(desc[l], comm[l]))
+      printf("singularity detected at level %lld.\n", l);
 }
 
 void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
@@ -196,6 +233,13 @@ void H2MatrixSolver::free_all_comms() {
   for (MPI_Comm& c : allocedComm)
     MPI_Comm_free(&c);
   allocedComm.clear();
+}
+
+void H2MatrixSolver::freeSparseMV() {
+  for (long long l = 0; l <= levels; l++) {
+    destroySpMatrixDesc(A_mv[l]);
+  }
+  A_mv.clear();
 }
 
 void H2MatrixSolver::free_gpu_handles() {
