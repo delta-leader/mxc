@@ -88,7 +88,7 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   cudaMalloc(reinterpret_cast<void**>(&desc->V_rows), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->V_R), M * sizeof(CUDA_CTYPE*));
 
-  cudaMalloc(reinterpret_cast<void**>(&desc->B_ind), M * sizeof(CUDA_CTYPE*));
+  cudaMalloc(reinterpret_cast<void**>(&desc->B_ind), N * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->B_cols), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->B_R), lenA * sizeof(CUDA_CTYPE*));
 
