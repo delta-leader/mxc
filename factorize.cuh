@@ -19,6 +19,7 @@ public:
   long long bdim = 0;
   long long rank = 0;
   long long diag_offset = 0;
+  long long lower_offset = 0;
   long long reducLen = 0;
 
   CUDA_CTYPE** A_ss = nullptr;
@@ -26,6 +27,7 @@ public:
   CUDA_CTYPE** A_rs = nullptr;
   CUDA_CTYPE** A_rr = nullptr;
   CUDA_CTYPE** A_sr_rows = nullptr;
+  CUDA_CTYPE** A_dst = nullptr;
   const CUDA_CTYPE** A_unsort = nullptr;
 
   CUDA_CTYPE** U_cols = nullptr;
@@ -37,15 +39,12 @@ public:
   CUDA_CTYPE** B_cols = nullptr;
   CUDA_CTYPE** B_R = nullptr;
 
-  CUDA_CTYPE** Y_cols = nullptr;
+  CUDA_CTYPE** X_cols = nullptr;
   CUDA_CTYPE** Y_R_cols = nullptr;
 
   CUDA_CTYPE** AC_X = nullptr;
   CUDA_CTYPE** AC_X_R = nullptr;
   CUDA_CTYPE** AC_ind = nullptr;
-
-  CUDA_CTYPE** L_dst = nullptr;
-  long long* Xlocs = nullptr;
 
   CUDA_CTYPE* Adata = nullptr;
   CUDA_CTYPE* Udata = nullptr;
@@ -80,6 +79,6 @@ void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A
 
 void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
 void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
-void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* Y, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
 
 int check_info(deviceMatrixDesc_t A, const ColCommMPI& comm);

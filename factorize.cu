@@ -83,7 +83,7 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
   
   if (0 < lenL) {
     long long len = Al.rank * Al.rank * lenL;
-    thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + len, copyFunc(Al.rank, Al.rank, Al.A_unsort, Al.bdim, A.L_dst, bdim));
+    thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + len, copyFunc(Al.rank, Al.rank, Al.A_unsort, Al.bdim, A.A_dst, bdim));
   }
 
   auto dup = nccl_comms.find(comm.DupComm);

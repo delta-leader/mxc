@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
   std::vector<Cell> cell(ncells);
 
   //mesh_sphere(&body[0], Nbody, std::sqrt(Nbody / (4 * M_PI)));
-  uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 1999);
+  uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
 
@@ -123,8 +123,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  matM.solvePrecondition(&X1[0]);
-  //matM.solvePreconditionDevice(&X1[0]);
+  //matM.solvePrecondition(&X1[0]);
+  matM.solvePreconditionDevice(&X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;

@@ -50,6 +50,7 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   desc->bdim = bdim;
   desc->rank = rank;
   desc->diag_offset = comm.oLocal();
+  desc->lower_offset = (comm.LowerX + lower.diag_offset) * lower.rank;
   long long lenA = comm.ARowOffsets.back();
   long long M = comm.lenLocal();
   long long N = comm.lenNeighbors();
@@ -66,8 +67,7 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   thrust::inclusive_scan(ARows.begin(), ARows.end(), ARows.begin());
   thrust::exclusive_scan_by_key(ARows.begin(), ARows.end(), one_iter, ADistCols.begin(), 0ll);
 
-  keysDLU key(desc->diag_offset, M, N);
-  thrust::transform(ARows.begin(), ARows.end(), ACols.begin(), keys.begin(), key);
+  thrust::transform(ARows.begin(), ARows.end(), ACols.begin(), keys.begin(), keysDLU(desc->diag_offset, M, N));
   thrust::sequence(AInd.begin(), AInd.end(), 0);
   thrust::sort_by_key(keys.begin(), keys.end(), thrust::make_zip_iterator(ARows.begin(), ACols.begin(), ADistCols.begin(), AInd.begin()));
 
@@ -81,6 +81,7 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   cudaMalloc(reinterpret_cast<void**>(&desc->A_rs), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->A_rr), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->A_sr_rows), lenA * sizeof(CUDA_CTYPE*));
+  cudaMalloc(reinterpret_cast<void**>(&desc->A_dst), lenLA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->A_unsort), lenA * sizeof(CUDA_CTYPE*));
 
   cudaMalloc(reinterpret_cast<void**>(&desc->U_cols), lenA * sizeof(CUDA_CTYPE*));
@@ -92,15 +93,12 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   cudaMalloc(reinterpret_cast<void**>(&desc->B_cols), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->B_R), lenA * sizeof(CUDA_CTYPE*));
 
-  cudaMalloc(reinterpret_cast<void**>(&desc->Y_cols), lenA * sizeof(CUDA_CTYPE*));
+  cudaMalloc(reinterpret_cast<void**>(&desc->X_cols), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->Y_R_cols), lenA * sizeof(CUDA_CTYPE*));
 
   cudaMalloc(reinterpret_cast<void**>(&desc->AC_X), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->AC_X_R), lenA * sizeof(CUDA_CTYPE*));
   cudaMalloc(reinterpret_cast<void**>(&desc->AC_ind), lenA * sizeof(CUDA_CTYPE*));
-
-  cudaMalloc(reinterpret_cast<void**>(&desc->L_dst), lenLA * sizeof(CUDA_CTYPE*));
-  cudaMalloc(reinterpret_cast<void**>(&desc->Xlocs), M * bdim * sizeof(long long));
 
   long long block = bdim * bdim;
   long long rblock = rank * rank;
@@ -126,6 +124,7 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   thrust::transform(AInd.begin(), AInd.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->A_rs), setDevicePtr(&(desc->Adata)[offset_RS], block));
   thrust::transform(AInd.begin(), AInd.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->A_rr), setDevicePtr(&(desc->Adata)[offset_RR], block));
   thrust::transform(rwise_diag_iter, rwise_diag_iter + lenA, thrust::device_ptr<CUDA_CTYPE*>(desc->A_sr_rows), setDevicePtr(&(desc->Adata)[offset_SR], block));
+  thrust::transform(LInd.begin(), LInd.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->A_dst), setDevicePtr(desc->Adata, block, bdim * lower.rank, lower.rank));
   thrust::transform(inc_iter, inc_iter + lenA, thrust::device_ptr<const CUDA_CTYPE*>(desc->A_unsort), setDevicePtr(desc->Adata, block));
 
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->U_cols), setDevicePtr(desc->Udata, block));
@@ -137,16 +136,13 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->B_cols), setDevicePtr(desc->Bdata, block));
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->B_R), setDevicePtr(&(desc->Bdata)[offset_SR], block));
 
-  thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->Y_cols), setDevicePtr(desc->Ydata, bdim));
+  thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->X_cols), setDevicePtr(desc->Xdata, rank));
   thrust::transform(ACols.begin(), ACols.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->Y_R_cols), setDevicePtr(&(desc->Ydata)[offset_RS], bdim));
 
-  thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_X), setDevicePtr(desc->ACdata, M * bdim, bdim));
+  thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_X), setDevicePtr(desc->ACdata, M * rank, rank));
   thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_X_R), setDevicePtr(&(desc->ACdata)[offset_RS], M * bdim, bdim));
   thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_ind), setDevicePtr(desc->ACdata, M * rblock, rblock));
   
-  long long startLX = (lower.diag_offset + comm.LowerX) * lower.bdim;
-  thrust::transform(LInd.begin(), LInd.end(), thrust::device_ptr<CUDA_CTYPE*>(desc->L_dst), setDevicePtr(desc->Adata, block, bdim * lower.rank, lower.rank));
-  thrust::transform(inc_iter, inc_iter + (M * bdim), thrust::device_ptr<long long>(desc->Xlocs), StridedSequence(startLX, std::max(lower.rank, 1ll), std::max(lower.bdim, 1ll)));
 }
 
 void destroyMatrixDesc(deviceMatrixDesc_t desc) {
@@ -155,6 +151,7 @@ void destroyMatrixDesc(deviceMatrixDesc_t desc) {
   cudaFree(desc.A_rs);
   cudaFree(desc.A_rr);
   cudaFree(desc.A_sr_rows);
+  cudaFree(desc.A_dst);
   cudaFree(desc.A_unsort);
 
   cudaFree(desc.U_cols);
@@ -167,13 +164,10 @@ void destroyMatrixDesc(deviceMatrixDesc_t desc) {
   cudaFree(desc.B_R);
   cudaFree(desc.AC_ind);
 
-  cudaFree(desc.Y_cols);
+  cudaFree(desc.X_cols);
   cudaFree(desc.Y_R_cols);
   cudaFree(desc.AC_X);
   cudaFree(desc.AC_X_R);
-
-  cudaFree(desc.L_dst);
-  cudaFree(desc.Xlocs);
 
   cudaFree(desc.Adata);
   cudaFree(desc.Udata);

@@ -156,7 +156,7 @@ void H2MatrixSolver::solvePreconditionDevice(std::complex<double> X[]) {
     compute_forward_substitution(desc[l], desc[l + 1].Xdata, compute_stream, cublasH, comm[l], nccl_comms);
 
   for (long long l = 0; l < levels; l++)
-    compute_backward_substitution(desc[l], desc[l + 1].Ydata, compute_stream, cublasH, comm[l], nccl_comms);
+    compute_backward_substitution(desc[l], desc[l + 1].Xdata, compute_stream, cublasH, comm[l], nccl_comms);
   compute_backward_substitution(desc[levels], X_dev, compute_stream, cublasH, comm[levels], nccl_comms);
   
   cudaMemcpy(X, X_dev, lenX * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
