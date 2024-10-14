@@ -54,6 +54,7 @@ public:
   CUDA_CTYPE* ACdata = nullptr;
   CUDA_CTYPE* Xdata = nullptr;
   CUDA_CTYPE* Ydata = nullptr;
+  CUDA_CTYPE* ONEdata = nullptr;
   
   int* Ipiv = nullptr;
   int* Info = nullptr;

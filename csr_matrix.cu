@@ -1,12 +1,11 @@
 
-#include <csr_matrix.hpp>
+#include <csr_matrix.cuh>
 #include <comm-mpi.hpp>
 
 #include <mkl_spblas.h>
 #include <algorithm>
 #include <numeric>
 #include <tuple>
-#include <iostream>
 
 void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Values[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double>* DataPtrs[], const long long LDs[]) {
   long long NNZ = 0;

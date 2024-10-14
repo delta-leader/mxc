@@ -41,15 +41,7 @@ void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cud
   if (0 < rank && 0 < rdim) {
     cudaMemsetAsync(A.ACdata, 0, reduc_len * M * rank * sizeof(CUDA_CTYPE), stream);
     cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, 1, rdim, &minus_one, A.A_sr, bdim, A.Y_R_cols, bdim, &zero, A.AC_X, rank, lenA);
-
-    while (1 < reduc_len) {
-      long long len = reduc_len * rank * M;
-      reduc_len = (reduc_len + 1) / 2;
-      long long tail_start = reduc_len * rank * M;
-      long long tail_len = len - tail_start;
-      cublasZaxpy(cublasH, tail_len, &one, &(A.ACdata)[tail_start], 1, A.ACdata, 1);
-    }
-    cublasZaxpy(cublasH, M * rank, &one, A.ACdata, 1, &(A.Xdata)[D * rank], 1);
+    cublasZgemv(cublasH, CUBLAS_OP_N, M * rank, reduc_len, &one, A.ACdata, M * rank, A.ONEdata, 1, &one, &(A.Xdata)[D * rank], 1);
   }
 
   if (1 < N) {
@@ -105,15 +97,7 @@ void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* X, cudaStre
   if (0 < rank && 0 < rdim) {
     cudaMemsetAsync(A.ACdata, 0, reduc_len * M * bdim * sizeof(CUDA_CTYPE), stream);
     cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, 1, rank, &minus_one, A.A_rs, bdim, A.X_cols, bdim, &zero, A.AC_X_R, bdim, lenA);
-
-    while (1 < reduc_len) {
-      long long len = reduc_len * bdim * M;
-      reduc_len = (reduc_len + 1) / 2;
-      long long tail_start = reduc_len * bdim * M;
-      long long tail_len = len - tail_start;
-      cublasZaxpy(cublasH, tail_len, &one, &(A.ACdata)[tail_start], 1, A.ACdata, 1);
-    }
-    cublasZaxpy(cublasH, M * bdim, &one, A.ACdata, 1, &(A.Ydata)[D * bdim], 1);
+    cublasZgemv(cublasH, CUBLAS_OP_N, M * bdim, reduc_len, &one, A.ACdata, M * bdim, A.ONEdata, 1, &one, &(A.Ydata)[D * bdim], 1);
   }
 
   cublasZgemmStridedBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_C, 1, bdim, bdim, &one, &(A.Ydata)[D * bdim], 1, bdim, &(A.Udata)[D * block], bdim, block, &zero, &X[A.lower_offset], 1, bdim, M);

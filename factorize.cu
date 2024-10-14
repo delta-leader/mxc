@@ -135,16 +135,9 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
       cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, rdim, &one, &(A.B_R)[i], bdim, &(A.A_sr)[i], bdim, &zero, A.B_ind, bdim, len);
       cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &(A.A_sr)[i], bdim, A.B_ind, bdim, &zero, &A.AC_ind[i], rank, len);
     }
+    cublasZgemvStridedBatched(cublasH, CUBLAS_OP_N, M * rank, reduc_len, &one, A.ACdata, M * rblock, M * rank, A.ONEdata, 1, 0, &zero, A.Bdata, 1, M * rank, rank);
 
-    while (1 < reduc_len) {
-      long long len = reduc_len * rblock * M;
-      reduc_len = (reduc_len + 1) / 2;
-      long long tail_start = reduc_len * rblock * M;
-      long long tail_len = len - tail_start;
-      cublasZaxpy(cublasH, tail_len, &one, &(A.ACdata)[tail_start], 1, A.ACdata, 1);
-    }
-
-    thrust::device_ptr<THRUST_CTYPE> ACptr(reinterpret_cast<THRUST_CTYPE*>(A.ACdata));
+    thrust::device_ptr<THRUST_CTYPE> ACptr(reinterpret_cast<THRUST_CTYPE*>(A.Bdata));
     auto Aiter = thrust::make_transform_iterator(inc_iter, StridedBlock(rank, rank, bdim, reinterpret_cast<THRUST_CTYPE**>(A.A_ss)));
     thrust::transform(thrust::cuda::par.on(stream), Aiter, Aiter + (rblock * M), ACptr, Aiter, thrust::plus<THRUST_CTYPE>());
   }

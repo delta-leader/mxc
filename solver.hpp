@@ -3,7 +3,7 @@
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
 #include <h2matrix.hpp>
-#include <csr_matrix.hpp>
+#include <csr_matrix.cuh>
 #include <kernel.hpp>
 #include <factorize.cuh>
 

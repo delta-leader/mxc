@@ -108,10 +108,11 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   cudaMalloc(reinterpret_cast<void**>(&desc->Udata), N * block * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Vdata), M * block * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Bdata), N * block * sizeof(CUDA_CTYPE));
-  cudaMalloc(reinterpret_cast<void**>(&desc->ACdata), desc->reducLen * acc_len * sizeof(CUDA_CTYPE));
+  cudaMalloc(reinterpret_cast<void**>(&desc->ACdata), acc_len * sizeof(CUDA_CTYPE));
 
   cudaMalloc(reinterpret_cast<void**>(&desc->Xdata), N * bdim * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Ydata), N * bdim * sizeof(CUDA_CTYPE));
+  cudaMalloc(reinterpret_cast<void**>(&desc->ONEdata), desc->reducLen * sizeof(CUDA_CTYPE));
   cudaMalloc(reinterpret_cast<void**>(&desc->Ipiv), M * bdim * sizeof(int));
   cudaMalloc(reinterpret_cast<void**>(&desc->Info), M * sizeof(int));
 
@@ -143,6 +144,7 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_X_R), setDevicePtr(&(desc->ACdata)[offset_RS], M * bdim, bdim));
   thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_ind), setDevicePtr(desc->ACdata, M * rblock, rblock));
   
+  thrust::fill(thrust::device_ptr<CUDA_CTYPE>(desc->ONEdata), thrust::device_ptr<CUDA_CTYPE>(&(desc->ONEdata)[desc->reducLen]), make_cuDoubleComplex(1., 0.));
 }
 
 void destroyMatrixDesc(deviceMatrixDesc_t desc) {
@@ -177,6 +179,7 @@ void destroyMatrixDesc(deviceMatrixDesc_t desc) {
 
   cudaFree(desc.Xdata);
   cudaFree(desc.Ydata);
+  cudaFree(desc.ONEdata);
   cudaFree(desc.Ipiv);
   cudaFree(desc.Info);
 }
