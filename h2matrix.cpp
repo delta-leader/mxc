@@ -280,6 +280,10 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
       std::transform(CCols.begin() + CRows[i], CCols.begin() + CRows[i + 1], Csizes.begin() + CRows[i],
         [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
     C.alloc(CRows[nodes], Csizes.data());
+
+    std::vector<long long> Usizes(nodes);
+    std::transform(&Dims[ibegin], &Dims[ibegin + nodes], &DimsLr[ibegin], Usizes.begin(), std::multiplies<long long>());
+    U.alloc(nodes, Usizes.data());
     Z.alloc(xlen, DimsLr.data());
     W.alloc(xlen, DimsLr.data());
 
@@ -287,6 +291,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
       long long y = i + ibegin;
       long long M = DimsLr[y];
       Matrix_t Ry(R[y], M, M, Stride_t(Dims[y], 1));
+      Eigen::Map<Eigen::MatrixXcd>(U[i], Dims[y], M) = Eigen::Map<Eigen::MatrixXcd>(Q[y], Dims[y], M);
 
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         long long x = CCols[ij];

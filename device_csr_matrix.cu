@@ -1,5 +1,5 @@
 
-#include <csr_matrix.cuh>
+#include <factorize.cuh>
 #include <comm-mpi.hpp>
 
 #include <mkl_spblas.h>
@@ -7,7 +7,7 @@
 #include <numeric>
 #include <tuple>
 
-void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Values[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double>* DataPtrs[], const long long LDs[]) {
+void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Values[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double> data[]) {
   long long NNZ = 0;
   for (long long i = 0; i < Mb; i++) {
     long long rows = RowDims[i];
@@ -24,21 +24,20 @@ void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Val
 
   for (long long i = 0; i < Mb; i++) {
     long long m = RowDims[i];
-    long long ld = LDs == nullptr ? m : LDs[i];
     long long ybegin = y_offsets[i];
 
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
       long long j = ACols[ij];
       long long n = ColDims[j];
       long long xbegin = x_offsets[j];
-      const std::complex<double>* dp = DataPtrs[ij];
 
       for (long long x = 0; x < n; x++)
         for (long long y = 0; y < m; y++)
-          A.emplace_back(ybegin + y, xbegin + x, dp[y + x * ld]);
+          A.emplace_back(ybegin + y, xbegin + x, std::complex<double>(0., 0.));
     }
   }
 
+  std::transform(data, &data[NNZ], A.begin(), A.begin(), [](std::complex<double> c, const auto& a) { return std::make_tuple(std::get<0>(a), std::get<1>(a), c); });
   std::sort(A.begin(), A.end(), [](const auto& a, const auto& b) { 
     return std::get<0>(a) == std::get<0>(b) ? std::get<1>(a) < std::get<1>(b) : std::get<0>(a) < std::get<0>(b); });
 
@@ -50,7 +49,7 @@ void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Val
   std::transform(A.begin(), A.end(), Values, [](const auto& a) { return std::get<2>(a); });
 }
 
-void createSpMatrixDesc(CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double>* U[], const std::complex<double>* C[], const std::complex<double>* A[], const ColCommMPI& comm) {
+void createSpMatrixDesc(CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   long long xlen = comm.lenNeighbors();

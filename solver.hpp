@@ -3,7 +3,6 @@
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
 #include <h2matrix.hpp>
-#include <csr_matrix.cuh>
 #include <kernel.hpp>
 #include <factorize.cuh>
 
@@ -19,6 +18,8 @@ private:
   cudaStream_t compute_stream;
   cudaStream_t memory_stream;
   cublasHandle_t cublasH;
+  cusparseHandle_t cusparseH;
+  cusolverDnHandle_t cusolverH;
   std::map<const MPI_Comm, ncclComm_t> nccl_comms;
   std::vector<deviceMatrixDesc_t> desc;
   CUDA_CTYPE* X_dev;

@@ -5,19 +5,14 @@
 #include <thrust/device_vector.h>
 #include <thrust/transform.h>
 #include <thrust/tuple.h>
-#include <thrust/sort.h>
+#include <thrust/partition.h>
 #include <thrust/iterator/constant_iterator.h>
 
-struct keysDLU {
-  long long D, M, N, U;
-  keysDLU(long long D, long long M, long long N) : D(D), M(M), N(N), U(2 * M * N) {}
-  __host__ __device__ long long operator()(long long y, long long x) const {
-    long long diff = D + y - x;
-    long long pred = (diff != 0) + (diff < 0);
-    return (pred * M + y) * N + x;
-  }
-  __host__ __device__ bool operator()(long long i) const {
-    return U <= i;
+struct keysD {
+  long long D;
+  keysD(long long D) : D(D) {}
+  __host__ __device__ bool operator()(thrust::tuple<long long, long long, long long, long long> x) const {
+    return D + thrust::get<0>(x) == thrust::get<1>(x);
   }
 };
 
@@ -37,15 +32,6 @@ template<class T> struct setDevicePtr {
   }
 };
 
-struct StridedSequence {
-  long long begin, M, LD;
-  StridedSequence(long long begin, long long M, long long LD) : begin(begin), M(M), LD(LD) {}
-  __host__ __device__ long long operator()(long long i) const {
-    long long x = i / M; long long y = i - x * M;
-    return begin + y + x * LD;
-  }
-};
-
 void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm) {
   desc->bdim = bdim;
   desc->rank = rank;
@@ -60,16 +46,15 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   thrust::device_vector<long long> ACols(comm.AColumns.begin(), comm.AColumns.end());
   thrust::device_vector<long long> ADistCols(lenA);
   thrust::device_vector<long long> AInd(lenA);
-  thrust::device_vector<long long> keys(lenA);
   
   auto one_iter = thrust::make_constant_iterator(1ll);
+  auto A_iter = thrust::make_zip_iterator(ARows.begin(), ACols.begin(), ADistCols.begin(), AInd.begin());
   thrust::scatter(one_iter, one_iter + (M - 1), ARowOffset.begin() + 1, ARows.begin()); 
   thrust::inclusive_scan(ARows.begin(), ARows.end(), ARows.begin());
   thrust::exclusive_scan_by_key(ARows.begin(), ARows.end(), one_iter, ADistCols.begin(), 0ll);
 
-  thrust::transform(ARows.begin(), ARows.end(), ACols.begin(), keys.begin(), keysDLU(desc->diag_offset, M, N));
   thrust::sequence(AInd.begin(), AInd.end(), 0);
-  thrust::sort_by_key(keys.begin(), keys.end(), thrust::make_zip_iterator(ARows.begin(), ACols.begin(), ADistCols.begin(), AInd.begin()));
+  thrust::stable_partition(A_iter, A_iter + lenA, keysD(desc->diag_offset));
 
   desc->reducLen = 1ll + thrust::reduce(ADistCols.begin(), ADistCols.end(), 0ll, thrust::maximum<long long>());
   long long lenLA = comm.LowerIndA.size();

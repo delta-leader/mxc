@@ -1,8 +1,7 @@
 
 #include <factorize.cuh>
-#include <comm-mpi.hpp>
 
-void initGpuEnvs(cudaStream_t* memory_stream, cudaStream_t* compute_stream, cublasHandle_t* cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world) {
+void initGpuEnvs(cudaStream_t* memory_stream, cudaStream_t* compute_stream, cublasHandle_t* cublasH, cusparseHandle_t* cusparseH, cusolverDnHandle_t* cusolverH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world) {
   int mpi_rank, num_device;
   if (cudaGetDeviceCount(&num_device) != cudaSuccess)
     return;
@@ -13,6 +12,10 @@ void initGpuEnvs(cudaStream_t* memory_stream, cudaStream_t* compute_stream, cubl
   cudaStreamCreate(compute_stream);
   cublasCreate(cublasH);
   cublasSetStream(*cublasH, *compute_stream);
+  cusparseCreate(cusparseH);
+  cusparseSetStream(*cusparseH, *compute_stream);
+  cusolverDnCreate(cusolverH);
+  cusolverDnSetStream(*cusolverH, *compute_stream);
 
   long long len = comms.size();
   std::vector<ncclUniqueId> ids(len);
@@ -34,11 +37,13 @@ void initGpuEnvs(cudaStream_t* memory_stream, cudaStream_t* compute_stream, cubl
     nccl_comms.insert(std::make_pair(comms[i], nccl_alloc[i]));
 }
 
-void finalizeGpuEnvs(cudaStream_t memory_stream, cudaStream_t compute_stream, cublasHandle_t cublasH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
+void finalizeGpuEnvs(cudaStream_t memory_stream, cudaStream_t compute_stream, cublasHandle_t cublasH, cusparseHandle_t cusparseH, cusolverDnHandle_t cusolverH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
   cudaDeviceSynchronize();
   cudaStreamDestroy(memory_stream);
   cudaStreamDestroy(compute_stream);
   cublasDestroy(cublasH);
+  cusparseDestroy(cusparseH);
+  cusolverDnDestroy(cusolverH);
   for (auto& c : nccl_comms)
     ncclCommDestroy(c.second);
   nccl_comms.clear();

@@ -45,6 +45,7 @@ public:
   MatrixDataContainer<std::complex<double>> R;
   MatrixDataContainer<std::complex<double>> A;
   MatrixDataContainer<std::complex<double>> C;
+  MatrixDataContainer<std::complex<double>> U;
 
   MatrixDataContainer<std::complex<double>> X;
   MatrixDataContainer<std::complex<double>> Y;

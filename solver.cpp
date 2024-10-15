@@ -41,7 +41,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
 }
 
 void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
-  initGpuEnvs(&memory_stream, &compute_stream, &cublasH, nccl_comms, allocedComm, world);
+  initGpuEnvs(&memory_stream, &compute_stream, &cublasH, &cusparseH, &cusolverH, nccl_comms, allocedComm, world);
   
   desc.resize(levels + 1);
   long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
@@ -61,21 +61,7 @@ void H2MatrixSolver::init_gpu_handles(MPI_Comm world) {
 void H2MatrixSolver::allocSparseMV() {
   A_mv.resize(levels + 1);
   for (long long l = 0; l <= levels; l++) {
-    long long lenC = comm[l].CRowOffsets.back();
-    long long lenA = comm[l].ARowOffsets.back();
-
-    std::vector<const std::complex<double>*> Uptr(comm[l].lenLocal());
-    std::vector<const std::complex<double>*> Cptr(lenC);
-    std::vector<const std::complex<double>*> Aptr(lenA);
-
-    for (long long i = 0; i < (long long)Uptr.size(); i++)
-      Uptr[i] = A[l].Q[i + comm[l].oLocal()];
-    for (long long i = 0; i < (long long)Cptr.size(); i++)
-      Cptr[i] = A[l].C[i];
-    for (long long i = 0; i < (long long)Aptr.size(); i++)
-      Aptr[i] = A[l].A[i];
-
-    createSpMatrixDesc(&A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), &Uptr[0], &Cptr[0], &Aptr[0], comm[l]);
+    createSpMatrixDesc(&A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], comm[l]);
   }
 }
 
@@ -243,7 +229,7 @@ void H2MatrixSolver::freeSparseMV() {
 }
 
 void H2MatrixSolver::free_gpu_handles() {
-  finalizeGpuEnvs(memory_stream, compute_stream, cublasH, nccl_comms);
+  finalizeGpuEnvs(memory_stream, compute_stream, cublasH, cusparseH, cusolverH, nccl_comms);
   for (long long l = levels; l >= 0; l--) {
     destroyMatrixDesc(desc[l]);
   }

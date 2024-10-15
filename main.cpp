@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
   long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 256;
-  long long rank = argc > 4 ? std::atoll(argv[4]) : 100;
+  long long rank = argc > 4 ? std::atoll(argv[4]) : 50;
   long long leveled_rank =  argc > 5 ? std::atoll(argv[5]) : 0;
   double epi = argc > 6 ? std::atof(argv[6]) : 1e-10;
   std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
-  //matA.allocSparseMV();
+  matA.allocSparseMV();
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matA.matVecMul(&X1[0]);
+  matA.matVecMulSp(&X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -162,7 +162,7 @@ int main(int argc, char* argv[]) {
   }
 
   matA.free_all_comms();
-  //matA.freeSparseMV();
+  matA.freeSparseMV();
   matM.free_all_comms();
   matM.free_gpu_handles();
   MPI_Finalize();
