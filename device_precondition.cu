@@ -2,9 +2,12 @@
 #include <factorize.cuh>
 #include <comm-mpi.hpp>
 
+#include <numeric>
+#include <thrust/complex.h>
 #include <thrust/device_vector.h>
-#include <thrust/transform.h>
 #include <thrust/tuple.h>
+#include <thrust/transform.h>
+#include <thrust/gather.h>
 #include <thrust/partition.h>
 #include <thrust/iterator/constant_iterator.h>
 
@@ -167,6 +170,91 @@ void destroyMatrixDesc(deviceMatrixDesc_t desc) {
   cudaFree(desc.ONEdata);
   cudaFree(desc.Ipiv);
   cudaFree(desc.Info);
+}
+
+struct genXY {
+  const long long* M, *A, *Y, *X;
+  genXY(const long long* M, const long long* A, const long long* Y, const long long* X) : M(M), A(A), Y(Y), X(X) {}
+  __host__ __device__ thrust::tuple<long long, long long> operator()(long long i, thrust::tuple<long long, long long> c) const {
+    long long b = thrust::get<0>(c);
+    long long m = M[b]; long long id = i - A[b];
+    long long x = id / m; long long y = id - x * m;
+    return thrust::make_tuple(Y[b] + y, X[b] + x);
+  }
+};
+
+struct cmpXY {
+  __host__ __device__ bool operator()(const thrust::tuple<long long, long long, thrust::complex<double>>& l, const thrust::tuple<long long, long long, thrust::complex<double>>& r) const {
+    return thrust::get<0>(l) == thrust::get<0>(r) ? thrust::get<1>(l) < thrust::get<1>(r) : thrust::get<0>(l) < thrust::get<0>(r);
+  }
+};
+
+long long computeCooNNZ(long long Mb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[]) {
+  return std::transform_reduce(ARows, &ARows[Mb], RowDims, 0ll, std::plus<long long>(), [&](const long long& begin, long long rows) { 
+    return rows * std::transform_reduce(&ACols[begin], &ACols[(&begin)[1]], 0ll, std::plus<long long>(), [&](long long col) { return ColDims[col]; }); });
+}
+
+void genCsrEntries(long long CsrM, long long devRowIndx[], long long devColIndx[], std::complex<double> devVals[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[]) {
+  long long lenA = ARows[Mb];
+  thrust::device_vector<long long> ARowOffset(ARows, &ARows[Mb + 1]);
+  thrust::device_vector<long long> ARowIndx(lenA, 0ll);
+  thrust::device_vector<long long> AColIndx(ACols, &ACols[lenA]);
+  thrust::device_vector<long long> AOffsets(lenA + 1, 0ll);
+
+  thrust::device_vector<long long> devRowOffsets(Mb + 1);
+  thrust::device_vector<long long> devColOffsets(Nb + 1);
+  thrust::device_vector<long long> devADimM(lenA);
+  thrust::device_vector<long long> devAIndY(lenA);
+  thrust::device_vector<long long> devAIndX(lenA);
+
+  long long keys_len = std::max(CsrM, std::max(lenA, Mb));
+  thrust::device_vector<long long> keys(keys_len);
+  thrust::device_vector<long long> counts(keys_len);
+  
+  auto one_iter = thrust::make_constant_iterator(1ll);
+  auto ydim_iter = thrust::make_permutation_iterator(devRowOffsets.begin(), ARowIndx.begin());
+  auto xdim_iter = thrust::make_permutation_iterator(devColOffsets.begin(), AColIndx.begin());
+
+  thrust::copy(RowDims, &RowDims[Mb], devRowOffsets.begin());
+  thrust::copy(ColDims, &ColDims[Nb], devColOffsets.begin());
+
+  auto counts_end = thrust::reduce_by_key(ARowOffset.begin() + 1, ARowOffset.begin() + Mb, one_iter, keys.begin(), counts.begin()).second;
+  thrust::scatter(counts.begin(), counts_end, keys.begin(), ARowIndx.begin()); 
+  thrust::inclusive_scan(ARowIndx.begin(), ARowIndx.end(), ARowIndx.begin());
+  thrust::transform(ydim_iter, ydim_iter + lenA, xdim_iter, AOffsets.begin(), thrust::multiplies<long long>());
+  thrust::exclusive_scan(AOffsets.begin(), AOffsets.end(), AOffsets.begin(), 0ll);
+
+  thrust::copy(ydim_iter, ydim_iter + lenA, devADimM.begin());
+  thrust::exclusive_scan(devRowOffsets.begin(), devRowOffsets.end(), devRowOffsets.begin(), 0ll);
+  thrust::exclusive_scan(devColOffsets.begin(), devColOffsets.end(), devColOffsets.begin(), 0ll);
+  thrust::copy(ydim_iter, ydim_iter + lenA, devAIndY.begin());
+  thrust::copy(xdim_iter, xdim_iter + lenA, devAIndX.begin());
+
+  long long NNZ = AOffsets.back();
+  thrust::device_vector<long long> Rows(NNZ, 0ll);
+  thrust::device_ptr<long long> RowsPtr(devRowIndx);
+  thrust::device_ptr<long long> ColsPtr(devColIndx);
+  thrust::device_ptr<thrust::complex<double>> Vals(reinterpret_cast<thrust::complex<double>*>(devVals));
+
+  auto ind_iter = thrust::make_zip_iterator(Rows.begin(), ColsPtr);
+  auto inc_iter = thrust::make_counting_iterator(0ll);
+  auto sort_iter = thrust::make_zip_iterator(Rows.begin(), ColsPtr, Vals);
+
+  const long long* Mptr = thrust::raw_pointer_cast(devADimM.data());
+  const long long* Aptr = thrust::raw_pointer_cast(AOffsets.data());
+  const long long* Yptr = thrust::raw_pointer_cast(devAIndY.data());
+  const long long* Xptr = thrust::raw_pointer_cast(devAIndX.data());
+
+  counts_end = thrust::reduce_by_key(AOffsets.begin() + 1, AOffsets.begin() + lenA, one_iter, keys.begin(), counts.begin()).second;
+  thrust::scatter(counts.begin(), counts_end, keys.begin(), Rows.begin());
+  thrust::inclusive_scan(Rows.begin(), Rows.end(), Rows.begin());
+  thrust::transform(inc_iter, inc_iter + NNZ, ind_iter, ind_iter, genXY(Mptr, Aptr, Yptr, Xptr));
+  thrust::sort(sort_iter, sort_iter + NNZ, cmpXY());
+
+  counts_end = thrust::reduce_by_key(Rows.begin(), Rows.end(), one_iter, keys.begin(), counts.begin()).second;
+  thrust::fill(RowsPtr, &RowsPtr[CsrM + 1], 0ll);
+  thrust::scatter(counts.begin(), counts_end, keys.begin(), RowsPtr);
+  thrust::exclusive_scan(RowsPtr, &RowsPtr[CsrM + 1], RowsPtr, 0ll);
 }
 
 void createHostMatrix(hostMatrix_t* h, long long bdim, long long lenA) {

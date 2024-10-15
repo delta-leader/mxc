@@ -109,6 +109,9 @@ void finalizeGpuEnvs(cudaStream_t memory_stream, cudaStream_t compute_stream, cu
 void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm);
 void destroyMatrixDesc(deviceMatrixDesc_t desc);
 
+long long computeCooNNZ(long long Mb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[]);
+void genCsrEntries(long long csrM, long long devRowIndx[], long long devColIndx[], std::complex<double> devVals[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[]);
+
 void createHostMatrix(hostMatrix_t* h, long long bdim, long long lenA);
 void destroyHostMatrix(hostMatrix_t h);
 
@@ -120,8 +123,6 @@ void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cud
 void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
 
 int check_info(deviceMatrixDesc_t A, const ColCommMPI& comm);
-
-void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Values[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double> data[]);
 
 void createSpMatrixDesc(CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm);
 void destroySpMatrixDesc(CsrMatVecDesc_t desc);

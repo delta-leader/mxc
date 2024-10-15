@@ -6,14 +6,28 @@
 #include <algorithm>
 #include <numeric>
 #include <tuple>
+#include <thrust/device_vector.h>
+#include <iostream>
 
 void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Values[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double> data[]) {
-  long long NNZ = 0;
-  for (long long i = 0; i < Mb; i++) {
-    long long rows = RowDims[i];
-    NNZ += std::transform_reduce(&ACols[ARows[i]], &ACols[ARows[i + 1]], 0ll, std::plus<long long>(), [&](long long col) { return rows * ColDims[col]; });
-  }
+  long long CsrM = std::reduce(RowDims, &RowDims[Mb]);
+  long long NNZ = computeCooNNZ(Mb, RowDims, ColDims, ARows, ACols);
 
+  thrust::device_vector<long long> row(CsrM + 1), col(NNZ);
+  thrust::device_vector<std::complex<double>> vals(data, &data[NNZ]);
+  std::vector<long long> row_h(CsrM + 1), col_h(NNZ);
+  genCsrEntries(CsrM, thrust::raw_pointer_cast(row.data()), thrust::raw_pointer_cast(col.data()), thrust::raw_pointer_cast(vals.data()), Mb, Nb, RowDims, ColDims, ARows, ACols);
+
+  thrust::copy(row.begin(), row.end(), row_h.begin());
+  thrust::copy(col.begin(), col.end(), col_h.begin());
+  thrust::copy(vals.begin(), vals.end(), Values);
+
+  std::transform(row_h.begin(), row_h.end(), RowOffsets, [](long long a) { return (int)a; });
+  std::transform(col_h.begin(), col_h.end(), Columns, [](long long a) { return (int)a; });
+}
+
+/*void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Values[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double> data[]) {
+  long long NNZ = computeCooNNZ(Mb, RowDims, ColDims, ARows, ACols);
   std::vector<std::tuple<int, int, std::complex<double>>> A;
   A.reserve(NNZ);
 
@@ -47,7 +61,15 @@ void convertCsrEntries(int RowOffsets[], int Columns[], std::complex<double> Val
     RowOffsets[i] = std::distance(A.begin(), std::find_if(A.begin() + RowOffsets[i - 1], A.end(), [=](const auto& a) { return i <= std::get<0>(a); }));
   std::transform(A.begin(), A.end(), Columns, [](const auto& a) { return std::get<1>(a); });
   std::transform(A.begin(), A.end(), Values, [](const auto& a) { return std::get<2>(a); });
-}
+
+  std::vector<int> test_r(M + 1), test_c(NNZ);
+  std::vector<std::complex<double>> test_v(NNZ);
+  convertCsrEntries_test(test_r.data(), test_c.data(), test_v.data(), Mb, Nb, RowDims, ColDims, ARows, ACols, data);
+  
+  for (long long i = 0; i <= M; i++)
+    if (test_r[i] != RowOffsets[i])
+      std::cout << i << ", " << test_r[i] << ", " << RowOffsets[i] << std::endl;
+}*/
 
 void createSpMatrixDesc(CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
