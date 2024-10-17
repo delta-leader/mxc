@@ -9,8 +9,7 @@
 #define CUDA_CTYPE cuDoubleComplex
 
 class ColCommMPI;
-class deviceMatrixDesc_t {
-public:
+struct deviceMatrixDesc_t {
   long long bdim = 0;
   long long rank = 0;
   long long diag_offset = 0;
@@ -55,55 +54,9 @@ public:
   int* Info = nullptr;
 };
 
-class CsrMatVecDesc_t {
-public:
-  long long lenX = 0;
-  long long lenZ = 0;
-  long long xbegin = 0;
-  long long zbegin = 0;
-  long long lowerZ = 0;
-  
-  std::complex<double>* X = nullptr;
-  std::complex<double>* Y = nullptr;
-  std::complex<double>* Z = nullptr;
-  std::complex<double>* W = nullptr;
-  long long* NeighborX = nullptr;
-  long long* NeighborZ = nullptr;
-
-  int* RowOffsetsU = nullptr;
-  int* ColIndU = nullptr;
-  std::complex<double>* ValuesU = nullptr;
-
-  int* RowOffsetsC = nullptr;
-  int* ColIndC = nullptr;
-  std::complex<double>* ValuesC = nullptr;
-
-  int* RowOffsetsA = nullptr;
-  int* ColIndA = nullptr;
-  std::complex<double>* ValuesA = nullptr;
-
-  void* descV = nullptr;
-  void* descU = nullptr;
-  void* descC = nullptr;
-  void* descA = nullptr;
-};
-
-constexpr int hint_number = 512;
-
-class hostMatrix_t {
-public:
-  long long lenA;
-  CUDA_CTYPE* Adata;
-};
-
 void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm);
 void destroyMatrixDesc(deviceMatrixDesc_t desc);
 
-long long computeCooNNZ(long long Mb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[]);
-void genCsrEntries(long long csrM, long long devRowIndx[], long long devColIndx[], std::complex<double> devVals[], long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[]);
-
-void createHostMatrix(hostMatrix_t* h, long long bdim, long long lenA);
-void destroyHostMatrix(hostMatrix_t h);
 
 void copyDataInMatrixDesc(deviceMatrixDesc_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream);
 void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream);
@@ -114,9 +67,3 @@ void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, 
 
 int check_info(deviceMatrixDesc_t A, const ColCommMPI& comm);
 
-void createSpMatrixDesc(CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm);
-void destroySpMatrixDesc(CsrMatVecDesc_t desc);
-
-void matVecUpwardPass(CsrMatVecDesc_t desc, const std::complex<double>* X_in, const ColCommMPI& comm);
-void matVecHorizontalandDownwardPass(CsrMatVecDesc_t desc, std::complex<double>* Y_out);
-void matVecLeafHorizontalPass(CsrMatVecDesc_t desc, std::complex<double>* X_io, const ColCommMPI& comm);
