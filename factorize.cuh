@@ -1,15 +1,8 @@
 #pragma once
 
+#include <gpu_handles.cuh>
 #include <complex>
-#include <map>
-#include <vector>
-#include <cuda_runtime_api.h>
-#include <cublas_v2.h>
-#include <cusparse.h>
-#include <cusolverDn.h>
 #include <cuComplex.h>
-#include <mpi.h>
-#include <nccl.h>
 
 #define STD_CTYPE std::complex<double>
 #define THRUST_CTYPE thrust::complex<double>
@@ -103,9 +96,6 @@ public:
   CUDA_CTYPE* Adata;
 };
 
-void initGpuEnvs(cudaStream_t* memory_stream, cudaStream_t* compute_stream, cublasHandle_t* cublasH, cusparseHandle_t* cusparseH, cusolverDnHandle_t* cusolverH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms, const std::vector<MPI_Comm>& comms, MPI_Comm world = MPI_COMM_WORLD);
-void finalizeGpuEnvs(cudaStream_t memory_stream, cudaStream_t compute_stream, cublasHandle_t cublasH, cusparseHandle_t cusparseH, cusolverDnHandle_t cusolverH, std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
-
 void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm);
 void destroyMatrixDesc(deviceMatrixDesc_t desc);
 
@@ -118,9 +108,9 @@ void destroyHostMatrix(hostMatrix_t h);
 void copyDataInMatrixDesc(deviceMatrixDesc_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream);
 void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream);
 
-void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
-void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
-void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms);
+void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrixDesc_t Al, const ColCommMPI& comm, const ncclComms nccl_comms);
+void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, const CUDA_CTYPE* X, const ColCommMPI& comm, const ncclComms nccl_comms);
+void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, CUDA_CTYPE* X, const ColCommMPI& comm, const ncclComms nccl_comms);
 
 int check_info(deviceMatrixDesc_t A, const ColCommMPI& comm);
 

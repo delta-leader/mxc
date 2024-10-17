@@ -8,6 +8,7 @@
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
+  cudaSetDevice();
 
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;

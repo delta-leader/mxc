@@ -2,7 +2,7 @@
 #include <factorize.cuh>
 #include <comm-mpi.hpp>
 
-void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
+void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, const CUDA_CTYPE* X, const ColCommMPI& comm, const ncclComms nccl_comms) {
   long long bdim = A.bdim;
   long long rank = A.rank;
   long long rdim = bdim - rank;
@@ -13,6 +13,9 @@ void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cud
   long long N = comm.lenNeighbors();
   long long lenA = comm.ARowOffsets[M];
   long long reduc_len = A.reducLen;
+
+  cudaStream_t stream = handle->compute_stream;
+  cublasHandle_t cublasH = handle->cublasH;
 
   STD_CTYPE constants[3] = { 1., 0., -1. };
   CUDA_CTYPE& one = reinterpret_cast<CUDA_CTYPE&>(constants[0]);
@@ -26,11 +29,11 @@ void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cud
     for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
       long long start = comm.BoxOffsets[p] * bdim;
       long long len = comm.BoxOffsets[p + 1] * bdim - start;
-      auto neighbor = nccl_comms.find(comm.NeighborComm[p].second);
+      auto neighbor = nccl_comms->find(comm.NeighborComm[p].second);
       ncclBroadcast(const_cast<const CUDA_CTYPE*>(&(A.Ydata)[start]), &(A.Ydata)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, (*neighbor).second, stream);
     }
 
-    auto dup = nccl_comms.find(comm.DupComm);
+    auto dup = nccl_comms->find(comm.DupComm);
     if (comm.DupComm != MPI_COMM_NULL)
       ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Ydata), A.Ydata, bdim * N * 2, ncclDouble, 0, (*dup).second, stream);
     ncclGroupEnd();
@@ -49,18 +52,18 @@ void compute_forward_substitution(deviceMatrixDesc_t A, const CUDA_CTYPE* X, cud
     for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
       long long start = comm.BoxOffsets[p] * rank;
       long long len = comm.BoxOffsets[p + 1] * rank - start;
-      auto neighbor = nccl_comms.find(comm.NeighborComm[p].second);
+      auto neighbor = nccl_comms->find(comm.NeighborComm[p].second);
       ncclBroadcast(const_cast<const CUDA_CTYPE*>(&(A.Xdata)[start]), &(A.Xdata)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, (*neighbor).second, stream);
     }
 
-    auto dup = nccl_comms.find(comm.DupComm);
+    auto dup = nccl_comms->find(comm.DupComm);
     if (comm.DupComm != MPI_COMM_NULL)
       ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Xdata), A.Xdata, rank * N * 2, ncclDouble, 0, (*dup).second, stream);
     ncclGroupEnd();
   }
 }
 
-void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* X, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
+void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, CUDA_CTYPE* X, const ColCommMPI& comm, const ncclComms nccl_comms) {
   long long bdim = A.bdim;
   long long rank = A.rank;
   long long rdim = bdim - rank;
@@ -72,6 +75,9 @@ void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* X, cudaStre
   long long lenA = comm.ARowOffsets[M];
   long long reduc_len = A.reducLen;
 
+  cudaStream_t stream = handle->compute_stream;
+  cublasHandle_t cublasH = handle->cublasH;
+
   STD_CTYPE constants[3] = { 1., 0., -1. };
   CUDA_CTYPE& one = reinterpret_cast<CUDA_CTYPE&>(constants[0]);
   CUDA_CTYPE& zero = reinterpret_cast<CUDA_CTYPE&>(constants[1]); 
@@ -82,11 +88,11 @@ void compute_backward_substitution(deviceMatrixDesc_t A, CUDA_CTYPE* X, cudaStre
     for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
       long long start = comm.BoxOffsets[p] * rank;
       long long len = comm.BoxOffsets[p + 1] * rank - start;
-      auto neighbor = nccl_comms.find(comm.NeighborComm[p].second);
+      auto neighbor = nccl_comms->find(comm.NeighborComm[p].second);
       ncclBroadcast(const_cast<const CUDA_CTYPE*>(&(A.Xdata)[start]), &(A.Xdata)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, (*neighbor).second, stream);
     }
 
-    auto dup = nccl_comms.find(comm.DupComm);
+    auto dup = nccl_comms->find(comm.DupComm);
     if (comm.DupComm != MPI_COMM_NULL)
       ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Xdata), A.Xdata, rank * N * 2, ncclDouble, 0, (*dup).second, stream);
     ncclGroupEnd();

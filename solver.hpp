@@ -15,12 +15,8 @@ private:
 
   std::vector<CsrMatVecDesc_t> A_mv;
 
-  cudaStream_t compute_stream;
-  cudaStream_t memory_stream;
-  cublasHandle_t cublasH;
-  cusparseHandle_t cusparseH;
-  cusolverDnHandle_t cusolverH;
-  std::map<const MPI_Comm, ncclComm_t> nccl_comms;
+  deviceHandle_t handle;
+  ncclComms nccl_comms;
   std::vector<deviceMatrixDesc_t> desc;
   CUDA_CTYPE* X_dev;
 
@@ -31,7 +27,7 @@ public:
   
   H2MatrixSolver();
   H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
-  void init_gpu_handles(MPI_Comm world = MPI_COMM_WORLD);
+  void init_gpu_handles();
   void move_data_gpu();
 
   void allocSparseMV();

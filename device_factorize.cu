@@ -55,7 +55,7 @@ template<class T> struct copyFunc {
   }
 };
 
-void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t stream, cublasHandle_t cublasH, const ColCommMPI& comm, const std::map<const MPI_Comm, ncclComm_t>& nccl_comms) {
+void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrixDesc_t Al, const ColCommMPI& comm, const ncclComms nccl_comms) {
   long long bdim = A.bdim;
   long long rank = A.rank;
   long long block = bdim * bdim;
@@ -66,6 +66,9 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
   long long N = comm.lenNeighbors();
   long long lenA = comm.ARowOffsets[M];
   long long lenL = comm.LowerIndA.size();
+
+  cudaStream_t stream = handle->compute_stream;
+  cublasHandle_t cublasH = handle->cublasH;
 
   long long rdim = bdim - rank;
   long long reduc_len = A.reducLen;
@@ -86,9 +89,9 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + len, copyFunc(Al.rank, Al.rank, Al.A_unsort, Al.bdim, A.A_dst, bdim));
   }
 
-  auto dup = nccl_comms.find(comm.DupComm);
+  auto dup = nccl_comms->find(comm.DupComm);
   if (M == 1) {
-    auto merge = nccl_comms.find(comm.MergeComm);
+    auto merge = nccl_comms->find(comm.MergeComm);
     if (comm.MergeComm != MPI_COMM_NULL)
       ncclAllReduce(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, (*merge).second, stream);
     if (comm.DupComm != MPI_COMM_NULL)
@@ -119,7 +122,7 @@ void compute_factorize(deviceMatrixDesc_t A, deviceMatrixDesc_t Al, cudaStream_t
     for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
       long long start = comm.BoxOffsets[p] * block;
       long long len = comm.BoxOffsets[p + 1] * block - start;
-      auto neighbor = nccl_comms.find(comm.NeighborComm[p].second);
+      auto neighbor = nccl_comms->find(comm.NeighborComm[p].second);
       ncclBroadcast(const_cast<const CUDA_CTYPE*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, (*neighbor).second, stream);
     }
 
