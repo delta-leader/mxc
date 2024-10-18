@@ -56,6 +56,7 @@ int main(int argc, char* argv[]) {
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
+  matA.init_gpu_handles();
   matA.allocSparseMV();
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
@@ -164,6 +165,7 @@ int main(int argc, char* argv[]) {
 
   matA.free_all_comms();
   matA.freeSparseMV();
+  matA.free_gpu_handles();
   matM.free_all_comms();
   matM.free_gpu_handles();
   MPI_Finalize();

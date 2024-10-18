@@ -63,19 +63,23 @@ void H2MatrixSolver::init_gpu_handles() {
 void H2MatrixSolver::allocSparseMV() {
   A_mv.resize(levels + 1);
   for (long long l = 0; l <= levels; l++) {
-    createSpMatrixDesc(&A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], comm[l]);
+    createSpMatrixDesc(handle, &A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], comm[l]);
   }
 }
 
 void H2MatrixSolver::matVecMulSp(std::complex<double> X[]) {
-  matVecUpwardPass(A_mv[levels], X, comm[levels]);
+  long long lenX = A[levels].lenX;
+  cudaMemcpy(X_dev, X, lenX * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
+
+  matVecUpwardPass(handle, A_mv[levels], reinterpret_cast<std::complex<double>*>(X_dev), comm[levels], nccl_comms);
   for (long long l = levels - 1; l >= 0; l--)
-   matVecUpwardPass(A_mv[l], A_mv[l + 1].Z, comm[l]);
+   matVecUpwardPass(handle, A_mv[l], A_mv[l + 1]->Z->Vals, comm[l], nccl_comms);
 
   for (long long l = 0; l < levels; l++)
-    matVecHorizontalandDownwardPass(A_mv[l], A_mv[l + 1].W);
+    matVecHorizontalandDownwardPass(handle, A_mv[l], A_mv[l + 1]->W->Vals);
 
-  matVecLeafHorizontalPass(A_mv[levels], X, comm[levels]);
+  matVecLeafHorizontalPass(handle, A_mv[levels], reinterpret_cast<std::complex<double>*>(X_dev), comm[levels], nccl_comms);
+  cudaMemcpy(X, X_dev, lenX * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
 }
 
 void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
