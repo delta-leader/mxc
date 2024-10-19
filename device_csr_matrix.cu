@@ -117,7 +117,7 @@ void destroyDeviceCsr(CsrContainer_t A) {
   delete A;
 }
 
-void createDeviceVec(VecDnContainer_t* X, const long long RowDims[], const ColCommMPI& comm) {
+void createDeviceVec(VecDnContainer_t* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms) {
   *X = new struct VecDnContainer();
   long long Mb = comm.lenNeighbors();
   std::vector<long long> DimsOffsets(Mb + 1);
@@ -128,27 +128,45 @@ void createDeviceVec(VecDnContainer_t* X, const long long RowDims[], const ColCo
   if (0 < N) {
     (*X)->Xbegin = DimsOffsets[comm.oLocal()];
     (*X)->lenX = DimsOffsets[comm.oLocal() + comm.lenLocal()] - (*X)->Xbegin;
-    (*X)->Neighbor = reinterpret_cast<long long*>(std::malloc(comm.BoxOffsets.size() * sizeof(long long)));
     cudaMalloc(reinterpret_cast<void**>(&((*X)->Vals)), sizeof(std::complex<double>) * N);
+
+    (*X)->Neighbor = reinterpret_cast<long long*>(std::malloc(comm.BoxOffsets.size() * sizeof(long long)));
     std::transform(comm.BoxOffsets.begin(), comm.BoxOffsets.end(), (*X)->Neighbor, [&](long long i) { return DimsOffsets[i]; });
+
+    (*X)->LenComms = comm.NeighborComm.size();
+    if ((*X)->LenComms) {
+      (*X)->NeighborRoots = reinterpret_cast<long long*>(std::malloc((*X)->LenComms * sizeof(long long)));
+      (*X)->NeighborComms = reinterpret_cast<ncclComm_t*>(std::malloc((*X)->LenComms * sizeof(ncclComm_t)));
+
+      std::transform(comm.NeighborComm.begin(), comm.NeighborComm.end(), (*X)->NeighborRoots, 
+        [](const std::pair<int, MPI_Comm>& comm) { return static_cast<long long>(comm.first); });
+      std::transform(comm.NeighborComm.begin(), comm.NeighborComm.end(), (*X)->NeighborComms, 
+        [=](const std::pair<int, MPI_Comm>& comm) { return findNcclComm(comm.second, nccl_comms); });
+    }
+
+    (*X)->DupComm = findNcclComm(comm.DupComm, nccl_comms);
   }
 }
 
 void destroyDeviceVec(VecDnContainer_t X) {
-  if (0 < X->N) {
+  if (X->N) {
     std::free(X->Neighbor);
     cudaFree(X->Vals);
+    if (X->LenComms) {
+      std::free(X->NeighborRoots);
+      std::free(X->NeighborComms);
+    }
   }
   delete X;
 }
 
-void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm) {
+void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm, const ncclComms nccl_comms) {
   *desc = new struct CsrMatVecDesc();
   (*desc)->lowerZ = lowerZ;
-  createDeviceVec(&((*desc)->X), Dims, comm);
-  createDeviceVec(&((*desc)->Y), Dims, comm);
-  createDeviceVec(&((*desc)->Z), Ranks, comm);
-  createDeviceVec(&((*desc)->W), Ranks, comm);
+  createDeviceVec(&((*desc)->X), Dims, comm, nccl_comms);
+  createDeviceVec(&((*desc)->Y), Dims, comm, nccl_comms);
+  createDeviceVec(&((*desc)->Z), Ranks, comm, nccl_comms);
+  createDeviceVec(&((*desc)->W), Ranks, comm, nccl_comms);
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -241,7 +259,22 @@ void destroySpMatrixDesc(CsrMatVecDesc_t desc) {
   delete desc;
 }
 
-void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, const std::complex<double>* X_in, const ColCommMPI& comm, const ncclComms nccl_comms) {
+void deviceVecNeighborBcast(cudaStream_t stream, VecDnContainer_t X) {
+  if (X->N) {
+    ncclGroupStart();
+    for (long long p = 0; p < X->LenComms; p++) {
+      long long start = (X->Neighbor)[p];
+      long long len = (X->Neighbor)[p + 1] - start;
+      ncclBroadcast(const_cast<const std::complex<double>*>(&(X->Vals)[start]), &(X->Vals)[start], len * 2, ncclDouble, X->NeighborRoots[p], X->NeighborComms[p], stream);
+    }
+
+    if (X->DupComm)
+      ncclBroadcast(const_cast<const std::complex<double>*>(X->Vals), X->Vals, X->N * 2, ncclDouble, 0, X->DupComm, stream);
+    ncclGroupEnd();
+  }
+}
+
+void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, const std::complex<double>* X_in) {
   long long lenX = desc->X->lenX;
   cudaStream_t stream = handle->compute_stream;
   cusparseHandle_t cusparseH = handle->cusparseH;
@@ -253,21 +286,7 @@ void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, const std::co
   std::complex<double> one(1., 0.), zero(0., 0.);
   if (desc->U->NNZ)
     cusparseSpMV(cusparseH, CUSPARSE_OPERATION_NON_TRANSPOSE, &one, desc->descV, desc->descXi, &zero, desc->descZi, CUDA_C_64F, CUSPARSE_SPMV_ALG_DEFAULT, desc->buffer);
-
-  if (1 < comm.lenNeighbors() && desc->Z->N) {
-    ncclGroupStart();
-    for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
-      long long start = (desc->Z->Neighbor)[p];
-      long long len = (desc->Z->Neighbor)[p + 1] - start;
-      auto neighbor = nccl_comms->find(comm.NeighborComm[p].second);
-      ncclBroadcast(const_cast<const std::complex<double>*>(&(desc->Z->Vals)[start]), &(desc->Z->Vals)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, (*neighbor).second, stream);
-    }
-
-    auto dup = nccl_comms->find(comm.DupComm);
-    if (comm.DupComm != MPI_COMM_NULL)
-      ncclBroadcast(const_cast<const std::complex<double>*>(desc->Z->Vals), desc->Z->Vals, desc->Z->N * 2, ncclDouble, 0, (*dup).second, stream);
-    ncclGroupEnd();
-  }
+  deviceVecNeighborBcast(stream, desc->Z);
 }
 
 void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* Y_out) {
@@ -285,27 +304,13 @@ void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc
     cudaMemcpyAsync(&Y_out[desc->lowerZ], desc->Y->Vals + desc->Y->Xbegin, sizeof(std::complex<double>) * lenX, cudaMemcpyDeviceToDevice, stream);
 }
 
-void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* X_io, const ColCommMPI& comm, const ncclComms nccl_comms) {
+void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* X_io) {
   long long lenX = desc->X->lenX;
   cudaStream_t stream = handle->compute_stream;
   cusparseHandle_t cusparseH = handle->cusparseH;
   if (lenX)
     cudaMemcpyAsync(desc->X->Vals + desc->X->Xbegin, X_io, sizeof(std::complex<double>) * lenX, cudaMemcpyDeviceToDevice, stream);
-
-  if (1 < comm.lenNeighbors() && desc->X->N) {
-    ncclGroupStart();
-    for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
-      long long start = (desc->X->Neighbor)[p];
-      long long len = (desc->X->Neighbor)[p + 1] - start;
-      auto neighbor = nccl_comms->find(comm.NeighborComm[p].second);
-      ncclBroadcast(const_cast<const std::complex<double>*>(&(desc->X->Vals)[start]), &(desc->X->Vals)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, (*neighbor).second, stream);
-    }
-
-    auto dup = nccl_comms->find(comm.DupComm);
-    if (comm.DupComm != MPI_COMM_NULL)
-      ncclBroadcast(const_cast<const std::complex<double>*>(desc->X->Vals), desc->X->Vals, desc->X->N * 2, ncclDouble, 0, (*dup).second, stream);
-    ncclGroupEnd();
-  }
+  deviceVecNeighborBcast(stream, desc->X);
 
   std::complex<double> one(1., 0.);
   if (desc->A->NNZ)

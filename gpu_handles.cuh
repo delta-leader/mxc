@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <map>
 #include <cuda_runtime_api.h>
 #include <cublas_v2.h>
 #include <cusparse.h>
@@ -18,10 +17,11 @@ struct deviceHandle {
 };
 
 typedef struct deviceHandle* deviceHandle_t;
-typedef std::map<MPI_Comm, ncclComm_t>* ncclComms;
+typedef std::vector<std::pair<MPI_Comm, ncclComm_t>>* ncclComms;
 
 void cudaSetDevice(MPI_Comm world = MPI_COMM_WORLD);
 void initNcclComms(ncclComms* nccl_comms, const std::vector<MPI_Comm>& mpi_comms);
+ncclComm_t findNcclComm(const MPI_Comm mpi_comm, const ncclComms nccl_comms);
 void initGpuEnvs(deviceHandle_t* handle);
 void finalizeGpuEnvs(deviceHandle_t handle);
 void finalizeNcclComms(ncclComms nccl_comms);

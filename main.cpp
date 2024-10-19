@@ -3,12 +3,15 @@
 #include <test_funcs.hpp>
 #include <string>
 
-#include <mkl.h>
 #include <Eigen/Dense>
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
+
+  deviceHandle_t handle;
+  ncclComms nccl_comms = nullptr;
   cudaSetDevice();
+  initGpuEnvs(&handle);
 
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
@@ -56,8 +59,9 @@ int main(int argc, char* argv[]) {
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
+  initNcclComms(&nccl_comms, matA.allocedComm);
   matA.init_gpu_handles();
-  matA.allocSparseMV();
+  matA.allocSparseMV(handle, nccl_comms);
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
@@ -67,7 +71,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matA.matVecMulSp(&X1[0]);
+  //matA.matVecMul(&X1[0]);
+  matA.matVecMulSp(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -105,17 +110,19 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
-  matM.init_gpu_handles();
 
   std::copy(&Xbody[matM.local_bodies.first], &Xbody[matM.local_bodies.second], &X1[0]);
   matM.matVecMul(&X1[0]);
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
+  initNcclComms(&nccl_comms, matM.allocedComm);
+  matM.init_gpu_handles();
+
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
   //matM.factorizeM();
-  matM.factorizeDeviceM();
+  matM.factorizeDeviceM(handle, nccl_comms);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -126,7 +133,7 @@ int main(int argc, char* argv[]) {
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
   //matM.solvePrecondition(&X1[0]);
-  matM.solvePreconditionDevice(&X1[0]);
+  matM.solvePreconditionDevice(handle, &X1[0], nccl_comms);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
@@ -164,11 +171,14 @@ int main(int argc, char* argv[]) {
   }
 
   matA.free_all_comms();
+  matM.free_all_comms();
+  MPI_Finalize();
+
   matA.freeSparseMV();
   matA.free_gpu_handles();
-  matM.free_all_comms();
   matM.free_gpu_handles();
-  MPI_Finalize();
+  finalizeGpuEnvs(handle);
+  finalizeNcclComms(nccl_comms);
   return 0;
 }
 

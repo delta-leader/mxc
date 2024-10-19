@@ -1,7 +1,6 @@
 
 #include <solver.hpp>
 
-#include <mkl.h>
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
@@ -41,10 +40,6 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
 }
 
 void H2MatrixSolver::init_gpu_handles() {
-  initGpuEnvs(&handle);
-  nccl_comms = nullptr;
-  initNcclComms(&nccl_comms, allocedComm);
-  
   desc.resize(levels + 1);
   long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
   long long rank = *std::max_element(A[levels].DimsLr.begin(), A[levels].DimsLr.end());
@@ -60,25 +55,25 @@ void H2MatrixSolver::init_gpu_handles() {
   cudaMalloc(reinterpret_cast<void**>(&X_dev), lenX * sizeof(CUDA_CTYPE));
 }
 
-void H2MatrixSolver::allocSparseMV() {
+void H2MatrixSolver::allocSparseMV(deviceHandle_t handle, const ncclComms nccl_comms) {
   A_mv.resize(levels + 1);
   for (long long l = 0; l <= levels; l++) {
-    createSpMatrixDesc(handle, &A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], comm[l]);
+    createSpMatrixDesc(handle, &A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], comm[l], nccl_comms);
   }
 }
 
-void H2MatrixSolver::matVecMulSp(std::complex<double> X[]) {
+void H2MatrixSolver::matVecMulSp(deviceHandle_t handle, std::complex<double> X[]) {
   long long lenX = A[levels].lenX;
   cudaMemcpy(X_dev, X, lenX * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
-  matVecUpwardPass(handle, A_mv[levels], reinterpret_cast<std::complex<double>*>(X_dev), comm[levels], nccl_comms);
+  matVecUpwardPass(handle, A_mv[levels], reinterpret_cast<std::complex<double>*>(X_dev));
   for (long long l = levels - 1; l >= 0; l--)
-   matVecUpwardPass(handle, A_mv[l], A_mv[l + 1]->Z->Vals, comm[l], nccl_comms);
+   matVecUpwardPass(handle, A_mv[l], A_mv[l + 1]->Z->Vals);
 
   for (long long l = 0; l < levels; l++)
     matVecHorizontalandDownwardPass(handle, A_mv[l], A_mv[l + 1]->W->Vals);
 
-  matVecLeafHorizontalPass(handle, A_mv[levels], reinterpret_cast<std::complex<double>*>(X_dev), comm[levels], nccl_comms);
+  matVecLeafHorizontalPass(handle, A_mv[levels], reinterpret_cast<std::complex<double>*>(X_dev));
   cudaMemcpy(X, X_dev, lenX * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
 }
 
@@ -104,7 +99,7 @@ void H2MatrixSolver::factorizeM() {
   }
 }
 
-void H2MatrixSolver::factorizeDeviceM() {
+void H2MatrixSolver::factorizeDeviceM(deviceHandle_t handle, const ncclComms nccl_comms) {
   copyDataInMatrixDesc(desc[levels], comm[levels].ARowOffsets.back(), A[levels].A[0], comm[levels].lenNeighbors(), A[levels].Q[0], handle->compute_stream);
   compute_factorize(handle, desc[levels], deviceMatrixDesc_t(), comm[levels], nccl_comms);
 
@@ -136,7 +131,7 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   A[levels].backwardSubstitute(X, comm[levels]);
 }
 
-void H2MatrixSolver::solvePreconditionDevice(std::complex<double> X[]) {
+void H2MatrixSolver::solvePreconditionDevice(deviceHandle_t handle, std::complex<double> X[], const ncclComms nccl_comms) {
   if (levels < 0)
     return;
   
@@ -235,8 +230,6 @@ void H2MatrixSolver::freeSparseMV() {
 }
 
 void H2MatrixSolver::free_gpu_handles() {
-  finalizeGpuEnvs(handle);
-  finalizeNcclComms(nccl_comms);
   for (long long l = levels; l >= 0; l--) {
     destroyMatrixDesc(desc[l]);
   }

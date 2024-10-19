@@ -89,13 +89,13 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrix
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + len, copyFunc(Al.rank, Al.rank, Al.A_unsort, Al.bdim, A.A_dst, bdim));
   }
 
-  auto dup = nccl_comms->find(comm.DupComm);
+  ncclComm_t dup = findNcclComm(comm.DupComm, nccl_comms);
   if (M == 1) {
-    auto merge = nccl_comms->find(comm.MergeComm);
+    ncclComm_t merge = findNcclComm(comm.MergeComm, nccl_comms);
     if (comm.MergeComm != MPI_COMM_NULL)
-      ncclAllReduce(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, (*merge).second, stream);
+      ncclAllReduce(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, merge, stream);
     if (comm.DupComm != MPI_COMM_NULL)
-      ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, (*dup).second, stream);
+      ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, dup, stream);
   }
 
   cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.A_ss, bdim, &zero, A.B_ind, bdim, M);
@@ -122,12 +122,12 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrix
     for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
       long long start = comm.BoxOffsets[p] * block;
       long long len = comm.BoxOffsets[p + 1] * block - start;
-      auto neighbor = nccl_comms->find(comm.NeighborComm[p].second);
-      ncclBroadcast(const_cast<const CUDA_CTYPE*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, (*neighbor).second, stream);
+      ncclComm_t neighbor = findNcclComm(comm.NeighborComm[p].second, nccl_comms);
+      ncclBroadcast(const_cast<const CUDA_CTYPE*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, neighbor, stream);
     }
 
     if (comm.DupComm != MPI_COMM_NULL)
-      ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, (*dup).second, stream);
+      ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, dup, stream);
     ncclGroupEnd();
 
     if (M < lenA)

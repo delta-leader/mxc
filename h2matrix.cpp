@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include <mkl.h>
 #include <Eigen/Dense>
 #include <Eigen/QR>
 #include <Eigen/LU>
@@ -437,8 +436,8 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     Matrix_t Aii(A[diag], M, M);
     Matrix_t b(B[i + ibegin], dims_max, M);
 
-    b.noalias() = Ui.adjoint() * Aii.transpose();
-    Aii.noalias() = Ui.adjoint() * b.transpose();
+    b.topRows(M).noalias() = Ui.adjoint() * Aii.transpose();
+    Aii.noalias() = Ui.adjoint() * b.topRows(M).transpose();
     V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
 
     if (0 < Mr) {

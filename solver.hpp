@@ -8,7 +8,7 @@
 #include <device_csr_matrix.cuh>
 
 class H2MatrixSolver {
-private:
+public:
   long long levels;
   std::vector<H2Matrix> A;
   std::vector<ColCommMPI> comm;
@@ -16,12 +16,9 @@ private:
 
   std::vector<CsrMatVecDesc_t> A_mv;
 
-  deviceHandle_t handle;
-  ncclComms nccl_comms;
   std::vector<deviceMatrixDesc_t> desc;
   CUDA_CTYPE* X_dev;
 
-public:
   std::pair<long long, long long> local_bodies;
   std::vector<double> resid;
   long long iters;
@@ -31,14 +28,14 @@ public:
   void init_gpu_handles();
   void move_data_gpu();
 
-  void allocSparseMV();
-  void matVecMulSp(std::complex<double> X[]);
+  void allocSparseMV(deviceHandle_t handle, const ncclComms nccl_comms);
+  void matVecMulSp(deviceHandle_t handle, std::complex<double> X[]);
 
   void matVecMul(std::complex<double> X[]);
   void factorizeM();
-  void factorizeDeviceM();
+  void factorizeDeviceM(deviceHandle_t handle, const ncclComms nccl_comms);
   void solvePrecondition(std::complex<double> X[]);
-  void solvePreconditionDevice(std::complex<double> X[]);
+  void solvePreconditionDevice(deviceHandle_t handle, std::complex<double> X[], const ncclComms nccl_comms);
   void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
