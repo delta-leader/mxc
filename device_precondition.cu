@@ -1,5 +1,5 @@
 
-#include <factorize.cuh>
+#include <device_factorize.cuh>
 #include <comm-mpi.hpp>
 
 #include <numeric>
@@ -10,6 +10,7 @@
 #include <thrust/gather.h>
 #include <thrust/partition.h>
 #include <thrust/iterator/constant_iterator.h>
+#include <thrust/inner_product.h>
 
 struct keysD {
   long long D;
@@ -206,3 +207,9 @@ void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, STD_CTYPE* A, STD_CTYPE* V, 
   cudaMemcpyAsync(V, desc.Vdata, block * desc.lenM, cudaMemcpyDeviceToHost, stream);
 }
 
+int check_info(deviceMatrixDesc_t A, const ColCommMPI& comm) {
+  long long M = comm.lenLocal();
+  thrust::device_ptr<int> info_ptr(A.Info);
+  int sum = thrust::inner_product(info_ptr, info_ptr + M, info_ptr, 0);
+  return 0 < sum;
+}

@@ -323,3 +323,15 @@ void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::
   if (lenX)
     cudaMemcpyAsync(X_io, desc->Y->Vals + desc->Y->Xbegin, sizeof(std::complex<double>) * lenX, cudaMemcpyDeviceToDevice, stream);
 }
+
+void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], std::complex<double>* devX) {
+  if (0 <= levels) {
+    matVecUpwardPass(handle, desc[levels], devX);
+    for (long long l = levels - 1; l >= 0; l--)
+    matVecUpwardPass(handle, desc[l], desc[l + 1]->Z->Vals);
+
+    for (long long l = 0; l < levels; l++)
+      matVecHorizontalandDownwardPass(handle, desc[l], desc[l + 1]->W->Vals);
+    matVecLeafHorizontalPass(handle, desc[levels], devX);
+  }
+}

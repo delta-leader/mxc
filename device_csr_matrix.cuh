@@ -72,3 +72,4 @@ void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, const std::co
 void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* Y_out);
 void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* X_io);
 
+void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], std::complex<double>* devX);

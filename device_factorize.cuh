@@ -71,8 +71,9 @@ void copyDataInMatrixDesc(deviceMatrixDesc_t desc, const STD_CTYPE* A, const STD
 void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, STD_CTYPE* A, STD_CTYPE* V, cudaStream_t stream);
 
 void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrixDesc_t Al);
-void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, const CUDA_CTYPE* X);
-void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, CUDA_CTYPE* X);
+void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, const std::complex<double>* X);
+void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, std::complex<double>* X);
+void matSolvePreconditionDeviceH2(deviceHandle_t handle, long long levels, deviceMatrixDesc_t A[], std::complex<double>* devX);
 
 int check_info(deviceMatrixDesc_t A, const ColCommMPI& comm);
 

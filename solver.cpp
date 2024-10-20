@@ -63,17 +63,12 @@ void H2MatrixSolver::allocSparseMV(deviceHandle_t handle, const ncclComms nccl_c
 }
 
 void H2MatrixSolver::matVecMulSp(deviceHandle_t handle, std::complex<double> X[]) {
+  if (levels < 0)
+    return;
+
   long long lenX = A[levels].lenX;
   cudaMemcpy(X_dev, X, lenX * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
-
-  matVecUpwardPass(handle, A_mv[levels], reinterpret_cast<std::complex<double>*>(X_dev));
-  for (long long l = levels - 1; l >= 0; l--)
-   matVecUpwardPass(handle, A_mv[l], A_mv[l + 1]->Z->Vals);
-
-  for (long long l = 0; l < levels; l++)
-    matVecHorizontalandDownwardPass(handle, A_mv[l], A_mv[l + 1]->W->Vals);
-
-  matVecLeafHorizontalPass(handle, A_mv[levels], reinterpret_cast<std::complex<double>*>(X_dev));
+  matVecDeviceH2(handle, levels, A_mv.data(), reinterpret_cast<std::complex<double>*>(X_dev));
   cudaMemcpy(X, X_dev, lenX * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
 }
 
@@ -134,18 +129,10 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
 void H2MatrixSolver::solvePreconditionDevice(deviceHandle_t handle, std::complex<double> X[]) {
   if (levels < 0)
     return;
-  
+
   long long lenX = A[levels].lenX;
   cudaMemcpy(X_dev, X, lenX * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
-
-  compute_forward_substitution(handle, desc[levels], X_dev);
-  for (long long l = levels - 1; l >= 0; l--)
-    compute_forward_substitution(handle, desc[l], desc[l + 1].Xdata);
-
-  for (long long l = 0; l < levels; l++)
-    compute_backward_substitution(handle, desc[l], desc[l + 1].Xdata);
-  compute_backward_substitution(handle, desc[levels], X_dev);
-  
+  matSolvePreconditionDeviceH2(handle, levels, desc.data(), reinterpret_cast<std::complex<double>*>(X_dev));
   cudaMemcpy(X, X_dev, lenX * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
 }
 

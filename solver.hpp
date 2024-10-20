@@ -4,7 +4,7 @@
 #include <comm-mpi.hpp>
 #include <h2matrix.hpp>
 #include <kernel.hpp>
-#include <factorize.cuh>
+#include <device_factorize.cuh>
 #include <device_csr_matrix.cuh>
 
 class H2MatrixSolver {
