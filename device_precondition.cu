@@ -35,14 +35,14 @@ template<class T> struct setDevicePtr {
   }
 };
 
-void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm) {
+void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm, const ncclComms nccl_comms) {
   desc->bdim = bdim;
   desc->rank = rank;
   desc->diag_offset = comm.oLocal();
   desc->lower_offset = (comm.LowerX + lower.diag_offset) * lower.rank;
-  long long lenA = comm.ARowOffsets.back();
-  long long M = comm.lenLocal();
-  long long N = comm.lenNeighbors();
+  long long lenA = desc->lenA = comm.ARowOffsets.back();
+  long long M = desc->lenM = comm.lenLocal();
+  long long N = desc->lenN = comm.lenNeighbors();
 
   thrust::device_vector<long long> ARowOffset(comm.ARowOffsets.begin(), comm.ARowOffsets.end());
   thrust::device_vector<long long> ARows(lenA, 0ll);
@@ -133,6 +133,23 @@ void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, 
   thrust::transform(ARows.begin(), ARows.end(), ADistCols.begin(), thrust::device_ptr<CUDA_CTYPE*>(desc->AC_ind), setDevicePtr(desc->ACdata, M * rblock, rblock));
   
   thrust::fill(thrust::device_ptr<CUDA_CTYPE>(desc->ONEdata), thrust::device_ptr<CUDA_CTYPE>(&(desc->ONEdata)[desc->reducLen]), make_cuDoubleComplex(1., 0.));
+
+  desc->Neighbor = reinterpret_cast<long long*>(std::malloc(comm.BoxOffsets.size() * sizeof(long long)));
+  std::copy(comm.BoxOffsets.begin(), comm.BoxOffsets.end(), desc->Neighbor);
+
+  desc->LenComms = comm.NeighborComm.size();
+  if (desc->LenComms) {
+    desc->NeighborRoots = reinterpret_cast<long long*>(std::malloc(desc->LenComms * sizeof(long long)));
+    desc->NeighborComms = reinterpret_cast<ncclComm_t*>(std::malloc(desc->LenComms * sizeof(ncclComm_t)));
+
+    std::transform(comm.NeighborComm.begin(), comm.NeighborComm.end(), desc->NeighborRoots, 
+      [](const std::pair<int, MPI_Comm>& comm) { return static_cast<long long>(comm.first); });
+    std::transform(comm.NeighborComm.begin(), comm.NeighborComm.end(), desc->NeighborComms, 
+      [=](const std::pair<int, MPI_Comm>& comm) { return findNcclComm(comm.second, nccl_comms); });
+  }
+
+  desc->DupComm = findNcclComm(comm.DupComm, nccl_comms);
+  desc->MergeComm = findNcclComm(comm.MergeComm, nccl_comms);
 }
 
 void destroyMatrixDesc(deviceMatrixDesc_t desc) {
@@ -170,17 +187,22 @@ void destroyMatrixDesc(deviceMatrixDesc_t desc) {
   cudaFree(desc.ONEdata);
   cudaFree(desc.Ipiv);
   cudaFree(desc.Info);
+
+  if (desc.LenComms) {
+    std::free(desc.NeighborRoots);
+    std::free(desc.NeighborComms);
+  }
 }
 
-void copyDataInMatrixDesc(deviceMatrixDesc_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream) {
+void copyDataInMatrixDesc(deviceMatrixDesc_t desc, const STD_CTYPE* A, const STD_CTYPE* U, cudaStream_t stream) {
   long long block = desc.bdim * desc.bdim * sizeof(CUDA_CTYPE);
-  cudaMemcpyAsync(desc.Adata, A, block * lenA, cudaMemcpyHostToDevice, stream);
-  cudaMemcpyAsync(desc.Udata, U, block * lenU, cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(desc.Adata, A, block * desc.lenA, cudaMemcpyHostToDevice, stream);
+  cudaMemcpyAsync(desc.Udata, U, block * desc.lenN, cudaMemcpyHostToDevice, stream);
 }
 
-void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream) {
+void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, STD_CTYPE* A, STD_CTYPE* V, cudaStream_t stream) {
   long long block = desc.bdim * desc.bdim * sizeof(CUDA_CTYPE);
-  cudaMemcpyAsync(A, desc.Adata, block * lenA, cudaMemcpyDeviceToHost, stream);
-  cudaMemcpyAsync(V, desc.Vdata, block * lenV, cudaMemcpyDeviceToHost, stream);
+  cudaMemcpyAsync(A, desc.Adata, block * desc.lenA, cudaMemcpyDeviceToHost, stream);
+  cudaMemcpyAsync(V, desc.Vdata, block * desc.lenM, cudaMemcpyDeviceToHost, stream);
 }
 

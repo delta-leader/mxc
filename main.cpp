@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
   initNcclComms(&nccl_comms, matA.allocedComm);
-  matA.init_gpu_handles();
+  matA.init_gpu_handles(nccl_comms);
   matA.allocSparseMV(handle, nccl_comms);
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
@@ -116,13 +116,13 @@ int main(int argc, char* argv[]) {
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
   initNcclComms(&nccl_comms, matM.allocedComm);
-  matM.init_gpu_handles();
+  matM.init_gpu_handles(nccl_comms);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
   //matM.factorizeM();
-  matM.factorizeDeviceM(handle, nccl_comms);
+  matM.factorizeDeviceM(handle);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -133,7 +133,7 @@ int main(int argc, char* argv[]) {
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
   //matM.solvePrecondition(&X1[0]);
-  matM.solvePreconditionDevice(handle, &X1[0], nccl_comms);
+  matM.solvePreconditionDevice(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;

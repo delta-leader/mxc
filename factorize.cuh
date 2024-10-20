@@ -12,7 +12,10 @@ class ColCommMPI;
 struct deviceMatrixDesc_t {
   long long bdim = 0;
   long long rank = 0;
+  long long lenM = 0;
+  long long lenN = 0;
   long long diag_offset = 0;
+  long long lenA = 0;
   long long lower_offset = 0;
   long long reducLen = 0;
 
@@ -52,17 +55,24 @@ struct deviceMatrixDesc_t {
   
   int* Ipiv = nullptr;
   int* Info = nullptr;
+
+  long long LenComms = 0;
+  long long* Neighbor = nullptr;
+  long long* NeighborRoots = nullptr;
+  ncclComm_t* NeighborComms = nullptr;
+  ncclComm_t MergeComm = nullptr;
+  ncclComm_t DupComm = nullptr;
 };
 
-void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm);
+void createMatrixDesc(deviceMatrixDesc_t* desc, long long bdim, long long rank, deviceMatrixDesc_t lower, const ColCommMPI& comm, const ncclComms nccl_comms);
 void destroyMatrixDesc(deviceMatrixDesc_t desc);
 
-void copyDataInMatrixDesc(deviceMatrixDesc_t desc, long long lenA, const STD_CTYPE* A, long long lenU, const STD_CTYPE* U, cudaStream_t stream);
-void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, long long lenA, STD_CTYPE* A, long long lenV, STD_CTYPE* V, cudaStream_t stream);
+void copyDataInMatrixDesc(deviceMatrixDesc_t desc, const STD_CTYPE* A, const STD_CTYPE* U, cudaStream_t stream);
+void copyDataOutMatrixDesc(deviceMatrixDesc_t desc, STD_CTYPE* A, STD_CTYPE* V, cudaStream_t stream);
 
-void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrixDesc_t Al, const ColCommMPI& comm, const ncclComms nccl_comms);
-void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, const CUDA_CTYPE* X, const ColCommMPI& comm, const ncclComms nccl_comms);
-void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, CUDA_CTYPE* X, const ColCommMPI& comm, const ncclComms nccl_comms);
+void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrixDesc_t Al);
+void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, const CUDA_CTYPE* X);
+void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t A, CUDA_CTYPE* X);
 
 int check_info(deviceMatrixDesc_t A, const ColCommMPI& comm);
 

@@ -59,8 +59,6 @@ void initGpuEnvs(deviceHandle_t* handle) {
   cublasSetStream((*handle)->cublasH, (*handle)->compute_stream);
   cusparseCreate(&((*handle)->cusparseH));
   cusparseSetStream((*handle)->cusparseH, (*handle)->compute_stream);
-  cusolverDnCreate(&((*handle)->cusolverH));
-  cusolverDnSetStream((*handle)->cusolverH, (*handle)->compute_stream);
 }
 
 void finalizeGpuEnvs(deviceHandle_t handle) {
@@ -69,7 +67,6 @@ void finalizeGpuEnvs(deviceHandle_t handle) {
   cudaStreamDestroy(handle->compute_stream);
   cublasDestroy(handle->cublasH);
   cusparseDestroy(handle->cusparseH);
-  cusolverDnDestroy(handle->cusolverH);
   delete handle;
 }
 

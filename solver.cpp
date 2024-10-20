@@ -39,16 +39,16 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
 }
 
-void H2MatrixSolver::init_gpu_handles() {
+void H2MatrixSolver::init_gpu_handles(const ncclComms nccl_comms) {
   desc.resize(levels + 1);
   long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
   long long rank = *std::max_element(A[levels].DimsLr.begin(), A[levels].DimsLr.end());
-  createMatrixDesc(&desc[levels], bdim, rank, deviceMatrixDesc_t(), comm[levels]);
+  createMatrixDesc(&desc[levels], bdim, rank, deviceMatrixDesc_t(), comm[levels], nccl_comms);
 
   for (long long l = levels - 1; l >= 0; l--) {
     long long bdim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
     long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
-    createMatrixDesc(&desc[l], bdim, rank, desc[l + 1], comm[l]);
+    createMatrixDesc(&desc[l], bdim, rank, desc[l + 1], comm[l], nccl_comms);
   }
 
   long long lenX = bdim * comm[levels].lenLocal();
@@ -99,18 +99,18 @@ void H2MatrixSolver::factorizeM() {
   }
 }
 
-void H2MatrixSolver::factorizeDeviceM(deviceHandle_t handle, const ncclComms nccl_comms) {
-  copyDataInMatrixDesc(desc[levels], comm[levels].ARowOffsets.back(), A[levels].A[0], comm[levels].lenNeighbors(), A[levels].Q[0], handle->compute_stream);
-  compute_factorize(handle, desc[levels], deviceMatrixDesc_t(), comm[levels], nccl_comms);
+void H2MatrixSolver::factorizeDeviceM(deviceHandle_t handle) {
+  copyDataInMatrixDesc(desc[levels], A[levels].A[0], A[levels].Q[0], handle->compute_stream);
+  compute_factorize(handle, desc[levels], deviceMatrixDesc_t());
 
   for (long long l = levels - 1; l >= 0; l--) {
-    copyDataInMatrixDesc(desc[l], comm[l].ARowOffsets.back(), A[l].A[0], comm[l].lenNeighbors(), A[l].Q[0], handle->memory_stream);
+    copyDataInMatrixDesc(desc[l], A[l].A[0], A[l].Q[0], handle->memory_stream);
     cudaDeviceSynchronize();
-    copyDataOutMatrixDesc(desc[l + 1], comm[l + 1].ARowOffsets.back(), A[l + 1].A[0], comm[l + 1].lenLocal(), A[l + 1].R[desc[l + 1].diag_offset], handle->memory_stream);
-    compute_factorize(handle, desc[l], desc[l + 1], comm[l], nccl_comms);
+    copyDataOutMatrixDesc(desc[l + 1], A[l + 1].A[0], A[l + 1].R[desc[l + 1].diag_offset], handle->memory_stream);
+    compute_factorize(handle, desc[l], desc[l + 1]);
   }
 
-  copyDataOutMatrixDesc(desc[0], 1, A[0].A[0], 1, A[0].R[0], handle->compute_stream);
+  copyDataOutMatrixDesc(desc[0], A[0].A[0], A[0].R[0], handle->compute_stream);
   cudaDeviceSynchronize();
 
   for (long long l = levels; l >= 0; l--)
@@ -131,20 +131,20 @@ void H2MatrixSolver::solvePrecondition(std::complex<double> X[]) {
   A[levels].backwardSubstitute(X, comm[levels]);
 }
 
-void H2MatrixSolver::solvePreconditionDevice(deviceHandle_t handle, std::complex<double> X[], const ncclComms nccl_comms) {
+void H2MatrixSolver::solvePreconditionDevice(deviceHandle_t handle, std::complex<double> X[]) {
   if (levels < 0)
     return;
   
   long long lenX = A[levels].lenX;
   cudaMemcpy(X_dev, X, lenX * sizeof(std::complex<double>), cudaMemcpyHostToDevice);
 
-  compute_forward_substitution(handle, desc[levels], X_dev, comm[levels], nccl_comms);
+  compute_forward_substitution(handle, desc[levels], X_dev);
   for (long long l = levels - 1; l >= 0; l--)
-    compute_forward_substitution(handle, desc[l], desc[l + 1].Xdata, comm[l], nccl_comms);
+    compute_forward_substitution(handle, desc[l], desc[l + 1].Xdata);
 
   for (long long l = 0; l < levels; l++)
-    compute_backward_substitution(handle, desc[l], desc[l + 1].Xdata, comm[l], nccl_comms);
-  compute_backward_substitution(handle, desc[levels], X_dev, comm[levels], nccl_comms);
+    compute_backward_substitution(handle, desc[l], desc[l + 1].Xdata);
+  compute_backward_substitution(handle, desc[levels], X_dev);
   
   cudaMemcpy(X, X_dev, lenX * sizeof(std::complex<double>), cudaMemcpyDeviceToHost);
 }

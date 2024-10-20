@@ -55,17 +55,17 @@ template<class T> struct copyFunc {
   }
 };
 
-void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrixDesc_t Al, const ColCommMPI& comm, const ncclComms nccl_comms) {
+void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrixDesc_t Al) {
   long long bdim = A.bdim;
   long long rank = A.rank;
   long long block = bdim * bdim;
   long long rblock = rank * rank;
 
-  long long D = comm.oLocal();
-  long long M = comm.lenLocal();
-  long long N = comm.lenNeighbors();
-  long long lenA = comm.ARowOffsets[M];
-  long long lenL = comm.LowerIndA.size();
+  long long D = A.diag_offset;
+  long long M = A.lenM;
+  long long N = A.lenN;
+  long long lenA = A.lenA;
+  long long lenL = Al.lenA;
 
   cudaStream_t stream = handle->compute_stream;
   cublasHandle_t cublasH = handle->cublasH;
@@ -89,13 +89,11 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrix
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + len, copyFunc(Al.rank, Al.rank, Al.A_unsort, Al.bdim, A.A_dst, bdim));
   }
 
-  ncclComm_t dup = findNcclComm(comm.DupComm, nccl_comms);
   if (M == 1) {
-    ncclComm_t merge = findNcclComm(comm.MergeComm, nccl_comms);
-    if (comm.MergeComm != MPI_COMM_NULL)
-      ncclAllReduce(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, merge, stream);
-    if (comm.DupComm != MPI_COMM_NULL)
-      ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, dup, stream);
+    if (A.MergeComm)
+      ncclAllReduce(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, A.MergeComm, stream);
+    if (A.DupComm)
+      ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, A.DupComm, stream);
   }
 
   cublasZgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.A_ss, bdim, &zero, A.B_ind, bdim, M);
@@ -119,15 +117,14 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t A, deviceMatrix
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const CUDA_CTYPE**>(A.A_rs), bdim, &(A.B_ind)[D], bdim));
     
     ncclGroupStart();
-    for (long long p = 0; p < (long long)comm.NeighborComm.size(); p++) {
-      long long start = comm.BoxOffsets[p] * block;
-      long long len = comm.BoxOffsets[p + 1] * block - start;
-      ncclComm_t neighbor = findNcclComm(comm.NeighborComm[p].second, nccl_comms);
-      ncclBroadcast(const_cast<const CUDA_CTYPE*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, comm.NeighborComm[p].first, neighbor, stream);
+    for (long long p = 0; p < A.LenComms; p++) {
+      long long start = A.Neighbor[p] * block;
+      long long len = A.Neighbor[p + 1] * block - start;
+      ncclBroadcast(const_cast<const CUDA_CTYPE*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
     }
 
-    if (comm.DupComm != MPI_COMM_NULL)
-      ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, dup, stream);
+    if (A.DupComm)
+      ncclBroadcast(const_cast<const CUDA_CTYPE*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, A.DupComm, stream);
     ncclGroupEnd();
 
     if (M < lenA)
