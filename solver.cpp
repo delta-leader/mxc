@@ -143,64 +143,61 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
   Eigen::Map<const Eigen::VectorXcd> B(b, N);
   Eigen::Map<Eigen::VectorXcd> X(x, N);
 
-  std::complex<double> normb_sum = B.adjoint() * B;
-  comm[levels].level_sum(&normb_sum, 1);
-  double normb = std::sqrt(normb_sum.real());
+  std::complex<double> nsum = B.adjoint() * B;
+  comm[levels].level_sum(&nsum, 1);
+  double normb = std::sqrt(nsum.real());
   if (normb == 0.)
     normb = 1.;
 
-  Eigen::VectorXcd R(N);
-  resid = std::vector<double>(outer_iters + 1, 0.);
+  Eigen::VectorXcd R = B;
+  resid.resize(outer_iters + 1);
+  resid[0] = 1.;
+  iters = 0;
 
-  for (iters = 0; iters < outer_iters; iters++) {
-    std::pair<std::complex<double>, std::complex<double>> normr_sum;
-    R = -X;
-    matVecMul(R.data());
-    R += B;
-    normr_sum.first = R.adjoint() * R;
-
+  while (iters < outer_iters && tol <= resid[iters]) {
     M.solvePrecondition(R.data());
-    normr_sum.second = R.adjoint() * R;
-    comm[levels].level_sum(reinterpret_cast<std::complex<double>*>(&normr_sum), 2);
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
 
-    resid[iters] = std::sqrt(normr_sum.first.real()) / normb;
-    if (resid[iters] < tol)
-      return;
-
-    double beta = std::sqrt(normr_sum.second.real());
+    double beta = std::sqrt(nsum.real());
     Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(ld, inner_iters);
     Eigen::MatrixXcd v = Eigen::MatrixXcd::Zero(N, ld);
     v.col(0) = R * (1. / beta);
     
     for (long long i = 0; i < inner_iters; i++) {
-      Eigen::VectorXcd w = v.col(i);
-      matVecMul(w.data());
-      M.solvePrecondition(w.data());
+      R = v.col(i);
+      matVecMul(R.data());
+      M.solvePrecondition(R.data());
 
-      H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * w;
+      H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
       comm[levels].level_sum(H.col(i).data(), i + 1);
-      w.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
+      R.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
 
-      std::complex<double> normw = w.adjoint() * w;
-      comm[levels].level_sum(&normw, 1);
-      H(i + 1, i) = std::sqrt(normw.real());
-      v.col(i + 1) = w * (1. / H(i + 1, i));
+      nsum = R.adjoint() * R;
+      comm[levels].level_sum(&nsum, 1);
+      H(i + 1, i) = std::sqrt(nsum.real());
+      v.col(i + 1) = R * (1. / H(i + 1, i));
     }
 
     Eigen::VectorXcd s = Eigen::VectorXcd::Zero(ld);
     s(0) = beta;
 
-    Eigen::VectorXcd y = H.colPivHouseholderQr().solve(s);
-    X += v.leftCols(inner_iters) * y;
+    R = H.householderQr().solve(s);
+    X.noalias() += v.leftCols(inner_iters) * R;
+
+    R = -X;
+    matVecMul(R.data());
+    R += B;
+
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+    resid[++iters] = std::sqrt(nsum.real()) / normb;
   }
+}
 
-  R = -X;
-  matVecMul(R.data());
-  R += B;
-
-  normb_sum = R.adjoint() * R;
-  comm[levels].level_sum(&normb_sum, 1);
-  resid[outer_iters] = std::sqrt(normb_sum.real()) / normb;
+void H2MatrixSolver::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms) {
+  resid.resize(outer_iters + 1);
+  iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data(), comm[levels], nccl_comms);
 }
 
 void H2MatrixSolver::free_all_comms() {

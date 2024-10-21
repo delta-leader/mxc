@@ -4,6 +4,7 @@
 #include <complex>
 
 class ColCommMPI;
+class deviceMatrixDesc_t;
 
 struct CsrContainer {
   long long M = 0;
@@ -73,3 +74,4 @@ void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc
 void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* X_io);
 
 void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], std::complex<double>* devX);
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], long long mlevels, deviceMatrixDesc_t desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms);

@@ -16,7 +16,7 @@ file(GLOB sources "*.cpp" "*.cu")
 file(GLOB headers "*.hpp" "*.cuh")
 
 add_executable(main.app ${sources} ${headers})
-target_link_libraries(main.app BLAS::BLAS LAPACK::LAPACK lapacke Eigen3::Eigen MPI::MPI_CXX cudart cublas cusparse cusolver nccl)
+target_link_libraries(main.app BLAS::BLAS LAPACK::LAPACK lapacke Eigen3::Eigen MPI::MPI_CXX cudart cublas cusparse nccl)
 
 target_compile_definitions(main.app PRIVATE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
 target_include_directories(main.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
