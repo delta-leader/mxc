@@ -10,13 +10,14 @@ set(BLA_VENDOR OpenBLAS)
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)
 find_package(MPI REQUIRED)
-find_package(Eigen3 3.4 REQUIRED NO_MODULE)
+find_package(Eigen3 REQUIRED NO_MODULE)
+find_package(CUDAToolkit REQUIRED)
 
 file(GLOB sources "*.cpp" "*.cu")
 file(GLOB headers "*.hpp" "*.cuh")
 
 add_executable(main.app ${sources} ${headers})
-target_link_libraries(main.app BLAS::BLAS LAPACK::LAPACK lapacke Eigen3::Eigen MPI::MPI_CXX cudart cublas cusparse nccl)
+target_link_libraries(main.app BLAS::BLAS LAPACK::LAPACK lapacke Eigen3::Eigen MPI::MPI_CXX CUDA::cudart CUDA::cublas CUDA::cusparse nccl)
 
 target_compile_definitions(main.app PRIVATE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
 target_include_directories(main.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
