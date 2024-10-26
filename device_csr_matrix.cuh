@@ -4,6 +4,7 @@
 #include <complex>
 
 class ColCommMPI;
+template <typename DT>
 class deviceMatrixDesc_t;
 
 struct CsrContainer {
@@ -62,16 +63,16 @@ struct CsrMatVecDesc {
 
 typedef struct CsrMatVecDesc* CsrMatVecDesc_t;
 
-void createDeviceCsr(CsrContainer_t* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double> data[]);
-void createDeviceVec(VecDnContainer_t* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
-void destroyDeviceVec(VecDnContainer_t X);
+//void createDeviceCsr(CsrContainer_t* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double> data[]);
+//void createDeviceVec(VecDnContainer_t* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
+//void destroyDeviceVec(VecDnContainer_t X);
 
-void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm, const ncclComms nccl_comms);
-void destroySpMatrixDesc(CsrMatVecDesc_t desc);
+//void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm, const ncclComms nccl_comms);
+//void destroySpMatrixDesc(CsrMatVecDesc_t desc);
 
-void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, const std::complex<double>* X_in);
-void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* Y_out);
-void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* X_io);
+//void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, const std::complex<double>* X_in);
+//void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* Y_out);
+//void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* X_io);
 
-void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], std::complex<double>* devX);
-long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], long long mlevels, deviceMatrixDesc_t desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms);
+//void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], std::complex<double>* devX);
+//long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], long long mlevels, deviceMatrixDesc_t desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms);

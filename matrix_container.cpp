@@ -2,6 +2,22 @@
 #include <matrix_container.hpp>
 #include <numeric>
 
+/* explicit template instantiation */
+// complex double
+template class MatrixDataContainer<std::complex<double>>;
+// complex float
+template class MatrixDataContainer<std::complex<float>>;
+// double
+template class MatrixDataContainer<double>;
+// float
+template class MatrixDataContainer<float>;
+
+template <class T>
+MatrixDataContainer<T>::~MatrixDataContainer() {
+  if (data)
+    delete data;
+}
+
 template <class T>
 void MatrixDataContainer<T>::alloc(long long len, const long long* dims) {
   offsets.resize(len + 1);
@@ -34,6 +50,3 @@ template <class T>
 long long MatrixDataContainer<T>::size() const {
   return offsets.back();
 }
-
-template class MatrixDataContainer<double>;
-template class MatrixDataContainer<std::complex<double>>;

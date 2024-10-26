@@ -6,7 +6,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/complex.h>
 #include <thrust/inner_product.h>
-
+/*
 struct conjugateFunc {
   __host__ __device__ thrust::complex<float> operator()(const thrust::complex<float>& z) const {
     return thrust::conj(z);
@@ -113,3 +113,4 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
   cudaFree(dev_info);
   return iters;
 }
+*/

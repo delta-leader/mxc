@@ -2,12 +2,14 @@
 
 #include <matrix_container.hpp>
 
+template <typename DT>
 class MatrixAccessor;
 class CSR;
 class Cell;
 class ColCommMPI;
 class MatrixDesc;
 
+template <typename DT = std::complex<double>>
 class WellSeparatedApproximation {
 private:
   long long lbegin = 0;
@@ -15,11 +17,12 @@ private:
   std::vector<std::vector<double>> M;
 
 public:
-  void construct(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper);
+  void construct(const MatrixAccessor<DT>& eval, double epi, long long rank, long long lbegin, long long lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper);
   long long fbodies_size_at_i(long long i) const;
   const double* fbodies_at_i(long long i) const;
 };
 
+template <typename DT = std::complex<double>>
 class H2Matrix {
 private:
   std::vector<long long> UpperStride;
@@ -41,26 +44,26 @@ public:
 
   std::vector<long long> ARows;
   std::vector<long long> ACols;
-  MatrixDataContainer<std::complex<double>> Q;
-  MatrixDataContainer<std::complex<double>> R;
-  MatrixDataContainer<std::complex<double>> A;
-  MatrixDataContainer<std::complex<double>> C;
-  MatrixDataContainer<std::complex<double>> U;
+  MatrixDataContainer<DT> Q;
+  MatrixDataContainer<DT> R;
+  MatrixDataContainer<DT> A;
+  MatrixDataContainer<DT> C;
+  MatrixDataContainer<DT> U;
 
-  MatrixDataContainer<std::complex<double>> X;
-  MatrixDataContainer<std::complex<double>> Y;
-  MatrixDataContainer<std::complex<double>> Z;
-  MatrixDataContainer<std::complex<double>> W;
+  MatrixDataContainer<DT> X;
+  MatrixDataContainer<DT> Y;
+  MatrixDataContainer<DT> Z;
+  MatrixDataContainer<DT> W;
   
-  void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
+  void construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm);
 
-  void matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm);
-  void matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm);
-  void matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCommMPI& comm);
+  void matVecUpwardPass(const DT* X_in, const ColCommMPI& comm);
+  void matVecHorizontalandDownwardPass(DT* Y_out, const ColCommMPI& comm);
+  void matVecLeafHorizontalPass(DT* X_io, const ColCommMPI& comm);
 
   void factorize(const ColCommMPI& comm);
   void factorizeCopyNext(const H2Matrix& lowerA, const ColCommMPI& lowerComm);
-  void forwardSubstitute(const std::complex<double>* X_in, const ColCommMPI& comm);
-  void backwardSubstitute(std::complex<double>* Y_out, const ColCommMPI& comm);
+  void forwardSubstitute(const DT* X_in, const ColCommMPI& comm);
+  void backwardSubstitute(DT* Y_out, const ColCommMPI& comm);
 };
 

@@ -5,6 +5,27 @@
 #include <set>
 #include <numeric>
 
+/* explicit template instantiation */
+// complex double
+template void ColCommMPI::level_merge<std::complex<double>>(std::complex<double>*, long long) const;
+template void ColCommMPI::level_sum<std::complex<double>>(std::complex<double>*, long long) const;
+template void ColCommMPI::neighbor_bcast<std::complex<double>>(std::complex<double>*, const long long[]) const;
+// complex float
+template void ColCommMPI::level_merge<std::complex<float>>(std::complex<float>*, long long) const;
+template void ColCommMPI::level_sum<std::complex<float>>(std::complex<float>*, long long) const;
+template void ColCommMPI::neighbor_bcast<std::complex<float>>(std::complex<float>*, const long long[]) const;
+// double
+template void ColCommMPI::level_merge<double>(double*, long long) const;
+template void ColCommMPI::level_sum<double>(double*, long long) const;
+template void ColCommMPI::neighbor_bcast<double>(double*, const long long[]) const;
+// float
+template void ColCommMPI::level_merge<float>(float*, long long) const;
+template void ColCommMPI::level_sum<float>(float*, long long) const;
+template void ColCommMPI::neighbor_bcast<float>(float*, const long long[]) const;
+
+// long long
+template void ColCommMPI::neighbor_bcast<long long>(long long*, const long long[]) const;
+
 MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
   MPI_Comm_split(world, color, mpi_rank, &comm);
@@ -190,58 +211,45 @@ template<class T> inline MPI_Datatype get_mpi_datatype() {
     return MPI_LONG_LONG_INT;
   if (typeid(T) == typeid(double))
     return MPI_DOUBLE;
+  if (typeid(T) == typeid(float))
+    return MPI_FLOAT;
   if (typeid(T) == typeid(std::complex<double>))
     return MPI_C_DOUBLE_COMPLEX;
+  if (typeid(T) == typeid(std::complex<float>))
+    return MPI_C_FLOAT_COMPLEX;
   return MPI_DATATYPE_NULL;
 }
 
-template<class T> inline void ColCommMPI::level_merge(T* data, long long len) const {
+template <typename DT>
+void ColCommMPI::level_merge(DT* data, long long len) const {
   record_mpi();
   if (MergeComm != MPI_COMM_NULL)
-    MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, MergeComm);
+    MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<DT>(), MPI_SUM, MergeComm);
   if (DupComm != MPI_COMM_NULL)
-    MPI_Bcast(data, len, get_mpi_datatype<T>(), 0, DupComm);
+    MPI_Bcast(data, len, get_mpi_datatype<DT>(), 0, DupComm);
   record_mpi();
 }
 
-template<class T> inline void ColCommMPI::level_sum(T* data, long long len) const {
+template <typename DT>
+void ColCommMPI::level_sum(DT* data, long long len) const {
   record_mpi();
   if (AllReduceComm != MPI_COMM_NULL)
-    MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<T>(), MPI_SUM, AllReduceComm);
+    MPI_Allreduce(MPI_IN_PLACE, data, len, get_mpi_datatype<DT>(), MPI_SUM, AllReduceComm);
   if (DupComm != MPI_COMM_NULL)
-    MPI_Bcast(data, len, get_mpi_datatype<T>(), 0, DupComm);
+    MPI_Bcast(data, len, get_mpi_datatype<DT>(), 0, DupComm);
   record_mpi();
 }
 
-template<class T> inline void ColCommMPI::neighbor_bcast(T* data, const long long noffsets[]) const {
+template <typename DT>
+void ColCommMPI::neighbor_bcast(DT data[], const long long noffsets[]) const {
   record_mpi();
   for (long long p = 0; p < (long long)NeighborComm.size(); p++) {
-    T* start = data + (0 < p ? noffsets[p - 1] : 0), *end = data + noffsets[p];
-    MPI_Bcast(start, std::distance(start, end), get_mpi_datatype<T>(), NeighborComm[p].first, NeighborComm[p].second);
+    DT* start = data + (0 < p ? noffsets[p - 1] : 0), *end = data + noffsets[p];
+    MPI_Bcast(start, std::distance(start, end), get_mpi_datatype<DT>(), NeighborComm[p].first, NeighborComm[p].second);
   }
   if (DupComm != MPI_COMM_NULL)
-    MPI_Bcast(data, noffsets[Boxes.size() - 1], get_mpi_datatype<T>(), 0, DupComm);
+    MPI_Bcast(data, noffsets[Boxes.size() - 1], get_mpi_datatype<DT>(), 0, DupComm);
   record_mpi();
-}
-
-void ColCommMPI::level_merge(std::complex<double>* data, long long len) const {
-  level_merge<std::complex<double>>(data, len);
-}
-
-void ColCommMPI::level_sum(std::complex<double>* data, long long len) const {
-  level_sum<std::complex<double>>(data, len);
-}
-
-void ColCommMPI::neighbor_bcast(long long data[], const long long noffsets[]) const {
-  neighbor_bcast<long long>(data, noffsets);
-}
-
-void ColCommMPI::neighbor_bcast(double data[], const long long noffsets[]) const {
-  neighbor_bcast<double>(data, noffsets);
-}
-
-void ColCommMPI::neighbor_bcast(std::complex<double> data[], const long long noffsets[]) const {
-  neighbor_bcast<std::complex<double>>(data, noffsets);
 }
 
 std::pair<double, double> timer = std::make_pair(0., 0.);

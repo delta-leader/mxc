@@ -9,6 +9,7 @@ private:
   T* data = nullptr;
 
 public:
+  ~MatrixDataContainer();
   void alloc(long long len, const long long* dims);
   T* operator[](long long index);
   const T* operator[](long long index) const;

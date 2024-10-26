@@ -36,16 +36,12 @@ public:
   long long lenNeighbors() const;
   long long dataSizesToNeighborOffsets(long long Dims[]) const;
 
-  template<class T> inline void level_merge(T* data, long long len) const;
-  template<class T> inline void level_sum(T* data, long long len) const;
-  template<class T> inline void neighbor_bcast(T* data, const long long noffsets[]) const;
-
-  void level_merge(std::complex<double>* data, long long len) const;
-  void level_sum(std::complex<double>* data, long long len) const;
-
-  void neighbor_bcast(long long data[], const long long noffsets[]) const;
-  void neighbor_bcast(double data[], const long long noffsets[]) const;
-  void neighbor_bcast(std::complex<double> data[], const long long noffsets[]) const;
+  template <typename DT>
+  void level_merge(DT* data, long long len) const;
+  template <typename DT>
+  void level_sum(DT* data, long long len) const;
+  template <typename DT>
+  void neighbor_bcast(DT data[], const long long noffsets[]) const;
 
   static double get_comm_time();
   static void record_mpi();
