@@ -4,9 +4,9 @@
 #include <complex>
 #include <cuComplex.h>
 
-#define STD_CTYPE std::complex<double>
-#define THRUST_CTYPE thrust::complex<double>
-#define CUDA_CTYPE cuDoubleComplex
+//#define STD_CTYPE std::complex<double>
+//#define THRUST_CTYPE thrust::complex<double>
+//#define CUDA_CTYPE cuDoubleComplex
 
 class ColCommMPI;
 template <typename DT>

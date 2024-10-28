@@ -79,14 +79,14 @@ void H2MatrixSolver<DT>::init_gpu_handles(const ncclComms nccl_comms) {
   }
 
   long long lenX = bdim * comm[levels].lenLocal();
-  cudaMalloc(reinterpret_cast<void**>(&X_dev), lenX * sizeof(CUDA_CTYPE));
+  cudaMalloc(reinterpret_cast<void**>(&X_dev), lenX * sizeof(DT));
 }
 
 template <typename DT>
 void H2MatrixSolver<DT>::allocSparseMV(deviceHandle_t handle, const ncclComms nccl_comms) {
   A_mv.resize(levels + 1);
   for (long long l = 0; l <= levels; l++) {
-    //createSpMatrixDesc(handle, &A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], comm[l], nccl_comms);
+    createSpMatrixDesc(handle, &A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], comm[l], nccl_comms);
   }
 }
 
@@ -97,7 +97,7 @@ void H2MatrixSolver<DT>::matVecMulSp(deviceHandle_t handle, DT X[]) {
 
   long long lenX = A[levels].lenX;
   cudaMemcpy(X_dev, X, lenX * sizeof(DT), cudaMemcpyHostToDevice);
-  //matVecDeviceH2(handle, levels, A_mv.data(), reinterpret_cast<DT*>(X_dev));
+  matVecDeviceH2(handle, levels, A_mv.data(), X_dev);
   cudaMemcpy(X, X_dev, lenX * sizeof(DT), cudaMemcpyDeviceToHost);
 }
 
@@ -237,7 +237,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<DT>& M, DT x[], c
 template <typename DT>
 void H2MatrixSolver<DT>::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms) {
   resid.resize(outer_iters + 1);
-  //iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data(), comm[levels], nccl_comms);
+  iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data(), comm[levels], nccl_comms);
 }
 
 template <typename DT>
@@ -250,7 +250,7 @@ void H2MatrixSolver<DT>::free_all_comms() {
 template <typename DT>
 void H2MatrixSolver<DT>::freeSparseMV() {
   for (long long l = 0; l <= levels; l++) {
-    //destroySpMatrixDesc(A_mv[l]);
+    destroySpMatrixDesc(A_mv[l]);
   }
   A_mv.clear();
 }

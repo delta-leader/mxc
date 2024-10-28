@@ -15,9 +15,10 @@ public:
   std::vector<ColCommMPI> comm;
   std::vector<MPI_Comm> allocedComm;
 
-  std::vector<CsrMatVecDesc_t> A_mv;
+  std::vector<CsrMatVecDesc_t<DT>> A_mv;
 
   std::vector<deviceMatrixDesc_t<DT>> desc;
+  // this is a device pointer
   DT* X_dev;
   //CUDA_CTYPE* X_dev;
 

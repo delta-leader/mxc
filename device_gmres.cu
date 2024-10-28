@@ -6,7 +6,9 @@
 #include <thrust/device_vector.h>
 #include <thrust/complex.h>
 #include <thrust/inner_product.h>
-/*
+
+#include <iostream>
+
 struct conjugateFunc {
   __host__ __device__ thrust::complex<float> operator()(const thrust::complex<float>& z) const {
     return thrust::conj(z);
@@ -23,7 +25,8 @@ void levelCommSum(long long N, thrust::complex<double> X[], ncclComm_t AllComm, 
     ncclBroadcast(const_cast<const thrust::complex<double>*>(X), X, N * 2, ncclDouble, 0, DupComm, stream);
 }
 
-long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], long long mlevels, deviceMatrixDesc_t desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+template <>
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<double>> desc[], long long mlevels, deviceMatrixDesc_t<std::complex<double>> desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
   long long N = desc[levels]->X->lenX;
   long long ld = inner_iters + 1;
 
@@ -113,4 +116,18 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
   cudaFree(dev_info);
   return iters;
 }
-*/
+
+template <>
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<float>> desc[], long long mlevels, deviceMatrixDesc_t<std::complex<float>> desc_m[], double tol, std::complex<float>* X, const std::complex<float>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+  std::cout<<"Not implemented"<<std::endl;
+}
+
+template <>
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<double> desc[], long long mlevels, deviceMatrixDesc_t<double> desc_m[], double tol, double* X, const double* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+  std::cout<<"Not implemented"<<std::endl;
+}
+
+template <>
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<float> desc[], long long mlevels, deviceMatrixDesc_t<float> desc_m[], double tol, float* X, const float* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+  std::cout<<"Not implemented"<<std::endl;
+}

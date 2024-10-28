@@ -7,20 +7,22 @@ class ColCommMPI;
 template <typename DT>
 class deviceMatrixDesc_t;
 
+template <typename DT>
 struct CsrContainer {
   long long M = 0;
   long long N = 0;
   long long NNZ = 0;
   long long* RowOffsets = nullptr;
   long long* ColInd = nullptr;
-  std::complex<double>* Vals = nullptr;
+  DT* Vals = nullptr;
 };
 
+template <typename DT>
 struct VecDnContainer {
   long long N = 0;
   long long Xbegin = 0;
   long long lenX = 0;
-  std::complex<double>* Vals = nullptr;
+  DT* Vals = nullptr;
 
   long long LenComms = 0;
   long long* Neighbor = nullptr;
@@ -29,21 +31,24 @@ struct VecDnContainer {
   ncclComm_t DupComm = nullptr;
 };
 
-typedef struct CsrContainer* CsrContainer_t;
-typedef struct VecDnContainer* VecDnContainer_t;
+template <typename DT>
+using CsrContainer_t = CsrContainer<DT>*;
+template <typename DT>
+using VecDnContainer_t = struct VecDnContainer<DT>*;
 
+template <typename DT>
 struct CsrMatVecDesc {
   long long lowerZ = 0;
   long long buffer_size = 0;
   
-  VecDnContainer_t X = nullptr;
-  VecDnContainer_t Y = nullptr;
-  VecDnContainer_t Z = nullptr;
-  VecDnContainer_t W = nullptr;
+  VecDnContainer_t<DT> X = nullptr;
+  VecDnContainer_t<DT> Y = nullptr;
+  VecDnContainer_t<DT> Z = nullptr;
+  VecDnContainer_t<DT> W = nullptr;
 
-  CsrContainer_t U = nullptr;
-  CsrContainer_t C = nullptr;
-  CsrContainer_t A = nullptr;
+  CsrContainer_t<DT> U = nullptr;
+  CsrContainer_t<DT> C = nullptr;
+  CsrContainer_t<DT> A = nullptr;
 
   cusparseDnVecDescr_t descX = nullptr;
   cusparseDnVecDescr_t descXi = nullptr;
@@ -61,18 +66,29 @@ struct CsrMatVecDesc {
   void* buffer = nullptr;
 };
 
-typedef struct CsrMatVecDesc* CsrMatVecDesc_t;
+template <typename DT>
+using CsrMatVecDesc_t = struct CsrMatVecDesc<DT>*;
 
-//void createDeviceCsr(CsrContainer_t* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double> data[]);
-//void createDeviceVec(VecDnContainer_t* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
-//void destroyDeviceVec(VecDnContainer_t X);
+template <typename DT>
+void createDeviceCsr(CsrContainer_t<DT>* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const DT data[]);
+template <typename DT>
+void createDeviceVec(VecDnContainer_t<DT>* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template <typename DT>
+void destroyDeviceVec(VecDnContainer_t<DT> X);
 
-//void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm, const ncclComms nccl_comms);
-//void destroySpMatrixDesc(CsrMatVecDesc_t desc);
+template <typename DT>
+void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<DT>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const DT U[], const DT C[], const DT A[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template <typename DT>
+void destroySpMatrixDesc(CsrMatVecDesc_t<DT> desc);
 
-//void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, const std::complex<double>* X_in);
-//void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* Y_out);
-//void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t desc, std::complex<double>* X_io);
+template <typename DT>
+void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t<DT> desc, const DT* X_in);
+template <typename DT>
+void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t<DT> desc, DT* Y_out);
+template <typename DT>
+void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t<DT> desc, DT* X_io);
 
-//void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], std::complex<double>* devX);
-//long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t desc[], long long mlevels, deviceMatrixDesc_t desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template <typename DT>
+void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<DT> desc[], DT* devX);
+template <typename DT>
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<DT> desc[], long long mlevels, deviceMatrixDesc_t<DT> desc_m[], double tol, DT* X, const DT* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms);

@@ -71,8 +71,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matA.matVecMul(&X1[0]);
-  //matA.matVecMulSp(handle, &X1[0]);
+  //matA.matVecMul(&X1[0]);
+  matA.matVecMulSp(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -121,8 +121,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
-  matM.factorizeM();
-  //matM.factorizeDeviceM(handle);
+  //matM.factorizeM();
+  matM.factorizeDeviceM(handle);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -132,8 +132,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  matM.solvePrecondition(&X1[0]);
-  //matM.solvePreconditionDevice(handle, &X1[0]);
+  //matM.solvePrecondition(&X1[0]);
+  matM.solvePreconditionDevice(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
@@ -151,8 +151,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
-  //matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
+  //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
+  matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
