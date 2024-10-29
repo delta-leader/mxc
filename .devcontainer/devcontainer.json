@@ -1,5 +1,5 @@
 {
-	"name": "Intel OneAPI",
-	"image": "intel/oneapi-hpckit:latest",
+	"name": "CUDA 12.6 w/ Eigen OpenBLAS",
+	"image": "qxm28/nbd:latest",
   	"runArgs": ["--rm", "--gpus", "all"]
 }
