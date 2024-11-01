@@ -14,6 +14,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
+  CSR HSS_Far('F', cells, cells, 0.);
   int mpi_size = 1;
   MPI_Comm_size(world, &mpi_size);
 
@@ -24,15 +25,15 @@ H2MatrixSolver::H2MatrixSolver(const MatrixAccessor& eval, double epi, long long
   for (long long i = 0; i <= levels; i++)
     comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
 
+  bool fix_rank = (epi == 0.);
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
   std::vector<WellSeparatedApproximation> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++)
-    wsa[l].construct(eval, epi, rank_func(l), comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
+    wsa[l].construct(comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), fix_rank ? HSS_Far : Far, bodies, wsa[l - 1]);
 
-  bool fix_rank = (epi == 0.);
-  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels]);
+  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, bodies, wsa[levels], comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1]);
+    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1]);
 
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();

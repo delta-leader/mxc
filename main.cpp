@@ -36,8 +36,8 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
 
-  //mesh_sphere(&body[0], Nbody, std::sqrt(Nbody / (4 * M_PI)));
-  uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
+  mesh_sphere(&body[0], Nbody, std::sqrt(Nbody / (4 * M_PI)));
+  //uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
 

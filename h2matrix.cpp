@@ -11,7 +11,7 @@
 #include <Eigen/QR>
 #include <Eigen/LU>
 
-void WellSeparatedApproximation::construct(const MatrixAccessor& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) {
+void WellSeparatedApproximation::construct(long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) {
   WellSeparatedApproximation::lbegin = lbegin;
   lend = lbegin + len;
   M.resize(len);
@@ -23,21 +23,9 @@ void WellSeparatedApproximation::construct(const MatrixAccessor& eval, double ep
   for (long long y = lbegin; y < lend; y++) {
     for (long long yx = Far.RowIndex[y]; yx < Far.RowIndex[y + 1]; yx++) {
       long long x = Far.ColIndex[yx];
-      long long m = cells[y].Body[1] - cells[y].Body[0];
       long long n = cells[x].Body[1] - cells[x].Body[0];
       const double* xbodies = &bodies[3 * cells[x].Body[0]];
-      const double* ybodies = &bodies[3 * cells[y].Body[0]];
-
-      long long k = std::min(rank, std::min(m, n));
-      std::vector<long long> ipiv(k);
-      long long iters = adaptive_cross_approximation(epi, eval, m, n, k, ybodies, xbodies, nullptr, &ipiv[0], nullptr, nullptr);
-      ipiv.resize(iters);
-
-      Eigen::Map<const Eigen::Matrix<double, 3, Eigen::Dynamic>> Xbodies(xbodies, 3, n);
-      Eigen::VectorXd Fbodies(3 * iters);
-
-      Fbodies = Xbodies(Eigen::all, ipiv).reshaped();
-      M[y - lbegin].insert(M[y - lbegin].end(), Fbodies.begin(), Fbodies.end());
+      M[y - lbegin].insert(M[y - lbegin].end(), xbodies, &xbodies[3 * n]);
     }
   }
 }
@@ -109,7 +97,7 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
   return (k < RowIndex[i + 1]) ? k : -1;
 }
 
-void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm) {
+void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -231,7 +219,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
 
     comm.dataSizesToNeighborOffsets(Ssizes.data());
     comm.neighbor_bcast(S[0], Ssizes.data());
-    std::vector<std::vector<double>> cbodies(nodes);
+    /*std::vector<std::vector<double>> cbodies(nodes);
     for (long long i = 0; i < nodes; i++) {
       long long fsize = wsa.fbodies_size_at_i(i);
       const double* fbodies = wsa.fbodies_at_i(i);
@@ -257,11 +245,11 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
         cbodies[i] = std::vector<double>(3 * fsize);
         std::copy(fbodies, &fbodies[3 * fsize], cbodies[i].begin());
       }
-    }
+    }*/
 
     for (long long i = 0; i < nodes; i++) {
-      long long fsize = cbodies[i].size() / 3;
-      const double* fbodies = cbodies[i].data();
+      long long fsize = wsa.fbodies_size_at_i(i);
+      const double* fbodies = wsa.fbodies_at_i(i);
       long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, Q[i + ibegin], R[i + ibegin], 1. <= epi);
       DimsLr[i + ibegin] = rank;
     }

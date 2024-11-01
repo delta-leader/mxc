@@ -7,6 +7,7 @@
 #include <thrust/complex.h>
 #include <thrust/sort.h>
 #include <thrust/iterator/constant_iterator.h>
+#include <iostream>
 
 struct genXY {
   const long long* M, *A, *Y, *X;
@@ -67,7 +68,7 @@ void genCsrEntries(long long CsrM, long long devRowIndx[], long long devColIndx[
   thrust::copy(xdim_iter, xdim_iter + lenA, devAIndX.begin());
 
   long long NNZ = AOffsets.back();
-  thrust::device_vector<long long> Rows(NNZ, 0ll);
+  thrust::device_vector<long long> Rows(NNZ + 1, 0ll);
   thrust::device_ptr<long long> RowsPtr(devRowIndx);
   thrust::device_ptr<long long> ColsPtr(devColIndx);
   thrust::device_ptr<thrust::complex<double>> Vals(reinterpret_cast<thrust::complex<double>*>(devVals));
@@ -87,7 +88,7 @@ void genCsrEntries(long long CsrM, long long devRowIndx[], long long devColIndx[
   thrust::transform(inc_iter, inc_iter + NNZ, ind_iter, ind_iter, genXY(Mptr, Aptr, Yptr, Xptr));
   thrust::sort(sort_iter, sort_iter + NNZ, cmpXY());
 
-  counts_end = thrust::reduce_by_key(Rows.begin(), Rows.end(), one_iter, keys.begin(), counts.begin()).second;
+  counts_end = thrust::reduce_by_key(Rows.begin(), Rows.begin() + NNZ, one_iter, keys.begin(), counts.begin()).second;
   thrust::fill(RowsPtr, &RowsPtr[CsrM + 1], 0ll);
   thrust::scatter(counts.begin(), counts_end, keys.begin(), RowsPtr);
   thrust::exclusive_scan(RowsPtr, &RowsPtr[CsrM + 1], RowsPtr, 0ll);
