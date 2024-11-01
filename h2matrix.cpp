@@ -219,33 +219,6 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
 
     comm.dataSizesToNeighborOffsets(Ssizes.data());
     comm.neighbor_bcast(S[0], Ssizes.data());
-    /*std::vector<std::vector<double>> cbodies(nodes);
-    for (long long i = 0; i < nodes; i++) {
-      long long fsize = wsa.fbodies_size_at_i(i);
-      const double* fbodies = wsa.fbodies_at_i(i);
-
-      if (1. <= epi) {
-        std::vector<long long>::iterator neighbors = ACols.begin() + ARows[i];
-        std::vector<long long>::iterator neighbors_end = ACols.begin() + ARows[i + 1];
-        long long csize = std::transform_reduce(neighbors, neighbors_end, -Dims[i + ibegin], std::plus<long long>(), [&](long long col) { return Dims[col]; });
-
-        cbodies[i] = std::vector<double>(3 * (fsize + csize));
-        long long loc = 0;
-        for (long long n = 0; n < (ARows[i + 1] - ARows[i]); n++) {
-          long long col = neighbors[n];
-          long long len = 3 * Dims[col];
-          if (col != (i + ibegin)) {
-            std::copy(S[col], S[col] + len, cbodies[i].begin() + loc);
-            loc += len;
-          }
-        }
-        std::copy(fbodies, &fbodies[3 * fsize], cbodies[i].begin() + loc);
-      }
-      else {
-        cbodies[i] = std::vector<double>(3 * fsize);
-        std::copy(fbodies, &fbodies[3 * fsize], cbodies[i].begin());
-      }
-    }*/
 
     for (long long i = 0; i < nodes; i++) {
       long long fsize = wsa.fbodies_size_at_i(i);
@@ -397,7 +370,7 @@ void H2Matrix::matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCom
 
   std::copy(Y[ibegin], Y[ibegin + nodes], X_io);
 }
-
+#include <iostream>
 void H2Matrix::factorize(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -409,6 +382,7 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
   std::fill(Bsizes.begin(), Bsizes.end(), dims_max * dims_max);
   MatrixDataContainer<std::complex<double>> B;
   B.alloc(xlen, Bsizes.data());
+  info = 0;
 
   if (nodes == 1)
     comm.level_merge(A[0], A.size());
@@ -429,12 +403,13 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
 
     if (0 < Mr) {
-      Eigen::HouseholderQR<Eigen::MatrixXcd> fac(Aii.bottomRightCorner(Mr, Mr));
+      Eigen::PartialPivLU<Eigen::MatrixXcd> fac(Aii.bottomRightCorner(Mr, Mr));
       V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
       if (0 < Ms) {
         Aii.bottomLeftCorner(Mr, Ms).noalias() = V.bottomRows(Mr) * b.topRows(Ms).transpose();
         Aii.topLeftCorner(Ms, Ms).noalias() -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
       }
+      info += (std::norm(fac.determinant()) <= std::numeric_limits<double>::min());
     }
 
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 

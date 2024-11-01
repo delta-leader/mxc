@@ -51,6 +51,7 @@ public:
   MatrixDataContainer<std::complex<double>> Y;
   MatrixDataContainer<std::complex<double>> Z;
   MatrixDataContainer<std::complex<double>> W;
+  int info;
   
   void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
 

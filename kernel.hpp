@@ -38,7 +38,7 @@ public:
   Gaussian (double a) : alpha(a) {}
   std::complex<double> operator()(double d) const override {
     if (d == 0.)
-      return std::complex<double>(1. + 1.e-2, 0.);
+      return std::complex<double>(1.0001, 0.);
     return std::complex<double>(std::exp(- alpha * d * d), 0.);
   }
 };

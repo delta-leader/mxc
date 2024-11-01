@@ -93,6 +93,10 @@ void H2MatrixSolver::factorizeM() {
     if (0 < l)
       A[l - 1].factorizeCopyNext(A[l], comm[l]);
   }
+
+  for (long long l = levels; l >= 0; l--)
+    if (A[l].info)
+      printf("singularity detected at level %lld.\n", l);
 }
 
 void H2MatrixSolver::factorizeDeviceM(deviceHandle_t handle) {
