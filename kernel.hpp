@@ -6,6 +6,7 @@
 #include <random>
 #include <algorithm>
 #include <iostream>
+#include <comm-mpi.hpp>
 
 template <typename DT = std::complex<double>>
 class MyVector {
@@ -157,3 +158,6 @@ long long adaptive_cross_approximation(double epi, const MatrixAccessor<DT>& eva
 
 template <typename DT>
 void mat_vec_reference(const MatrixAccessor<DT>& eval, long long M, long long N, DT B[], const DT X[], const double ibodies[], const double jbodies[]);
+
+template <typename DT>
+double rel_backward_error(const MatrixAccessor<DT>& eval, long long M, long long N, const DT B[], const DT X[], const double ibodies[], const double jbodies[], MPI_Comm world = MPI_COMM_WORLD);

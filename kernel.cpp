@@ -8,25 +8,28 @@
 
 #include <Eigen/Dense>
 
+
 /* explicit template instantiation */
 // complex double
 template void gen_matrix<std::complex<double>>(const MatrixAccessor<std::complex<double>>&, long long, long long, const double*, const double*, std::complex<double>[]);
 template long long adaptive_cross_approximation<std::complex<double>>(double, const MatrixAccessor<std::complex<double>>&, long long, long long, long long, const double[], const double[], long long[], long long[], std::complex<double>[], std::complex<double>[]);
 template void mat_vec_reference<std::complex<double>> (const MatrixAccessor<std::complex<double>>&, long long, long long, std::complex<double> B[], const std::complex<double> X[], const double[], const double[]);
+template double rel_backward_error(const MatrixAccessor<std::complex<double>>&, long long, long long, const std::complex<double> B[], const std::complex<double> X[], const double[], const double[], MPI_Comm);
 // complex float
 template void gen_matrix<std::complex<float>>(const MatrixAccessor<std::complex<float>>&, long long, long long, const double*, const double*, std::complex<float>[]);
 template long long adaptive_cross_approximation<std::complex<float>>(double, const MatrixAccessor<std::complex<float>>&, long long, long long, long long, const double[], const double[], long long[], long long[], std::complex<float>[], std::complex<float>[]);
 template void mat_vec_reference<std::complex<float>> (const MatrixAccessor<std::complex<float>>&, long long, long long, std::complex<float> B[], const std::complex<float> X[], const double[], const double[]);
+template double rel_backward_error(const MatrixAccessor<std::complex<float>>&, long long, long long, const std::complex<float> B[], const std::complex<float> X[], const double[], const double[], MPI_Comm);
 // double
 template void gen_matrix<double>(const MatrixAccessor<double>&, long long, long long, const double*, const double*, double[]);
 template long long adaptive_cross_approximation<double>(double, const MatrixAccessor<double>&, long long, long long, long long, const double[], const double[], long long[], long long[], double[], double[]);
 template void mat_vec_reference<double> (const MatrixAccessor<double>&, long long, long long, double B[], const double X[], const double[], const double[]);
-//template double mat_vec_reference_norm<double> (const MatrixAccessor<double>&, long long, long long, double B[], const double X[], const double[], const double[]);
+template double rel_backward_error(const MatrixAccessor<double>&, long long, long long, const double B[], const double X[], const double[], const double[], MPI_Comm);
 // float
 template void gen_matrix<float>(const MatrixAccessor<float>&, long long, long long, const double*, const double*, float[]);
 template long long adaptive_cross_approximation<float>(double, const MatrixAccessor<float>&, long long, long long, long long, const double[], const double[], long long[], long long[], float[], float[]);
 template void mat_vec_reference<float> (const MatrixAccessor<float>&, long long, long long, float B[], const float X[], const double[], const double[]);
-//template double mat_vec_reference_norm<float> (const MatrixAccessor<float>&, long long, long long, float B[], const float X[], const double[], const double[]);
+template double rel_backward_error(const MatrixAccessor<float>&, long long, long long, const float B[], const float X[], const double[], const double[], MPI_Comm);
 
 template <typename DT>
 void gen_matrix(const MatrixAccessor<DT>& eval, long long m, long long n, const double* bi, const double* bj, DT Aij[]) {
@@ -130,4 +133,34 @@ void mat_vec_reference(const MatrixAccessor<DT>& eval, long long M, long long N,
       b.segment(i, m) += A.leftCols(n) * x.segment(j, n);
     }
   }
+}
+
+template <typename DT>
+double rel_backward_error(const MatrixAccessor<DT>& eval, long long M, long long N, const DT B[], const DT X[], const double ibodies[], const double jbodies[], MPI_Comm world) {
+  typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
+  constexpr long long size = 256;
+  Eigen::Map<const Vector_dt> x(X, N);
+  Eigen::Map<const Vector_dt> b(B, M);
+  Vector_dt r = b;
+  double nrm[4] = {0, 0, 0, 0};
+  nrm[2] = b.squaredNorm();
+  nrm[3] = x.squaredNorm();
+  nrm[1] = 0;
+
+  for (long long i = 0; i < M; i += size) {
+    long long m = std::min(M - i, size);
+    const double* bi = &ibodies[i * 3];
+    Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> A(m, size);
+
+    for (long long j = 0; j < N; j += size) {
+      const double* bj = &jbodies[j * 3];
+      long long n = std::min(N - j, size);
+      gen_matrix(eval, m, n, bi, bj, A.data());
+      r.segment(i, m) -= A.leftCols(n) * x.segment(j, n);
+      nrm[1] += A.squaredNorm();
+    }
+  }
+  nrm[0] = r.squaredNorm();
+  MPI_Allreduce(MPI_IN_PLACE, nrm, 3, MPI_DOUBLE, MPI_SUM, world);
+  return std::sqrt(nrm[0])/(std::sqrt(nrm[1]) * std::sqrt(nrm[3]) + std::sqrt(nrm[2]));
 }

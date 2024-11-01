@@ -265,7 +265,7 @@ void H2MatrixSolver<DT>::free_gpu_handles() {
 }
 
 // Ma's version
-template <typename DT>
+/*template <typename DT>
 double solveRelErr(long long lenX, const DT X[], const DT ref[], MPI_Comm world) {
   double err[2] = { 0., 0. };
   for (long long i = 0; i < lenX; i++) {
@@ -275,10 +275,10 @@ double solveRelErr(long long lenX, const DT X[], const DT ref[], MPI_Comm world)
   }
   MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
   return std::sqrt(err[0] / err[1]);
-}
+}*/
 
 // Eigen version
-/*template <typename DT>
+template <typename DT>
 double solveRelErr(long long lenX, const DT X[], const DT ref[], MPI_Comm world) {
   double err[2] = { 0., 0. };
   typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
@@ -290,4 +290,4 @@ double solveRelErr(long long lenX, const DT X[], const DT ref[], MPI_Comm world)
 
   MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
   return std::sqrt(err[0] / err[1]);
-}*/
+}
