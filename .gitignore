@@ -54,3 +54,6 @@ _deps
 
 # JSON
 *.json
+
+# build directory
+build/
