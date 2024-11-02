@@ -36,6 +36,7 @@ private:
   std::vector<long long> NbZoffsets;
 
 public:
+  template <typename OT> friend class H2Matrix;
   long long lenX;
   long long LowerZ;
 
@@ -54,6 +55,10 @@ public:
   MatrixDataContainer<DT> Y;
   MatrixDataContainer<DT> Z;
   MatrixDataContainer<DT> W;
+  
+  H2Matrix() = default;
+  template <typename OT>
+  H2Matrix(const H2Matrix<OT>& h2matrix);
   
   void construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm);
 

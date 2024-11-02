@@ -9,6 +9,11 @@ private:
   T* data = nullptr;
 
 public:
+  template <class U> friend class MatrixDataContainer;
+  MatrixDataContainer() = default;
+  MatrixDataContainer(const MatrixDataContainer& container);
+  template <class U>
+  MatrixDataContainer(const MatrixDataContainer<U>& container);
   ~MatrixDataContainer();
   void alloc(long long len, const long long* dims);
   T* operator[](long long index);

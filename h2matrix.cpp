@@ -34,11 +34,11 @@ template class H2Matrix<float>;
 
 /* supported type conversions */
 // (complex) double to float
-//template H2Matrix<std::complex<float>>::H2Matrix(const H2Matrix<std::complex<double>>&);
-//template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
+template H2Matrix<std::complex<float>>::H2Matrix(const H2Matrix<std::complex<double>>&);
+template H2Matrix<float>::H2Matrix(const H2Matrix<double>&);
 // (complex) float to double
-//template H2Matrix<std::complex<double>>::H2Matrix(const H2Matrix<std::complex<float>>&);
-//template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
+template H2Matrix<std::complex<double>>::H2Matrix(const H2Matrix<std::complex<float>>&);
+template H2Matrix<double>::H2Matrix(const H2Matrix<float>&);
 
 template <typename DT>
 void WellSeparatedApproximation<DT>::construct(const MatrixAccessor<DT>& eval, double epi, long long rank, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& upper) {
@@ -142,6 +142,13 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
   long long k = std::distance(ColIndex.begin(), std::find(ColIndex.begin() + RowIndex[i], ColIndex.begin() + RowIndex[i + 1], j));
   return (k < RowIndex[i + 1]) ? k : -1;
 }
+
+template <typename DT> template <typename OT>
+H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : UpperStride(h2matrix.UpperStride), S(h2matrix.S),
+  CRows(h2matrix.CRows), CCols(h2matrix.CCols), NA(h2matrix.NA), NbXoffsets(h2matrix.NbXoffsets), NbZoffsets(h2matrix.NbZoffsets),
+  lenX(h2matrix.lenX), LowerZ(h2matrix.LowerZ), Dims(h2matrix.Dims), DimsLr(h2matrix.DimsLr), ARows(h2matrix.ARows), ACols(h2matrix.ACols),
+  Q(h2matrix.Q), R(h2matrix.R), A(h2matrix.A), C(h2matrix.C), U(h2matrix.U),
+  X(h2matrix.X), Y(h2matrix.Y), Z(h2matrix.Z), W(h2matrix.W) {}
 
 template <typename DT>
 void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm) {

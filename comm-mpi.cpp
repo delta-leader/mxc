@@ -43,6 +43,19 @@ MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, in
   return comm;
 }
 
+MPI_Comm find_same(const MPI_Comm& comm, const std::vector<MPI_Comm>& allocedComm) {
+  if (comm != MPI_COMM_NULL) {
+    auto iter = std::find_if(allocedComm.begin(), allocedComm.end(), [comm](MPI_Comm c) -> bool { 
+      int result; MPI_Comm_compare(comm, c, &result); return result == MPI_CONGRUENT; });
+    if (iter == allocedComm.end()) {
+      //std::cerr<<"Could not find congruent communicator!"<<std::endl;
+      std::abort();
+    }
+  return *iter;
+  }
+  return MPI_COMM_NULL;
+}
+
 void getNextLevelMapping(std::pair<long long, long long> Mapping[], const std::pair<long long, long long> Tree[], long long mpi_size) {
   long long p = 0;
   std::vector<std::pair<long long, long long>> MappingNext(mpi_size, std::make_pair(-1, -1));
@@ -168,6 +181,20 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
       }
     }
   }
+}
+
+ColCommMPI::ColCommMPI(const ColCommMPI& comm, const std::vector<MPI_Comm>& allocedComm) :
+  Proc(comm.Proc), Boxes(comm.Boxes), BoxOffsets(comm.BoxOffsets), ARowOffsets(comm.ARowOffsets),
+  AColumns(comm.AColumns), CRowOffsets(comm.CRowOffsets), CColumns(comm.CColumns),
+  LowerX(comm.LowerX), LowerIndA(comm.LowerIndA), LowerIndC(comm.LowerIndC) {
+
+  for (size_t i = 0; i< comm.NeighborComm.size(); ++i) {
+    std::pair<int, MPI_Comm> neighbor(comm.NeighborComm[i].first, find_same(comm.NeighborComm[i].second, allocedComm));
+    NeighborComm.emplace_back(neighbor);
+  }
+  MergeComm = find_same(comm.MergeComm, allocedComm);
+  AllReduceComm = find_same(comm.AllReduceComm, allocedComm);
+  DupComm = find_same(comm.DupComm, allocedComm);
 }
 
 long long ColCommMPI::iLocal(long long iglobal) const {

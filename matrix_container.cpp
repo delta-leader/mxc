@@ -1,6 +1,8 @@
 
 #include <matrix_container.hpp>
 #include <numeric>
+#include <algorithm>
+#include <cstring>
 
 /* explicit template instantiation */
 // complex double
@@ -12,10 +14,40 @@ template class MatrixDataContainer<double>;
 // float
 template class MatrixDataContainer<float>;
 
+/* supported type conversions */
+// (complex) double to float
+template MatrixDataContainer<std::complex<float>>::MatrixDataContainer(const MatrixDataContainer<std::complex<double>>&);
+template MatrixDataContainer<float>::MatrixDataContainer(const MatrixDataContainer<double>&);
+// (complex) float to double
+template MatrixDataContainer<std::complex<double>>::MatrixDataContainer(const MatrixDataContainer<std::complex<float>>&);
+template MatrixDataContainer<double>::MatrixDataContainer(const MatrixDataContainer<float>&);
+
 template <class T>
 MatrixDataContainer<T>::~MatrixDataContainer() {
   if (data)
     delete data;
+}
+
+template <class T>
+MatrixDataContainer<T>::MatrixDataContainer(const MatrixDataContainer& container) : offsets(container.offsets) {
+  long long data_len = offsets.back();
+  if (0 < data_len) {
+   data = (T*)std::malloc(data_len * sizeof(T));
+   memcpy(data, container.data, data_len * sizeof(T));
+  } else {
+    data = nullptr;
+  }
+}
+
+template <class T> template <class U>
+MatrixDataContainer<T>::MatrixDataContainer(const MatrixDataContainer<U>& container) : offsets(container.offsets) {
+  long long data_len = offsets.back();
+  if (0 < data_len) {
+   data = (T*)std::malloc(data_len * sizeof(T));
+   std::transform(container.data, container.data + data_len, data, [](U value) -> T {return T(value);});
+  } else {
+    data = nullptr;
+  }
 }
 
 template <class T>

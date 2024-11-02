@@ -10,6 +10,8 @@
 template <typename DT = std::complex<double>>
 class H2MatrixSolver {
 public:
+  template <typename OT> friend class H2MatrixSolver;
+
   long long levels;
   std::vector<H2Matrix<DT>> A;
   std::vector<ColCommMPI> comm;
@@ -28,6 +30,8 @@ public:
   
   H2MatrixSolver();
   H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
+  template <typename OT>
+  H2MatrixSolver(const H2MatrixSolver<OT>& solver);
   void init_gpu_handles(const ncclComms nccl_comms);
   void move_data_gpu();
 
