@@ -92,3 +92,5 @@ template <typename DT>
 void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<DT> desc[], DT* devX);
 template <typename DT>
 long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<DT> desc[], long long mlevels, deviceMatrixDesc_t<DT> desc_m[], double tol, DT* X, const DT* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template <typename DT, typename OT>
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<DT> desc[], long long mlevels, deviceMatrixDesc_t<OT> desc_m[], double tol, DT* X, const DT* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms);

@@ -47,6 +47,8 @@ public:
   template <typename OT>
   void solveGMRES(double tol, H2MatrixSolver<OT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters);
   void solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms);
+  template <typename OT>
+  void solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<OT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms);
 
   void free_all_comms();
   void freeSparseMV();

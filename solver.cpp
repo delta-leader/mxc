@@ -10,6 +10,7 @@
 // complex double
 template class H2MatrixSolver<std::complex<double>>;
 template void H2MatrixSolver<std::complex<double>>::solveGMRES<std::complex<float>>(double, H2MatrixSolver<std::complex<float>>&, std::complex<double>[], const std::complex<double>[], long long, long long);
+template void H2MatrixSolver<std::complex<double>>::solveGMRESDevice<std::complex<float>>(deviceHandle_t, double, H2MatrixSolver<std::complex<float>>&, std::complex<double>[], const std::complex<double>[], long long, long long, const ncclComms); 
 template double solveRelErr<std::complex<double>>(long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 // complex float
 template class H2MatrixSolver<std::complex<float>>;
@@ -68,7 +69,6 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
 template <typename DT> template <typename OT>
 H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
   levels(solver.levels), local_bodies(solver.local_bodies) {
-  
   for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
     MPI_Comm mpi_comm = MPI_COMM_NULL;
     MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
@@ -78,8 +78,8 @@ H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
     comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
   }
   A.reserve(solver.A.size());
-  for (size_t i = 0; i < A.size(); ++i) {
-    A.push_back(H2Matrix<DT>(solver.A[i]));
+  for (size_t i = 0; i < solver.A.size(); ++i) {
+    A.emplace_back(H2Matrix<DT>(solver.A[i]));
   }
 }
 
@@ -271,12 +271,13 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<OT>& M, DT x[], c
     normb = 1.;
 
   Vector_dt R = B;
-  Vector_ot R_low = R.template cast<OT>();
+  Vector_ot R_low;
   resid.resize(outer_iters + 1);
   resid[0] = 1.;
   iters = 0;
 
   while (iters < outer_iters && tol <= resid[iters]) {
+    R_low = R.template cast<OT>();
     M.solvePrecondition(R_low.data());
     R = R_low.template cast<DT>();
     nsum = R.squaredNorm();
@@ -322,6 +323,12 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<OT>& M, DT x[], c
 
 template <typename DT>
 void H2MatrixSolver<DT>::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms) {
+  resid.resize(outer_iters + 1);
+  iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data(), comm[levels], nccl_comms);
+}
+
+template <typename DT> template <typename OT>
+void H2MatrixSolver<DT>::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<OT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms) {
   resid.resize(outer_iters + 1);
   iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data(), comm[levels], nccl_comms);
 }

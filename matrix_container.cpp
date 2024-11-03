@@ -30,10 +30,10 @@ MatrixDataContainer<T>::~MatrixDataContainer() {
 
 template <class T>
 MatrixDataContainer<T>::MatrixDataContainer(const MatrixDataContainer& container) : offsets(container.offsets) {
-  long long data_len = offsets.back();
-  if (0 < data_len) {
-   data = (T*)std::malloc(data_len * sizeof(T));
-   memcpy(data, container.data, data_len * sizeof(T));
+  if (0 < offsets.size()){
+    long long data_len = offsets.back();
+    data = (T*)std::malloc(data_len * sizeof(T));
+    memcpy(data, container.data, data_len * sizeof(T));
   } else {
     data = nullptr;
   }
@@ -41,10 +41,10 @@ MatrixDataContainer<T>::MatrixDataContainer(const MatrixDataContainer& container
 
 template <class T> template <class U>
 MatrixDataContainer<T>::MatrixDataContainer(const MatrixDataContainer<U>& container) : offsets(container.offsets) {
-  long long data_len = offsets.back();
-  if (0 < data_len) {
-   data = (T*)std::malloc(data_len * sizeof(T));
-   std::transform(container.data, container.data + data_len, data, [](U value) -> T {return T(value);});
+  if (0 < offsets.size()){
+    long long data_len = offsets.back();
+    data = (T*)std::malloc(data_len * sizeof(T));
+    std::transform(container.data, container.data + data_len, data, [](U value) -> T {return T(value);});
   } else {
     data = nullptr;
   }
