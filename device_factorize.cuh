@@ -197,6 +197,8 @@ void copyDataOutMatrixDesc(deviceMatrixDesc_t<DT> desc, DT* A, DT* V, cudaStream
 template <typename DT>
 void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMatrixDesc_t<DT> Al);
 template <typename DT>
+void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMatrixDesc_t<DT> Al, const cublasComputeType_t COMP);
+template <typename DT>
 void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, const DT* X);
 template <typename DT>
 void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, DT* X);

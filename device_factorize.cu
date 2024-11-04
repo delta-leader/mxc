@@ -9,24 +9,30 @@
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/iterator/transform_iterator.h>
 
+#include <iostream>
+
 /* explicit template instantiation */
 // complex double
 template void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<std::complex<double>> A, deviceMatrixDesc_t<std::complex<double>> Al);
+template void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<std::complex<double>> A, deviceMatrixDesc_t<std::complex<double>> Al, const cublasComputeType_t COMP);
 template void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<std::complex<double>> A, const std::complex<double>* X);
 template void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<std::complex<double>> A, std::complex<double>* X);
 template void matSolvePreconditionDeviceH2(deviceHandle_t handle, long long levels, deviceMatrixDesc_t<std::complex<double>> A[], std::complex<double>* devX);
 // complex float
 template void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<std::complex<float>> A, deviceMatrixDesc_t<std::complex<float>> Al);
+template void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<std::complex<float>> A, deviceMatrixDesc_t<std::complex<float>> Al, const cublasComputeType_t COMP);
 template void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<std::complex<float>> A, const std::complex<float>* X);
 template void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<std::complex<float>> A, std::complex<float>* X);
 template void matSolvePreconditionDeviceH2(deviceHandle_t handle, long long levels, deviceMatrixDesc_t<std::complex<float>> A[], std::complex<float>* devX);
 // double
 template void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<double> A, deviceMatrixDesc_t<double> Al);
+template void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<double> A, deviceMatrixDesc_t<double> Al, const cublasComputeType_t COMP);
 template void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<double> A, const double* X);
 template void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<double> A, double* X);
 template void matSolvePreconditionDeviceH2(deviceHandle_t handle, long long levels, deviceMatrixDesc_t<double> A[], double* devX);
 // float
 template void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<float> A, deviceMatrixDesc_t<float> Al);
+template void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<float> A, deviceMatrixDesc_t<float> Al, const cublasComputeType_t COMP);
 template void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<float> A, const float* X);
 template void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<float> A, float* X);
 template void matSolvePreconditionDeviceH2(deviceHandle_t handle, long long levels, deviceMatrixDesc_t<float> A[], float* devX);
@@ -292,6 +298,163 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
     //thrust::device_ptr<THRUST_CTYPE> ACptr(reinterpret_cast<THRUST_CTYPE*>(A.Bdata));
     //auto Aiter = thrust::make_transform_iterator(inc_iter, StridedBlock(rank, rank, bdim, reinterpret_cast<THRUST_CTYPE**>(A.A_ss)));
     //thrust::transform(thrust::cuda::par.on(stream), Aiter, Aiter + (rblock * M), ACptr, Aiter, thrust::plus<THRUST_CTYPE>());
+  }
+}
+
+inline void cublasXgemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const cuDoubleComplex *alpha,  const cuDoubleComplex *const Aarray[], int lda,
+  const cuDoubleComplex *const Barray[], int ldb, const cuDoubleComplex *beta, cuDoubleComplex *const Carray[], int ldc, int batchCount, const cublasComputeType_t COMP) {
+    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(&alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_C_64F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_C_64F, ldb, reinterpret_cast<const void*>(&beta), reinterpret_cast<void* const*>(Carray), CUDA_C_64F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
+}
+
+inline void cublasXgemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const cuComplex *alpha,  const cuComplex *const Aarray[], int lda,
+  const cuComplex *const Barray[], int ldb, const cuComplex *beta, cuComplex *const Carray[], int ldc, int batchCount, const cublasComputeType_t COMP) {
+    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(&alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_C_32F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_C_32F, ldb, reinterpret_cast<const void*>(&beta), reinterpret_cast<void* const*>(Carray), CUDA_C_32F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
+}
+
+inline void cublasXgemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const double *alpha,  const double *const Aarray[], int lda,
+  const double *const Barray[], int ldb, const double *beta, double *const Carray[], int ldc, int batchCount, const cublasComputeType_t COMP) {
+    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(&alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_R_64F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_R_64F, ldb, reinterpret_cast<const void*>(&beta), reinterpret_cast<void* const*>(Carray), CUDA_R_64F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
+}
+
+inline void cublasXgemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const float *alpha,  const float *const Aarray[], int lda,
+  const float *const Barray[], int ldb, const float *beta, float *const Carray[], int ldc, int batchCount, const cublasComputeType_t COMP) {
+    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(&alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_R_32F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_R_32F, ldb, reinterpret_cast<const void*>(&beta), reinterpret_cast<void* const*>(Carray), CUDA_R_32F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
+}
+
+template <typename DT>
+void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMatrixDesc_t<DT> Al, const cublasComputeType_t COMP) {
+  typedef typename deviceMatrixDesc_t<DT>::CT CT;
+
+  long long bdim = A.bdim;
+  long long rank = A.rank;
+  long long block = bdim * bdim;
+  long long rblock = rank * rank;
+
+  long long D = A.diag_offset;
+  long long M = A.lenM;
+  long long N = A.lenN;
+  long long lenA = A.lenA;
+  long long lenL = Al.lenA;
+
+  cudaStream_t stream = handle->compute_stream;
+  cublasHandle_t cublasH = handle->cublasH;
+
+  long long rdim = bdim - rank;
+  long long reduc_len = A.reducLen;
+  int info_host = 0;
+  DT constants[3] = { 1., 0., -1. };
+  CT& one = reinterpret_cast<CT&>(constants[0]);
+  CT& zero = reinterpret_cast<CT&>(constants[1]); 
+  CT& minus_one = reinterpret_cast<CT&>(constants[2]); 
+
+  auto inc_iter = thrust::make_counting_iterator(0ll);
+  conjugate_transpose(stream, bdim, block, D, M, A.Udata, A.Vdata);
+  //auto mapV = thrust::make_transform_iterator(inc_iter, swapXY(bdim, bdim));
+  //thrust::device_ptr<THRUST_CTYPE> Uptr(reinterpret_cast<THRUST_CTYPE*>(&(A.Udata)[D * block]));
+  //thrust::device_ptr<THRUST_CTYPE> Vptr(reinterpret_cast<THRUST_CTYPE*>(A.Vdata));
+  //thrust::gather(thrust::cuda::par.on(stream), mapV, mapV + (block * M), thrust::make_transform_iterator(Uptr, conjugateFunc()), Vptr);
+  
+  if (0 < lenL) {
+    long long len = Al.rank * Al.rank * lenL;
+    thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + len, copyFunc(Al.rank, Al.rank, Al.A_unsort, Al.bdim, A.A_dst, bdim));
+  }
+
+  if (M == 1) {
+    if (A.MergeComm)
+      ncclAllReduce(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, A.MergeComm, stream);
+    if (A.DupComm)
+      ncclBroadcast(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, A.DupComm, stream);
+  }
+
+  const int T=14;
+  cudaEvent_t start[T], stop[T];
+  for (int i=0; i<T; ++i) {
+    cudaEventCreate(&start[i]);
+    cudaEventCreate(&stop[i]);
+  }
+
+  cudaEventRecord(start[0], stream);
+  cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.A_ss, bdim, &zero, A.B_ind, bdim, M, COMP);
+  cudaEventRecord(stop[0], stream);
+  cudaEventRecord(start[1], stream);
+  cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.B_ind, bdim, &zero, A.A_ss, bdim, M, COMP);
+  cudaEventRecord(stop[1], stream);
+
+  cudaEventRecord(start[2], stream);
+  cublasXgetrfBatched(cublasH, rdim, A.A_rr, bdim, A.Ipiv, A.Info, M);
+  cudaEventRecord(stop[2], stream);
+  cudaEventRecord(start[3], stream);
+  cublasXgetrsBatched(cublasH, CUBLAS_OP_N, rdim, bdim, A.A_rr, bdim, A.Ipiv, A.V_R, bdim, &info_host, M);
+  cudaEventRecord(stop[3], stream);
+
+  if (0 < rank) {
+    cudaEventRecord(start[4], stream);
+    cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, bdim, &one, A.V_R, bdim, A.B_ind, bdim, &zero, A.A_rs, bdim, M, COMP);
+    cudaEventRecord(stop[4], stream);
+    cudaMemsetAsync(A.ACdata, 0, reduc_len * M * rblock * sizeof(CT), stream);
+
+    for (long long i = M; i < lenA; i += N) {
+      long long len = std::min(lenA - i, N);
+      cudaEventRecord(start[5], stream);
+      cublasXgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, &(A.U_cols)[i], bdim, &(A.A_ss)[i], bdim, &zero, A.B_ind, bdim, len, COMP);
+      cudaEventRecord(stop[5], stream);
+      cudaEventRecord(start[6], stream);
+      cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, &(A.V_rows)[i], bdim, A.B_ind, bdim, &zero, &(A.A_ss)[i], bdim, len, COMP);
+      cudaEventRecord(stop[6], stream);
+    }
+
+    cudaEventRecord(start[7], stream);
+    cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, A.A_sr_rows, bdim, A.A_rs, bdim, &one, A.A_ss, bdim, lenA, COMP);
+    cudaEventRecord(stop[7], stream);
+    cudaEventRecord(start[8], stream);
+    cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, rdim, bdim, &one, A.V_R, bdim, A.U_R, bdim, &zero, A.B_R, bdim, M, COMP);
+    cudaEventRecord(stop[8], stream);
+    thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const CT**>(A.A_rs), bdim, &(A.B_ind)[D], bdim));
+    
+    ncclGroupStart();
+    for (long long p = 0; p < A.LenComms; p++) {
+      long long start = A.Neighbor[p] * block;
+      long long len = A.Neighbor[p + 1] * block - start;
+      ncclBroadcast(const_cast<const CT*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+    }
+
+    if (A.DupComm)
+      ncclBroadcast(const_cast<const CT*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, A.DupComm, stream);
+    ncclGroupEnd();
+
+    if (M < lenA) {
+      cudaEventRecord(start[9], stream);
+      cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &(A.A_sr)[M], bdim, &(A.B_cols)[M], bdim, &one, &(A.A_ss)[M], bdim, lenA - M, COMP);
+      cudaEventRecord(stop[9], stream);
+    }
+
+    for (long long i = M; i < lenA; i += N) {
+      long long len = std::min(lenA - i, N);
+      cudaEventRecord(start[10], stream);
+      cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, rdim, &one, &(A.B_R)[i], bdim, &(A.A_sr)[i], bdim, &zero, A.B_ind, bdim, len, COMP);
+      cudaEventRecord(stop[10], stream);
+      cudaEventRecord(start[11], stream);
+      cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &(A.A_sr)[i], bdim, A.B_ind, bdim, &zero, &A.AC_ind[i], rank, len, COMP);
+      cudaEventRecord(stop[11], stream);
+    }
+    cudaEventRecord(start[12], stream);
+    cublasXgemvStridedBatched(cublasH, CUBLAS_OP_N, M * rank, reduc_len, &one, A.ACdata, M * rblock, M * rank, A.ONEdata, 1, 0, &zero, A.Bdata, 1, M * rank, rank);
+    cudaEventRecord(stop[12], stream);
+
+    cudaEventRecord(start[13], stream);
+    transform(stream, rank, bdim, rblock, M, A.Bdata, A.A_ss);
+    cudaEventRecord(stop[13], stream);
+    //thrust::device_ptr<THRUST_CTYPE> ACptr(reinterpret_cast<THRUST_CTYPE*>(A.Bdata));
+    //auto Aiter = thrust::make_transform_iterator(inc_iter, StridedBlock(rank, rank, bdim, reinterpret_cast<THRUST_CTYPE**>(A.A_ss)));
+    //thrust::transform(thrust::cuda::par.on(stream), Aiter, Aiter + (rblock * M), ACptr, Aiter, thrust::plus<THRUST_CTYPE>());
+
+    cudaEventSynchronize(stop);
+    float milliseconds = 0;
+    for (int i=0; i<T; ++i) {
+      cudaEventElapsedTime(&milliseconds, start[i], stop[i]);
+      std::cout << milliseconds << ", ";
+    }
+    std::cout<<std::endl;
   }
 }
 

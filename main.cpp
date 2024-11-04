@@ -4,8 +4,10 @@
 #include <string>
 
 #include <Eigen/Dense>
+#include <cublas_v2.h>
 
 int main(int argc, char* argv[]) {
+  std::vector<cublasComputeType_t> comp = {CUBLAS_COMPUTE_32F, CUBLAS_COMPUTE_32F_FAST_TF32, CUBLAS_COMPUTE_32F_FAST_16F, CUBLAS_COMPUTE_32F_FAST_16BF};
   typedef std::complex<double> DT;
   typedef std::complex<float> DT_low;
 
@@ -60,9 +62,9 @@ int main(int argc, char* argv[]) {
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
-  initNcclComms(&nccl_comms, matA.allocedComm);
-  matA.init_gpu_handles(nccl_comms);
-  matA.allocSparseMV(handle, nccl_comms);
+  //initNcclComms(&nccl_comms, matA.allocedComm);
+  //matA.init_gpu_handles(nccl_comms);
+  //matA.allocSparseMV(handle, nccl_comms);
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   MyVector<DT> X1(lenX);
@@ -70,10 +72,10 @@ int main(int argc, char* argv[]) {
 
   std::copy(&Xbody[matA.local_bodies.first], &Xbody[matA.local_bodies.second], &X1[0]);
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  /*MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  //matA.matVecMul(&X1[0]);
-  matA.matVecMulSp(handle, &X1[0]);
+  matA.matVecMul(&X1[0]);
+  //matA.matVecMulSp(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -94,11 +96,11 @@ int main(int argc, char* argv[]) {
     std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
-    /*Eigen::MatrixXcd A(Nbody, Nbody);
+    Eigen::MatrixXcd A(Nbody, Nbody);
     gen_matrix(eval, Nbody, Nbody, body.data(), body.data(), A.data());
     double cond = 1. / A.lu().rcond();
-    std::cout << "Condition #: " << cond << std::endl;*/
-  }
+    std::cout << "Condition #: " << cond << std::endl;
+  }*/
   
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
@@ -126,8 +128,10 @@ int main(int argc, char* argv[]) {
 
   //matM_low.factorizeM();
   matM_low.factorizeDeviceM(handle);
+  //matM_low.factorizeDeviceM(handle, CUBLAS_COMPUTE_32F_FAST_16F);
 
-  MPI_Barrier(MPI_COMM_WORLD);
+
+  /*MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
   h2_factor_comm_time = ColCommMPI::get_comm_time();
   std::copy(X2.begin(), X2.end(), X1.begin());
@@ -175,13 +179,13 @@ int main(int argc, char* argv[]) {
         m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
         matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());
   }
-
+  */
   matA.free_all_comms();
   matM.free_all_comms();
   MPI_Finalize();
 
-  matA.freeSparseMV();
-  matA.free_gpu_handles();
+  //matA.freeSparseMV();
+  //matA.free_gpu_handles();
   matM_low.free_gpu_handles();
   finalizeGpuEnvs(handle);
   finalizeNcclComms(nccl_comms);

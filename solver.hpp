@@ -40,7 +40,8 @@ public:
 
   void matVecMul(DT X[]);
   void factorizeM();
-  void factorizeDeviceM(deviceHandle_t handle);
+    void factorizeDeviceM(deviceHandle_t handle);
+  void factorizeDeviceM(deviceHandle_t handle, const cublasComputeType_t COMP);
   void solvePrecondition(DT X[]);
   void solvePreconditionDevice(deviceHandle_t handle, DT X[]);
   void solveGMRES(double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters);

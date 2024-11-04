@@ -164,6 +164,26 @@ void H2MatrixSolver<DT>::factorizeDeviceM(deviceHandle_t handle) {
 }
 
 template <typename DT>
+void H2MatrixSolver<DT>::factorizeDeviceM(deviceHandle_t handle, const cublasComputeType_t COMP) {
+  copyDataInMatrixDesc(desc[levels], A[levels].A[0], A[levels].Q[0], handle->compute_stream);
+  compute_factorize(handle, desc[levels], deviceMatrixDesc_t<DT>(), COMP);
+
+  for (long long l = levels - 1; l >= 0; l--) {
+    copyDataInMatrixDesc(desc[l], A[l].A[0], A[l].Q[0], handle->memory_stream);
+    cudaDeviceSynchronize();
+    copyDataOutMatrixDesc(desc[l + 1], A[l + 1].A[0], A[l + 1].R[desc[l + 1].diag_offset], handle->memory_stream);
+    compute_factorize(handle, desc[l], desc[l + 1], COMP);
+  }
+
+  copyDataOutMatrixDesc(desc[0], A[0].A[0], A[0].R[0], handle->compute_stream);
+  cudaDeviceSynchronize();
+
+  for (long long l = levels; l >= 0; l--)
+    if (check_info(desc[l], comm[l]))
+      printf("singularity detected at level %lld.\n", l);
+}
+
+template <typename DT>
 void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   if (levels < 0)
     return;
