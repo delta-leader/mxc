@@ -370,7 +370,7 @@ void H2Matrix::matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCom
 
   std::copy(Y[ibegin], Y[ibegin + nodes], X_io);
 }
-#include <iostream>
+
 void H2Matrix::factorize(const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -409,7 +409,7 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
         Aii.bottomLeftCorner(Mr, Ms).noalias() = V.bottomRows(Mr) * b.topRows(Ms).transpose();
         Aii.topLeftCorner(Ms, Ms).noalias() -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
       }
-      info += (std::norm(fac.determinant()) <= std::numeric_limits<double>::min());
+      info += (std::abs(fac.determinant()) <= std::numeric_limits<double>::min());
     }
 
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 

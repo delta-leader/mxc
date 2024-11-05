@@ -329,7 +329,7 @@ void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t des
   if (0 <= levels) {
     matVecUpwardPass(handle, desc[levels], devX);
     for (long long l = levels - 1; l >= 0; l--)
-    matVecUpwardPass(handle, desc[l], desc[l + 1]->Z->Vals);
+      matVecUpwardPass(handle, desc[l], desc[l + 1]->Z->Vals);
 
     for (long long l = 0; l < levels; l++)
       matVecHorizontalandDownwardPass(handle, desc[l], desc[l + 1]->W->Vals);
