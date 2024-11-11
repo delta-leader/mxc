@@ -366,11 +366,8 @@ void H2Matrix<DT>::matVecUpwardPass(const DT* X_in, const ColCommMPI& comm) {
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
-  //std::cout<<LowerZ<<std::endl;
-  //std::cout<<LowerZ<<" "<<lenX<<" "<<ibegin<<std::endl;
-  //std::cout<<X_in[LowerZ]<<" "<<X_in[LowerZ + lenX]<<" "<<X[ibegin]<<std::endl;
-  //std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], X[ibegin]);
-  /*
+  std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], X[ibegin]);
+
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
     long long N = DimsLr[i + ibegin];
@@ -382,7 +379,7 @@ void H2Matrix<DT>::matVecUpwardPass(const DT* X_in, const ColCommMPI& comm) {
     }
   }
 
-  comm.neighbor_bcast(Z[0], NbZoffsets.data());*/
+  comm.neighbor_bcast(Z[0], NbZoffsets.data());
 }
 
 template <typename DT>

@@ -119,7 +119,7 @@ public:
     if (d == 0.)
       return (std::complex<DT>) singularity;
     else
-      return std::exp(std::complex(0., -k * d)) / d;
+      return std::exp(std::complex<DT>(0., -k * d)) / (DT)d;
   }
 };
 

@@ -180,7 +180,7 @@ void H2MatrixSolver<DT>::factorizeDeviceM(deviceHandle_t handle, const cublasCom
 
   for (long long l = levels; l >= 0; l--)
     if (check_info(desc[l], comm[l]))
-      printf("singularity detected at level %lld.\n", l);
+      printf("singularity detected at level %lld of %lld.\n", l, levels);
 }
 
 template <typename DT>

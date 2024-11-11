@@ -10,6 +10,7 @@
 #include <thrust/iterator/transform_iterator.h>
 
 #include <iostream>
+#define TIMING
 
 /* explicit template instantiation */
 // complex double
@@ -208,6 +209,38 @@ inline void cublasXgemvStridedBatched(cublasHandle_t handle, cublasOperation_t t
     cublasSgemvStridedBatched(handle, trans, m, n, alpha, A, lda, strideA, x, incx, stridex, beta, y, incy, stridey, batchCount);
 }
 
+inline void ncclAllReduceSum(cuDoubleComplex *buff, size_t count, ncclComm_t comm, cudaStream_t stream){
+  ncclAllReduce(static_cast<const void*>(buff), static_cast<void*>(buff), count * 2, ncclDouble, ncclSum, comm, stream);
+}
+
+inline void ncclAllReduceSum(cuComplex *buff, size_t count, ncclComm_t comm, cudaStream_t stream){
+  ncclAllReduce(static_cast<const void*>(buff), static_cast<void*>(buff), count * 2, ncclFloat, ncclSum, comm, stream);
+}
+
+inline void ncclAllReduceSum(double *buff, size_t count, ncclComm_t comm, cudaStream_t stream){
+  ncclAllReduce(static_cast<const void*>(buff), static_cast<void*>(buff), count, ncclDouble, ncclSum, comm, stream);
+}
+
+inline void ncclAllReduceSum(float *buff, size_t count, ncclComm_t comm, cudaStream_t stream){
+  ncclAllReduce(static_cast<const void*>(buff), static_cast<void*>(buff), count, ncclFloat, ncclSum, comm, stream);
+}
+
+inline void ncclBroadcast(cuDoubleComplex* buff, size_t count, int root, ncclComm_t comm, cudaStream_t stream){
+  ncclBroadcast(static_cast<const void*>(buff), static_cast<void*>(buff), count * 2, ncclDouble, root, comm, stream);
+}
+
+inline void ncclBroadcast(cuComplex* buff, size_t count, int root, ncclComm_t comm, cudaStream_t stream){
+  ncclBroadcast(static_cast<const void*>(buff), buff, count * 2, ncclFloat, root, comm, stream);
+}
+
+inline void ncclBroadcast(double* buff, size_t count, int root, ncclComm_t comm, cudaStream_t stream){
+  ncclBroadcast(static_cast<const void*>(buff), static_cast<void*>(buff), count, ncclDouble, root, comm, stream);
+}
+
+inline void ncclBroadcast(float* buff, size_t count, int root, ncclComm_t comm, cudaStream_t stream){
+  ncclBroadcast(static_cast<const void*>(buff), static_cast<void*>(buff), count, ncclFloat, root, comm, stream);
+}
+
 template <typename DT>
 void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMatrixDesc_t<DT> Al) {
   typedef typename deviceMatrixDesc_t<DT>::CT CT;
@@ -247,10 +280,14 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
   }
 
   if (M == 1) {
-    if (A.MergeComm)
-      ncclAllReduce(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, A.MergeComm, stream);
-    if (A.DupComm)
-      ncclBroadcast(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, A.DupComm, stream);
+    if (A.MergeComm) {
+      //ncclAllReduce(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, A.MergeComm, stream);
+      ncclAllReduceSum(A.Adata, block * lenA, A.MergeComm, stream);
+    }
+    if (A.DupComm) {
+      //ncclBroadcast(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, A.DupComm, stream);
+      ncclBroadcast(A.Adata, block * lenA, 0, A.DupComm, stream);
+    }
   }
 
   cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.A_ss, bdim, &zero, A.B_ind, bdim, M);
@@ -277,11 +314,14 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * block;
       long long len = A.Neighbor[p + 1] * block - start;
-      ncclBroadcast(const_cast<const CT*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      //ncclBroadcast(const_cast<const CT*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      ncclBroadcast(&(A.Bdata)[start], len, A.NeighborRoots[p], A.NeighborComms[p], stream);
     }
 
-    if (A.DupComm)
-      ncclBroadcast(const_cast<const CT*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, A.DupComm, stream);
+    if (A.DupComm) {
+      //ncclBroadcast(const_cast<const CT*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, A.DupComm, stream);
+      ncclBroadcast(A.Bdata, block * N, 0, A.DupComm, stream);
+    }
     ncclGroupEnd();
 
     if (M < lenA)
@@ -303,22 +343,22 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
 
 inline void cublasXgemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const cuDoubleComplex *alpha,  const cuDoubleComplex *const Aarray[], int lda,
   const cuDoubleComplex *const Barray[], int ldb, const cuDoubleComplex *beta, cuDoubleComplex *const Carray[], int ldc, int batchCount, const cublasComputeType_t COMP) {
-    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(&alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_C_64F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_C_64F, ldb, reinterpret_cast<const void*>(&beta), reinterpret_cast<void* const*>(Carray), CUDA_C_64F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
+    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_C_64F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_C_64F, ldb, reinterpret_cast<const void*>(beta), reinterpret_cast<void* const*>(Carray), CUDA_C_64F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
 }
 
 inline void cublasXgemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const cuComplex *alpha,  const cuComplex *const Aarray[], int lda,
   const cuComplex *const Barray[], int ldb, const cuComplex *beta, cuComplex *const Carray[], int ldc, int batchCount, const cublasComputeType_t COMP) {
-    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(&alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_C_32F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_C_32F, ldb, reinterpret_cast<const void*>(&beta), reinterpret_cast<void* const*>(Carray), CUDA_C_32F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
+    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_C_32F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_C_32F, ldb, reinterpret_cast<const void*>(beta), reinterpret_cast<void* const*>(Carray), CUDA_C_32F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
 }
 
 inline void cublasXgemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const double *alpha,  const double *const Aarray[], int lda,
   const double *const Barray[], int ldb, const double *beta, double *const Carray[], int ldc, int batchCount, const cublasComputeType_t COMP) {
-    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(&alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_R_64F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_R_64F, ldb, reinterpret_cast<const void*>(&beta), reinterpret_cast<void* const*>(Carray), CUDA_R_64F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
+    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_R_64F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_R_64F, ldb, reinterpret_cast<const void*>(beta), reinterpret_cast<void* const*>(Carray), CUDA_R_64F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
 }
 
 inline void cublasXgemmBatched(cublasHandle_t handle, cublasOperation_t transa, cublasOperation_t transb, int m, int n, int k, const float *alpha,  const float *const Aarray[], int lda,
   const float *const Barray[], int ldb, const float *beta, float *const Carray[], int ldc, int batchCount, const cublasComputeType_t COMP) {
-    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(&alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_R_32F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_R_32F, ldb, reinterpret_cast<const void*>(&beta), reinterpret_cast<void* const*>(Carray), CUDA_R_32F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
+    cublasGemmBatchedEx(handle, transa, transb, m, n, k, reinterpret_cast<const void*>(alpha), reinterpret_cast<const void* const*>(Aarray), CUDA_R_32F, lda, reinterpret_cast<const void* const*>(Barray), CUDA_R_32F, ldb, reinterpret_cast<const void*>(beta), reinterpret_cast<void* const*>(Carray), CUDA_R_32F, ldc, batchCount, COMP, CUBLAS_GEMM_DEFAULT);
 }
 
 template <typename DT>
@@ -349,10 +389,6 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
 
   auto inc_iter = thrust::make_counting_iterator(0ll);
   conjugate_transpose(stream, bdim, block, D, M, A.Udata, A.Vdata);
-  //auto mapV = thrust::make_transform_iterator(inc_iter, swapXY(bdim, bdim));
-  //thrust::device_ptr<THRUST_CTYPE> Uptr(reinterpret_cast<THRUST_CTYPE*>(&(A.Udata)[D * block]));
-  //thrust::device_ptr<THRUST_CTYPE> Vptr(reinterpret_cast<THRUST_CTYPE*>(A.Vdata));
-  //thrust::gather(thrust::cuda::par.on(stream), mapV, mapV + (block * M), thrust::make_transform_iterator(Uptr, conjugateFunc()), Vptr);
   
   if (0 < lenL) {
     long long len = Al.rank * Al.rank * lenL;
@@ -360,101 +396,145 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
   }
 
   if (M == 1) {
-    if (A.MergeComm)
-      ncclAllReduce(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, A.MergeComm, stream);
-    if (A.DupComm)
-      ncclBroadcast(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, A.DupComm, stream);
+    if (A.MergeComm) {
+      ncclAllReduceSum(A.Adata, block * lenA, A.MergeComm, stream);
+    }
+    if (A.DupComm) {
+      ncclBroadcast(A.Adata, block * lenA, 0, A.DupComm, stream);
+    }
   }
 
-  const int T=14;
-  cudaEvent_t start[T], stop[T];
-  for (int i=0; i<T; ++i) {
-    cudaEventCreate(&start[i]);
-    cudaEventCreate(&stop[i]);
-  }
+  #ifdef TIMING
+    const int T=14;
+    cudaEvent_t start[T], stop[T];
+    for (int i=0; i<T; ++i) {
+      cudaEventCreate(&start[i]);
+      cudaEventCreate(&stop[i]);
+    }
 
-  cudaEventRecord(start[0], stream);
+    cudaEventRecord(start[0], stream);
+  #endif
   cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.A_ss, bdim, &zero, A.B_ind, bdim, M, COMP);
-  cudaEventRecord(stop[0], stream);
-  cudaEventRecord(start[1], stream);
+  #ifdef TIMING
+    cudaEventRecord(stop[0], stream);
+    cudaEventRecord(start[1], stream);
+  #endif
   cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.B_ind, bdim, &zero, A.A_ss, bdim, M, COMP);
-  cudaEventRecord(stop[1], stream);
+  #ifdef TIMING
+    cudaEventRecord(stop[1], stream);
 
-  cudaEventRecord(start[2], stream);
+    cudaEventRecord(start[2], stream);
+  #endif
   cublasXgetrfBatched(cublasH, rdim, A.A_rr, bdim, A.Ipiv, A.Info, M);
-  cudaEventRecord(stop[2], stream);
-  cudaEventRecord(start[3], stream);
+  #ifdef TIMING
+    cudaEventRecord(stop[2], stream);
+    cudaEventRecord(start[3], stream);
+  #endif
   cublasXgetrsBatched(cublasH, CUBLAS_OP_N, rdim, bdim, A.A_rr, bdim, A.Ipiv, A.V_R, bdim, &info_host, M);
-  cudaEventRecord(stop[3], stream);
-
+  #ifdef TIMING
+    cudaEventRecord(stop[3], stream);
+  #endif
+  
   if (0 < rank) {
-    cudaEventRecord(start[4], stream);
+    #ifdef TIMING
+      cudaEventRecord(start[4], stream);
+    #endif
     cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, bdim, &one, A.V_R, bdim, A.B_ind, bdim, &zero, A.A_rs, bdim, M, COMP);
-    cudaEventRecord(stop[4], stream);
+    #ifdef TIMING
+      cudaEventRecord(stop[4], stream);
+    #endif
     cudaMemsetAsync(A.ACdata, 0, reduc_len * M * rblock * sizeof(CT), stream);
 
     for (long long i = M; i < lenA; i += N) {
       long long len = std::min(lenA - i, N);
-      cudaEventRecord(start[5], stream);
+      #ifdef TIMING
+        cudaEventRecord(start[5], stream);
+      #endif
       cublasXgemmBatched(cublasH, CUBLAS_OP_C, CUBLAS_OP_T, bdim, bdim, bdim, &one, &(A.U_cols)[i], bdim, &(A.A_ss)[i], bdim, &zero, A.B_ind, bdim, len, COMP);
-      cudaEventRecord(stop[5], stream);
-      cudaEventRecord(start[6], stream);
+      #ifdef TIMING
+        cudaEventRecord(stop[5], stream);
+        cudaEventRecord(start[6], stream);
+      #endif
       cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, &(A.V_rows)[i], bdim, A.B_ind, bdim, &zero, &(A.A_ss)[i], bdim, len, COMP);
-      cudaEventRecord(stop[6], stream);
+      #ifdef TIMING
+        cudaEventRecord(stop[6], stream);
+      #endif
     }
 
-    cudaEventRecord(start[7], stream);
+    #ifdef TIMING
+      cudaEventRecord(start[7], stream);
+    #endif
     cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, A.A_sr_rows, bdim, A.A_rs, bdim, &one, A.A_ss, bdim, lenA, COMP);
-    cudaEventRecord(stop[7], stream);
-    cudaEventRecord(start[8], stream);
+    #ifdef TIMING
+      cudaEventRecord(stop[7], stream);
+      cudaEventRecord(start[8], stream);
+    #endif
     cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, rdim, bdim, &one, A.V_R, bdim, A.U_R, bdim, &zero, A.B_R, bdim, M, COMP);
-    cudaEventRecord(stop[8], stream);
+    #ifdef TIMING
+      cudaEventRecord(stop[8], stream);
+    #endif
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const CT**>(A.A_rs), bdim, &(A.B_ind)[D], bdim));
     
     ncclGroupStart();
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * block;
       long long len = A.Neighbor[p + 1] * block - start;
-      ncclBroadcast(const_cast<const CT*>(&(A.Bdata)[start]), &(A.Bdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      ncclBroadcast(&(A.Bdata)[start], len, A.NeighborRoots[p], A.NeighborComms[p], stream);
     }
 
-    if (A.DupComm)
-      ncclBroadcast(const_cast<const CT*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, A.DupComm, stream);
+    if (A.DupComm) {
+      ncclBroadcast(A.Bdata, block * N, 0, A.DupComm, stream);
+    }
     ncclGroupEnd();
 
     if (M < lenA) {
-      cudaEventRecord(start[9], stream);
+      #ifdef TIMING
+        cudaEventRecord(start[9], stream);
+      #endif
       cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &(A.A_sr)[M], bdim, &(A.B_cols)[M], bdim, &one, &(A.A_ss)[M], bdim, lenA - M, COMP);
-      cudaEventRecord(stop[9], stream);
+      #ifdef TIMING
+        cudaEventRecord(stop[9], stream);
+      #endif
     }
 
     for (long long i = M; i < lenA; i += N) {
       long long len = std::min(lenA - i, N);
-      cudaEventRecord(start[10], stream);
+      #ifdef TIMING
+        cudaEventRecord(start[10], stream);
+      #endif
       cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, rdim, rank, rdim, &one, &(A.B_R)[i], bdim, &(A.A_sr)[i], bdim, &zero, A.B_ind, bdim, len, COMP);
-      cudaEventRecord(stop[10], stream);
-      cudaEventRecord(start[11], stream);
+      #ifdef TIMING
+        cudaEventRecord(stop[10], stream);
+        cudaEventRecord(start[11], stream);
+      #endif
       cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &(A.A_sr)[i], bdim, A.B_ind, bdim, &zero, &A.AC_ind[i], rank, len, COMP);
-      cudaEventRecord(stop[11], stream);
+      #ifdef TIMING
+        cudaEventRecord(stop[11], stream);
+      #endif
     }
-    cudaEventRecord(start[12], stream);
+    #ifdef TIMING
+      cudaEventRecord(start[12], stream);
+    #endif
     cublasXgemvStridedBatched(cublasH, CUBLAS_OP_N, M * rank, reduc_len, &one, A.ACdata, M * rblock, M * rank, A.ONEdata, 1, 0, &zero, A.Bdata, 1, M * rank, rank);
-    cudaEventRecord(stop[12], stream);
+    #ifdef TIMING
+      cudaEventRecord(stop[12], stream);
+    #endif
 
-    cudaEventRecord(start[13], stream);
+    #ifdef TIMING
+      cudaEventRecord(start[13], stream);
+    #endif
     transform(stream, rank, bdim, rblock, M, A.Bdata, A.A_ss);
-    cudaEventRecord(stop[13], stream);
-    //thrust::device_ptr<THRUST_CTYPE> ACptr(reinterpret_cast<THRUST_CTYPE*>(A.Bdata));
-    //auto Aiter = thrust::make_transform_iterator(inc_iter, StridedBlock(rank, rank, bdim, reinterpret_cast<THRUST_CTYPE**>(A.A_ss)));
-    //thrust::transform(thrust::cuda::par.on(stream), Aiter, Aiter + (rblock * M), ACptr, Aiter, thrust::plus<THRUST_CTYPE>());
+    #ifdef TIMING
+      cudaEventRecord(stop[13], stream);
 
-    cudaEventSynchronize(stop);
-    float milliseconds = 0;
-    for (int i=0; i<T; ++i) {
-      cudaEventElapsedTime(&milliseconds, start[i], stop[i]);
-      std::cout << milliseconds << ", ";
-    }
-    std::cout<<std::endl;
+      cudaEventSynchronize(stop[T-1]);
+      float milliseconds = 0;
+      for (int i=0; i<T; ++i) {
+        cudaEventElapsedTime(&milliseconds, start[i], stop[i]);
+        std::cout << milliseconds << ", ";
+      }
+      std::cout<<std::endl;
+    #endif
   }
 }
 
@@ -529,10 +609,13 @@ void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT> 
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * bdim;
       long long len = A.Neighbor[p + 1] * bdim - start;
-      ncclBroadcast(const_cast<const CT*>(&(A.Ydata)[start]), &(A.Ydata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      //ncclBroadcast(const_cast<const CT*>(&(A.Ydata)[start]), &(A.Ydata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      ncclBroadcast(&(A.Ydata)[start], len, A.NeighborRoots[p], A.NeighborComms[p], stream);
     }
-    if (A.DupComm)
-      ncclBroadcast(const_cast<const CT*>(A.Ydata), A.Ydata, bdim * N * 2, ncclDouble, 0, A.DupComm, stream);
+    if (A.DupComm) {
+      //ncclBroadcast(const_cast<const CT*>(A.Ydata), A.Ydata, bdim * N * 2, ncclDouble, 0, A.DupComm, stream);
+      ncclBroadcast(A.Ydata, bdim * N , 0, A.DupComm, stream);
+    }
     ncclGroupEnd();
   }
 
@@ -549,10 +632,13 @@ void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT> 
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * rank;
       long long len = A.Neighbor[p + 1] * rank - start;
-      ncclBroadcast(const_cast<const CT*>(&(A.Xdata)[start]), &(A.Xdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      //ncclBroadcast(const_cast<const CT*>(&(A.Xdata)[start]), &(A.Xdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      ncclBroadcast(&(A.Xdata)[start], len, A.NeighborRoots[p], A.NeighborComms[p], stream);
     }
-    if (A.DupComm)
-      ncclBroadcast(const_cast<const CT*>(A.Xdata), A.Xdata, rank * N * 2, ncclDouble, 0, A.DupComm, stream);
+    if (A.DupComm) {
+      //ncclBroadcast(const_cast<const CT*>(A.Xdata), A.Xdata, rank * N * 2, ncclDouble, 0, A.DupComm, stream);
+      ncclBroadcast(A.Xdata, rank * N, 0, A.DupComm, stream);
+    }
     ncclGroupEnd();
   }
 }
@@ -586,10 +672,13 @@ void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT>
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * rank;
       long long len = A.Neighbor[p + 1] * rank - start;
-      ncclBroadcast(const_cast<const CT*>(&(A.Xdata)[start]), &(A.Xdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      //ncclBroadcast(const_cast<const CT*>(&(A.Xdata)[start]), &(A.Xdata)[start], len * 2, ncclDouble, A.NeighborRoots[p], A.NeighborComms[p], stream);
+      ncclBroadcast(&(A.Xdata)[start], len, A.NeighborRoots[p], A.NeighborComms[p], stream);
     }
-    if (A.DupComm)
-      ncclBroadcast(const_cast<const CT*>(A.Xdata), A.Xdata, rank * N * 2, ncclDouble, 0, A.DupComm, stream);
+    if (A.DupComm) {
+      //ncclBroadcast(const_cast<const CT*>(A.Xdata), A.Xdata, rank * N * 2, ncclDouble, 0, A.DupComm, stream);
+      ncclBroadcast(A.Xdata, rank * N, 0, A.DupComm, stream);
+    }
     ncclGroupEnd();
   }
 

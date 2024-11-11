@@ -27,9 +27,9 @@ void levelCommSum(long long N, thrust::complex<double> X[], ncclComm_t AllComm, 
 
 void levelCommSum(long long N, thrust::complex<float> X[], ncclComm_t AllComm, ncclComm_t DupComm, cudaStream_t stream) {
   if (AllComm)
-    ncclAllReduce(const_cast<const thrust::complex<float>*>(X), X, N * 2, ncclDouble, ncclSum, AllComm, stream);
+    ncclAllReduce(const_cast<const thrust::complex<float>*>(X), X, N * 2, ncclFloat, ncclSum, AllComm, stream);
   if (DupComm)
-    ncclBroadcast(const_cast<const thrust::complex<float>*>(X), X, N * 2, ncclDouble, 0, DupComm, stream);
+    ncclBroadcast(const_cast<const thrust::complex<float>*>(X), X, N * 2, ncclFloat, 0, DupComm, stream);
 }
 
 template <>
