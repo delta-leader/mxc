@@ -30,6 +30,8 @@ public:
   
   H2MatrixSolver();
   H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver<DT>& operator=(const H2MatrixSolver<DT>& solver);
+  H2MatrixSolver(const H2MatrixSolver<DT>& solver);
   template <typename OT>
   H2MatrixSolver(const H2MatrixSolver<OT>& solver);
   void init_gpu_handles(const ncclComms nccl_comms);

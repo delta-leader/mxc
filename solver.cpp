@@ -66,6 +66,46 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
 }
 
+template <typename DT>
+H2MatrixSolver<DT>& H2MatrixSolver<DT>::operator=(const H2MatrixSolver<DT>& solver) {
+  free_all_comms();
+  A.clear();
+  levels = solver.levels;
+  local_bodies = solver.local_bodies;
+  for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
+    MPI_Comm mpi_comm = MPI_COMM_NULL;
+    MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
+    allocedComm.emplace_back(mpi_comm);
+  }
+  for (size_t i = 0; i < solver.comm.size(); ++i) {
+    comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
+  }
+  A.reserve(solver.A.size());
+  for (size_t i = 0; i < solver.A.size(); ++i) {
+    A.emplace_back(H2Matrix<DT>(solver.A[i]));
+  }
+  return *this;
+}
+
+template <typename DT>
+H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<DT>& solver) :
+  levels(solver.levels), local_bodies(solver.local_bodies) {
+  // A_mv, desc and X_dev can remain empty as they are allocated from the GPU functions
+  // and we don't need to copy resid or iters since we only copy the factorization matrix
+  for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
+    MPI_Comm mpi_comm = MPI_COMM_NULL;
+    MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
+    allocedComm.emplace_back(mpi_comm);
+  }
+  for (size_t i = 0; i < solver.comm.size(); ++i) {
+    comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
+  }
+  A.reserve(solver.A.size());
+  for (size_t i = 0; i < solver.A.size(); ++i) {
+    A.emplace_back(H2Matrix<DT>(solver.A[i]));
+  }
+}
+
 template <typename DT> template <typename OT>
 H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
   levels(solver.levels), local_bodies(solver.local_bodies) {

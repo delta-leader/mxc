@@ -57,6 +57,7 @@ public:
   MatrixDataContainer<DT> W;
   
   H2Matrix() = default;
+  H2Matrix(const H2Matrix<DT>& h2matrix);
   template <typename OT>
   H2Matrix(const H2Matrix<OT>& h2matrix);
   

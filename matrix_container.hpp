@@ -11,6 +11,7 @@ private:
 public:
   template <class U> friend class MatrixDataContainer;
   MatrixDataContainer() = default;
+  MatrixDataContainer& operator=(const MatrixDataContainer& container);
   MatrixDataContainer(const MatrixDataContainer& container);
   template <class U>
   MatrixDataContainer(const MatrixDataContainer<U>& container);

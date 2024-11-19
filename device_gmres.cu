@@ -315,11 +315,11 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
 }
 
 template <>
-long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<double> desc[], long long mlevels, deviceMatrixDesc_t<double> desc_m[], double tol, double* X, const double* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+long long solveDeviceGMRES(deviceHandle_t, long long, CsrMatVecDesc_t<double>[], long long, deviceMatrixDesc_t<double>[], double, double*, const double*, long long, long long, double[], const ColCommMPI&, const ncclComms) {
   std::cout<<"Not implemented"<<std::endl;
 }
 
 template <>
-long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<float> desc[], long long mlevels, deviceMatrixDesc_t<float> desc_m[], double tol, float* X, const float* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+long long solveDeviceGMRES(deviceHandle_t, long long, CsrMatVecDesc_t<float>[], long long, deviceMatrixDesc_t<float>[], double, float*, const float*, long long, long long, double[], const ColCommMPI&, const ncclComms) {
   std::cout<<"Not implemented"<<std::endl;
 }
