@@ -7,7 +7,7 @@
 
 int main(int argc, char* argv[]) {
   typedef std::complex<double> DT;
-  typedef std::complex<float> DT;
+  typedef std::complex<float> DT_low;
   MPI_Init(&argc, &argv);
 
   deviceHandle_t handle;
