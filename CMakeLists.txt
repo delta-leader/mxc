@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project ("shimo" LANGUAGES CXX CUDA)
 
-set(BLA_VENDOR OpenBLAS)
+set(BLA_VENDOR Intel10_64lp)
 
 find_package(BLAS REQUIRED)
 find_package(LAPACK REQUIRED)

@@ -38,6 +38,8 @@ H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), l
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world) : 
   levels(levels), A(levels + 1), local_bodies(0, 0) {
+
+  double init_time = MPI_Wtime();
   
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
@@ -51,19 +53,31 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
   for (long long i = 0; i <= levels; i++)
     comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
 
+  init_time = MPI_Wtime() - init_time;
+  double wsa_time = MPI_Wtime();
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
   std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++)
     wsa[l].construct(eval, epi, rank_func(l), comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
 
+  wsa_time = MPI_Wtime() - wsa_time;
+  double const_time = MPI_Wtime();
   bool fix_rank = (epi == 0.);
   A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--)
     A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1]);
 
+  const_time = MPI_Wtime() - const_time;
+  double finish_time = MPI_Wtime();
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
+  finish_time = MPI_Wtime() - finish_time;
+
+  std::cout << "Init Time: " << init_time << std::endl;
+  std::cout << "WSA Time: " << wsa_time << std::endl;
+  std::cout << "Construction Time: " << const_time << std::endl;
+  std::cout << "Finish Time: " << finish_time << std::endl;
 }
 
 template <typename DT>
