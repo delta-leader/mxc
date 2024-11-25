@@ -1,5 +1,5 @@
 #!/bin/bash
-#YBATCH -r epyc-7502_2
+#YBATCH -r epyc-7502_1
 #SBATCH -N 1
 #SBATCH -J ranks
 #SBATCH --time=24:00:00
@@ -16,8 +16,11 @@ module load eigen/3.4
 cd build
 make -j
 
-N=131072
+N=65536
 admis=3
+geom=sphere
+rank=64
+rplus=32
 
-mpirun -n 16 ./main.app $N $admis 512 256 128 1e-10 h2 >> output/conv/helmholtz_circle_${N}_${admis}_h2.txt
-mpirun -n 16 ./main.app $N $admis 512 256 128 1e-10 hss >> output/conv/helmholtz_circle_${N}_${admis}_hss.txt
+mpirun -n 1 ./main.app $N $admis 512 $rank $rplus 1e-10 h2 $geom >> output/conv/helmholtz_${geom}_${N}_${admis}_${rank}_${rplus}_h2.txt
+mpirun -n 1 ./main.app $N $admis 512 $rank $rplus 1e-10 hss $geom >> output/conv/helmholtz_${geom}_${N}_${admis}_${rank}_${rplus}_hss.txt

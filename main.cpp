@@ -24,7 +24,8 @@ int main(int argc, char* argv[]) {
   long long leveled_rank =  argc > 5 ? std::atoll(argv[5]) : 0;
   double epi = argc > 6 ? std::atof(argv[6]) : 1e-10;
   std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
-  const char* csv = argc > 8 ? argv[8] : nullptr;
+  std::string geom = argc > 8 ? std::string(argv[8]) : "cube";
+  const char* csv = argc > 9 ? argv[9] : nullptr;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   long long levels = (long long)std::log2((double)Nbody / leaf_size);
@@ -39,9 +40,22 @@ int main(int argc, char* argv[]) {
   std::vector<double> body(Nbody * 3);
   MyVector<DT> Xbody(Nbody);
   std::vector<Cell> cell(ncells);
-
+  if (geom == "cube") {
+    uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
+  } else {
+    if (geom == "sphere") {
+      mesh_sphere(&body[0], Nbody, std::sqrt(Nbody / (4 * M_PI)));
+    } else {
+      if (geom == "ball") {
+        mesh_ball(&body[0], Nbody, 999);
+      } else {
+        std::cout<<geom<<" is not a valid geometry!"<<std::endl;
+        return 1;
+      }
+    }
+  }
   //mesh_sphere(&body[0], Nbody, std::sqrt(Nbody / (4 * M_PI)));
-  uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
+  //uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
 
@@ -51,9 +65,10 @@ int main(int argc, char* argv[]) {
   cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
   ncells = Nleaf + 1;
   levels = 1;*/
-  omp_set_num_threads(2);
-  mkl_set_num_threads(2);
+  //omp_set_num_threads(4);
+  //mkl_set_num_threads(2);
   std::cout<<"OpenMP: "<<omp_get_max_threads()<<std::endl;
+  //std::cout<<"OpenMP: "<<omp_get_num_threads()<<std::endl;
   std::cout<<"MKL: "<<mkl_get_max_threads()<<std::endl;
 
   MPI_Barrier(MPI_COMM_WORLD);

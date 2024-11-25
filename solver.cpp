@@ -74,10 +74,10 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
   finish_time = MPI_Wtime() - finish_time;
 
-  std::cout << "Init Time: " << init_time << std::endl;
-  std::cout << "WSA Time: " << wsa_time << std::endl;
-  std::cout << "Construction Time: " << const_time << std::endl;
-  std::cout << "Finish Time: " << finish_time << std::endl;
+  //std::cout << "Init Time: " << init_time << std::endl;
+  //std::cout << "WSA Time: " << wsa_time << std::endl;
+  //std::cout << "Construction Time: " << const_time << std::endl;
+  //std::cout << "Finish Time: " << finish_time << std::endl;
 }
 
 template <typename DT>
