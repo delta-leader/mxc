@@ -279,7 +279,7 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + len, copyFunc(Al.rank, Al.rank, Al.A_unsort, Al.bdim, A.A_dst, bdim));
   }
 
-  if (M == 1) {
+  /*if (M == 1) {
     if (A.MergeComm) {
       //ncclAllReduce(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, ncclSum, A.MergeComm, stream);
       ncclAllReduceSum(A.Adata, block * lenA, A.MergeComm, stream);
@@ -288,7 +288,7 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
       //ncclBroadcast(const_cast<const CT*>(A.Adata), A.Adata, block * lenA * 2, ncclDouble, 0, A.DupComm, stream);
       ncclBroadcast(A.Adata, block * lenA, 0, A.DupComm, stream);
     }
-  }
+  }*/
 
   cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.A_ss, bdim, &zero, A.B_ind, bdim, M);
   cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_T, bdim, bdim, bdim, &one, A.V_rows, bdim, A.B_ind, bdim, &zero, A.A_ss, bdim, M);
@@ -310,7 +310,7 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
     cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rdim, rdim, bdim, &one, A.V_R, bdim, A.U_R, bdim, &zero, A.B_R, bdim, M);
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const CT**>(A.A_rs), bdim, &(A.B_ind)[D], bdim));
     
-    ncclGroupStart();
+    /*ncclGroupStart();
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * block;
       long long len = A.Neighbor[p + 1] * block - start;
@@ -322,7 +322,7 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
       //ncclBroadcast(const_cast<const CT*>(A.Bdata), A.Bdata, block * N * 2, ncclDouble, 0, A.DupComm, stream);
       ncclBroadcast(A.Bdata, block * N, 0, A.DupComm, stream);
     }
-    ncclGroupEnd();
+    ncclGroupEnd();*/
 
     if (M < lenA)
       cublasXgemmBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, rank, rank, rdim, &minus_one, &(A.A_sr)[M], bdim, &(A.B_cols)[M], bdim, &one, &(A.A_ss)[M], bdim, lenA - M);
@@ -395,14 +395,14 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + len, copyFunc(Al.rank, Al.rank, Al.A_unsort, Al.bdim, A.A_dst, bdim));
   }
 
-  if (M == 1) {
+  /*if (M == 1) {
     if (A.MergeComm) {
       ncclAllReduceSum(A.Adata, block * lenA, A.MergeComm, stream);
     }
     if (A.DupComm) {
       ncclBroadcast(A.Adata, block * lenA, 0, A.DupComm, stream);
     }
-  }
+  }*/
 
   #ifdef TIMING
     const int T=14;
@@ -475,7 +475,7 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
     #endif
     thrust::for_each(thrust::cuda::par.on(stream), inc_iter, inc_iter + (rdim * rank * M), copyFunc(rdim, rank, const_cast<const CT**>(A.A_rs), bdim, &(A.B_ind)[D], bdim));
     
-    ncclGroupStart();
+    /*ncclGroupStart();
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * block;
       long long len = A.Neighbor[p + 1] * block - start;
@@ -485,7 +485,7 @@ void compute_factorize(deviceHandle_t handle, deviceMatrixDesc_t<DT> A, deviceMa
     if (A.DupComm) {
       ncclBroadcast(A.Bdata, block * N, 0, A.DupComm, stream);
     }
-    ncclGroupEnd();
+    ncclGroupEnd();*/
 
     if (M < lenA) {
       #ifdef TIMING
@@ -604,7 +604,7 @@ void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT> 
 
   cublasXgemmStridedBatched(cublasH, CUBLAS_OP_N, CUBLAS_OP_N, bdim, 1, bdim, &one, A.Vdata, bdim, block, X_in, bdim, bdim, &zero, &(A.Ydata)[D * bdim], bdim, bdim, M);
 
-  if (1 < N) {
+  /*if (1 < N) {
     ncclGroupStart();
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * bdim;
@@ -617,7 +617,7 @@ void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT> 
       ncclBroadcast(A.Ydata, bdim * N , 0, A.DupComm, stream);
     }
     ncclGroupEnd();
-  }
+  }*/
 
   size_t sizeX = rank * sizeof(CT);
   cudaMemcpy2DAsync(&(A.Xdata)[D * rank], sizeX, &(A.Ydata)[D * bdim], bdim * sizeof(CT), sizeX, M, cudaMemcpyDeviceToDevice, stream);
@@ -627,7 +627,7 @@ void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT> 
     cublasXgemv(cublasH, CUBLAS_OP_N, M * rank, reduc_len, &one, A.ACdata, M * rank, A.ONEdata, 1, &one, &(A.Xdata)[D * rank], 1);
   }
 
-  if (1 < N) {
+  /*if (1 < N) {
     ncclGroupStart();
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * rank;
@@ -640,7 +640,7 @@ void compute_forward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT> 
       ncclBroadcast(A.Xdata, rank * N, 0, A.DupComm, stream);
     }
     ncclGroupEnd();
-  }
+  }*/
 }
 
 template <typename DT>
@@ -667,7 +667,7 @@ void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT>
   CT& minus_one = reinterpret_cast<CT&>(constants[2]);
   CT* X_out = reinterpret_cast<CT*>(&X[A.lower_offset]);
 
-  if (1 < N) {
+  /*if (1 < N) {
     ncclGroupStart();
     for (long long p = 0; p < A.LenComms; p++) {
       long long start = A.Neighbor[p] * rank;
@@ -680,7 +680,7 @@ void compute_backward_substitution(deviceHandle_t handle, deviceMatrixDesc_t<DT>
       ncclBroadcast(A.Xdata, rank * N, 0, A.DupComm, stream);
     }
     ncclGroupEnd();
-  }
+  }*/
 
   size_t sizeX = rank * sizeof(CT);
   cudaMemcpy2DAsync(&(A.Ydata)[D * bdim], bdim * sizeof(CT), &(A.Xdata)[D * rank], sizeX, sizeX, M, cudaMemcpyDeviceToDevice, stream);

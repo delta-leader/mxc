@@ -201,8 +201,8 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
   }
 
   std::vector<long long> neighbor_ones(xlen, 1ll);
-  comm.dataSizesToNeighborOffsets(neighbor_ones.data());
-  comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
+  //comm.dataSizesToNeighborOffsets(neighbor_ones.data());
+  //comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
   X.alloc(xlen, Dims.data());
   Y.alloc(xlen, Dims.data());
 
@@ -280,8 +280,8 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
       }
     }
 
-    comm.dataSizesToNeighborOffsets(Ssizes.data());
-    comm.neighbor_bcast(S[0], Ssizes.data());
+    //comm.dataSizesToNeighborOffsets(Ssizes.data());
+    //comm.neighbor_bcast(S[0], Ssizes.data());
     std::vector<std::vector<double>> cbodies(nodes);
 
     // epi is not accessed until here
@@ -324,11 +324,11 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
       DimsLr[i + ibegin] = rank;
     }
 
-    comm.dataSizesToNeighborOffsets(Qsizes.data());
-    comm.neighbor_bcast(DimsLr.data(), neighbor_ones.data());
-    comm.neighbor_bcast(S[0], Ssizes.data());
-    comm.neighbor_bcast(Q[0], Qsizes.data());
-    comm.neighbor_bcast(R[0], Qsizes.data());
+    //comm.dataSizesToNeighborOffsets(Qsizes.data());
+    //comm.neighbor_bcast(DimsLr.data(), neighbor_ones.data());
+    //comm.neighbor_bcast(S[0], Ssizes.data());
+    //comm.neighbor_bcast(Q[0], Qsizes.data());
+    //comm.neighbor_bcast(R[0], Qsizes.data());
   }
 
   if (std::reduce(DimsLr.begin(), DimsLr.end())) {
@@ -368,9 +368,9 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
   }
 
   NbXoffsets.insert(NbXoffsets.begin(), Dims.begin(), Dims.end());
-  NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
+  //NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
   NbZoffsets.insert(NbZoffsets.begin(), DimsLr.begin(), DimsLr.end());
-  NbZoffsets.erase(NbZoffsets.begin() + comm.dataSizesToNeighborOffsets(NbZoffsets.data()), NbZoffsets.end());
+  //NbZoffsets.erase(NbZoffsets.begin() + comm.dataSizesToNeighborOffsets(NbZoffsets.data()), NbZoffsets.end());
 }
 
 template <typename DT>
@@ -393,7 +393,7 @@ void H2Matrix<DT>::matVecUpwardPass(const DT* X_in, const ColCommMPI& comm) {
     }
   }
 
-  comm.neighbor_bcast(Z[0], NbZoffsets.data());
+  //comm.neighbor_bcast(Z[0], NbZoffsets.data());
 }
 
 template <typename DT>
@@ -435,7 +435,7 @@ void H2Matrix<DT>::matVecLeafHorizontalPass(DT* X_io, const ColCommMPI& comm) {
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   std::copy(&X_io[0], &X_io[lenX], X[ibegin]);
-  comm.neighbor_bcast(X[0], NbXoffsets.data());
+  //comm.neighbor_bcast(X[0], NbXoffsets.data());
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
@@ -486,7 +486,7 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   B.alloc(xlen, Bsizes.data());
 
   if (nodes == 1)
-    comm.level_merge(A[0], A.size());
+    //comm.level_merge(A[0], A.size());
 
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
@@ -527,8 +527,8 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
     b.topLeftCorner(Mr, Ms) = Aii.bottomLeftCorner(Mr, Ms);
     b.topRightCorner(Mr, Mr) = V.bottomRows(Mr) * Ui.rightCols(Mr);
   }
-  comm.dataSizesToNeighborOffsets(Bsizes.data());
-  comm.neighbor_bcast(B[0], Bsizes.data());
+  //comm.dataSizesToNeighborOffsets(Bsizes.data());
+  //comm.neighbor_bcast(B[0], Bsizes.data());
 
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
@@ -594,7 +594,7 @@ void H2Matrix<DT>::forwardSubstitute(const DT* X_in, const ColCommMPI& comm) {
     }
   }
 
-  comm.neighbor_bcast(X[0], NbXoffsets.data());
+  //comm.neighbor_bcast(X[0], NbXoffsets.data());
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
@@ -619,7 +619,7 @@ void H2Matrix<DT>::forwardSubstitute(const DT* X_in, const ColCommMPI& comm) {
     }
   }
 
-  comm.neighbor_bcast(Z[0], NbZoffsets.data());
+  //comm.neighbor_bcast(Z[0], NbZoffsets.data());
 }
 
 template <typename DT>
@@ -629,7 +629,7 @@ void H2Matrix<DT>::backwardSubstitute(DT* Y_out, const ColCommMPI& comm) {
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
-  comm.neighbor_bcast(W[0], NbZoffsets.data());
+  //comm.neighbor_bcast(W[0], NbZoffsets.data());
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];

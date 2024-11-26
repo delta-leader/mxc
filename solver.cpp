@@ -10,7 +10,7 @@
 // complex double
 template class H2MatrixSolver<std::complex<double>>;
 template void H2MatrixSolver<std::complex<double>>::solveGMRES<std::complex<float>>(double, H2MatrixSolver<std::complex<float>>&, std::complex<double>[], const std::complex<double>[], long long, long long);
-template void H2MatrixSolver<std::complex<double>>::solveGMRESDevice<std::complex<float>>(deviceHandle_t, double, H2MatrixSolver<std::complex<float>>&, std::complex<double>[], const std::complex<double>[], long long, long long, const ncclComms); 
+template void H2MatrixSolver<std::complex<double>>::solveGMRESDevice<std::complex<float>>(deviceHandle_t, double, H2MatrixSolver<std::complex<float>>&, std::complex<double>[], const std::complex<double>[], long long, long long); 
 template double solveRelErr<std::complex<double>>(long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 // complex float
 template class H2MatrixSolver<std::complex<float>>;
@@ -341,7 +341,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<DT>& M, DT x[], c
   Eigen::Map<Vector_dt> X(x, N);
 
   DT nsum = B.adjoint() * B;
-  comm[levels].level_sum(&nsum, 1);
+  //comm[levels].level_sum(&nsum, 1);
   double normb = std::sqrt(std::real(nsum));
   if (normb == 0.)
     normb = 1.;
@@ -354,7 +354,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<DT>& M, DT x[], c
   while (iters < outer_iters && tol <= resid[iters]) {
     M.solvePrecondition(R.data());
     nsum = R.adjoint() * R;
-    comm[levels].level_sum(&nsum, 1);
+    //comm[levels].level_sum(&nsum, 1);
 
     double beta = std::sqrt(std::real(nsum));
     Matrix_dt H = Matrix_dt::Zero(ld, inner_iters);
@@ -367,11 +367,11 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<DT>& M, DT x[], c
       M.solvePrecondition(R.data());
 
       H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
-      comm[levels].level_sum(H.col(i).data(), i + 1);
+      //comm[levels].level_sum(H.col(i).data(), i + 1);
       R.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
 
       nsum = R.adjoint() * R;
-      comm[levels].level_sum(&nsum, 1);
+      //comm[levels].level_sum(&nsum, 1);
       H(i + 1, i) = std::sqrt(std::real(nsum));
       v.col(i + 1) = R * ((DT)1. / H(i + 1, i));
     }
@@ -387,7 +387,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<DT>& M, DT x[], c
     R += B;
 
     nsum = R.adjoint() * R;
-    comm[levels].level_sum(&nsum, 1);
+    //comm[levels].level_sum(&nsum, 1);
     resid[++iters] = std::sqrt(std::real(nsum)) / normb;
   }
 }
@@ -405,7 +405,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<OT>& M, DT x[], c
   Eigen::Map<Vector_dt> X(x, N);
 
   double nsum = B.squaredNorm();
-  comm[levels].level_sum(&nsum, 1);
+  //comm[levels].level_sum(&nsum, 1);
   double normb = std::sqrt(nsum);
   if (normb == 0.)
     normb = 1.;
@@ -421,7 +421,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<OT>& M, DT x[], c
     M.solvePrecondition(R_low.data());
     R = R_low.template cast<DT>();
     nsum = R.squaredNorm();
-    comm[levels].level_sum(&nsum, 1);
+    //comm[levels].level_sum(&nsum, 1);
 
     double beta = std::sqrt(nsum);
     Matrix_dt H = Matrix_dt::Zero(ld, inner_iters);
@@ -436,11 +436,11 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<OT>& M, DT x[], c
       R = R_low.template cast<DT>();
 
       H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
-      comm[levels].level_sum(H.col(i).data(), i + 1);
+      //comm[levels].level_sum(H.col(i).data(), i + 1);
       R.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
 
       nsum = R.squaredNorm();
-      comm[levels].level_sum(&nsum, 1);
+      //comm[levels].level_sum(&nsum, 1);
       H(i + 1, i) = std::sqrt(nsum);
       v.col(i + 1) = R * ((DT)1. / H(i + 1, i));
     }
@@ -456,21 +456,21 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<OT>& M, DT x[], c
     R += B;
 
     nsum = R.squaredNorm();
-    comm[levels].level_sum(&nsum, 1);
+    //comm[levels].level_sum(&nsum, 1);
     resid[++iters] = std::sqrt(nsum) / normb;
   }
 }
 
 template <typename DT>
-void H2MatrixSolver<DT>::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms) {
+void H2MatrixSolver<DT>::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<DT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters) {
   resid.resize(outer_iters + 1);
-  iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data(), comm[levels], nccl_comms);
+  iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data());
 }
 
 template <typename DT> template <typename OT>
-void H2MatrixSolver<DT>::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<OT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms) {
+void H2MatrixSolver<DT>::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver<OT>& M, DT X[], const DT B[], long long inner_iters, long long outer_iters) {
   resid.resize(outer_iters + 1);
-  iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data(), comm[levels], nccl_comms);
+  iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data());
 }
 
 template <typename DT>

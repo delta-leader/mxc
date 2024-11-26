@@ -411,7 +411,7 @@ void destroySpMatrixDesc(CsrMatVecDesc_t<DT> desc) {
     cudaFree(desc->buffer);
   delete desc;
 }
-
+/*
 void deviceVecNeighborBcast(cudaStream_t stream, VecDnContainer_t<std::complex<double>> X) {
   if (X->N) {
     ncclGroupStart();
@@ -470,7 +470,7 @@ void deviceVecNeighborBcast(cudaStream_t stream, VecDnContainer_t<float> X) {
       ncclBroadcast(const_cast<const float*>(X->Vals), X->Vals, X->N, ncclFloat, 0, X->DupComm, stream);
     ncclGroupEnd();
   }
-}
+}*/
 
 inline void spMV(cusparseHandle_t handle, cusparseOperation_t opA, const std::complex<double>* alpha, cusparseConstSpMatDescr_t matA, cusparseConstDnVecDescr_t vecX,
   const std::complex<double>* beta, cusparseDnVecDescr_t vecY, cusparseSpMVAlg_t alg, void* externalBuffer) {
@@ -505,7 +505,7 @@ void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t<DT> desc, const DT*
   DT one{1.}, zero{0.};
   if (desc->U->NNZ)
     spMV(cusparseH, CUSPARSE_OPERATION_NON_TRANSPOSE, &one, desc->descV, desc->descXi, &zero, desc->descZi, CUSPARSE_SPMV_ALG_DEFAULT, desc->buffer);
-  deviceVecNeighborBcast(stream, desc->Z);
+  //deviceVecNeighborBcast(stream, desc->Z);
 }
 
 template <typename DT>
@@ -532,7 +532,7 @@ void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t<DT> desc, D
   cusparseHandle_t cusparseH = handle->cusparseH;
   if (lenX)
     cudaMemcpyAsync(desc->X->Vals + desc->X->Xbegin, X_io, sizeof(DT) * lenX, cudaMemcpyDeviceToDevice, stream);
-  deviceVecNeighborBcast(stream, desc->X);
+  //deviceVecNeighborBcast(stream, desc->X);
 
   DT one{1.};
   if (desc->A->NNZ)

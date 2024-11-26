@@ -33,7 +33,7 @@ void levelCommSum(long long N, thrust::complex<float> X[], ncclComm_t AllComm, n
 }
 
 template <>
-long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<double>> desc[], long long mlevels, deviceMatrixDesc_t<std::complex<double>> desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<double>> desc[], long long mlevels, deviceMatrixDesc_t<std::complex<double>> desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[]) {
   long long N = desc[levels]->X->lenX;
   long long ld = inner_iters + 1;
 
@@ -53,8 +53,8 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
   cuDoubleComplex* Sdata = reinterpret_cast<cuDoubleComplex*>(thrust::raw_pointer_cast(s.data()));
   cuDoubleComplex** Pdata = reinterpret_cast<cuDoubleComplex**>(thrust::raw_pointer_cast(ptr.data()));
 
-  ncclComm_t AllComm = findNcclComm(comm.AllReduceComm, nccl_comms);
-  ncclComm_t DupComm = findNcclComm(comm.DupComm, nccl_comms);
+  //ncclComm_t AllComm = findNcclComm(comm.AllReduceComm, nccl_comms);
+  //ncclComm_t DupComm = findNcclComm(comm.DupComm, nccl_comms);
   cudaStream_t stream = handle->compute_stream;
   cublasHandle_t cublasH = handle->cublasH;
   int* dev_info;
@@ -63,7 +63,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
   auto conjR = thrust::make_transform_iterator(devR.begin(), conjugateFunc());
   thrust::complex<double> nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
     thrust::complex<double>(0., 0.), thrust::plus<thrust::complex<double>>(), thrust::multiplies<thrust::complex<double>>());
-  comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
+  //comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
 
   double normb = std::sqrt(nsum.real());
   if (normb == 0.)
@@ -77,7 +77,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
     matSolvePreconditionDeviceH2(handle, mlevels, desc_m, reinterpret_cast<std::complex<double>*>(Rdata));
     nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
       thrust::complex<double>(0., 0.), thrust::plus<thrust::complex<double>>(), thrust::multiplies<thrust::complex<double>>());
-    comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
+    //comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
 
     double beta = std::sqrt(nsum.real());
     thrust::complex<double> inv_beta(1. / beta, 0.);
@@ -93,12 +93,12 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
       matSolvePreconditionDeviceH2(handle, mlevels, desc_m, reinterpret_cast<std::complex<double>*>(Rdata));
 
       cublasZgemv(cublasH, CUBLAS_OP_C, N, i + 1, reinterpret_cast<cuDoubleComplex*>(&one), Vdata, N, Rdata, 1, reinterpret_cast<cuDoubleComplex*>(&zero), &Hdata[i * ld], 1);
-      levelCommSum(i + 1, thrust::raw_pointer_cast(&H[i * ld]), AllComm, DupComm, stream);
+      //levelCommSum(i + 1, thrust::raw_pointer_cast(&H[i * ld]), AllComm, DupComm, stream);
       cublasZgemv(cublasH, CUBLAS_OP_N, N, i + 1, reinterpret_cast<cuDoubleComplex*>(&minus_one), Vdata, N, &Hdata[i * ld], 1, reinterpret_cast<cuDoubleComplex*>(&one), Rdata, 1);
 
       nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
         thrust::complex<double>(0., 0.), thrust::plus<thrust::complex<double>>(), thrust::multiplies<thrust::complex<double>>());
-      comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
+      //comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
 
       H[i * (ld + 1) + 1] = std::sqrt(nsum.real());
       thrust::complex<double> inv_beta(1. / std::sqrt(nsum.real()), 0.);
@@ -115,7 +115,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
 
     nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
       thrust::complex<double>(0., 0.), thrust::plus<thrust::complex<double>>(), thrust::multiplies<thrust::complex<double>>());
-    comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
+    //comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
     resid[++iters] = std::sqrt(nsum.real()) / normb;
   }
 
@@ -125,7 +125,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
 }
 
 template <>
-long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<double>> desc[], long long mlevels, deviceMatrixDesc_t<std::complex<float>> desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<double>> desc[], long long mlevels, deviceMatrixDesc_t<std::complex<float>> desc_m[], double tol, std::complex<double>* X, const std::complex<double>* B, long long inner_iters, long long outer_iters, double resid[]) {
   long long N = desc[levels]->X->lenX;
   long long ld = inner_iters + 1;
 
@@ -147,8 +147,8 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
   cuDoubleComplex* Sdata = reinterpret_cast<cuDoubleComplex*>(thrust::raw_pointer_cast(s.data()));
   cuDoubleComplex** Pdata = reinterpret_cast<cuDoubleComplex**>(thrust::raw_pointer_cast(ptr.data()));
 
-  ncclComm_t AllComm = findNcclComm(comm.AllReduceComm, nccl_comms);
-  ncclComm_t DupComm = findNcclComm(comm.DupComm, nccl_comms);
+  //ncclComm_t AllComm = findNcclComm(comm.AllReduceComm, nccl_comms);
+  //ncclComm_t DupComm = findNcclComm(comm.DupComm, nccl_comms);
   cudaStream_t stream = handle->compute_stream;
   cublasHandle_t cublasH = handle->cublasH;
   int* dev_info;
@@ -157,7 +157,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
   auto conjR = thrust::make_transform_iterator(devR.begin(), conjugateFunc());
   thrust::complex<double> nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
     thrust::complex<double>(0., 0.), thrust::plus<thrust::complex<double>>(), thrust::multiplies<thrust::complex<double>>());
-  comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
+  //comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
 
   double normb = std::sqrt(nsum.real());
   if (normb == 0.)
@@ -173,7 +173,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
     devR = devR_low;
     nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
       thrust::complex<double>(0., 0.), thrust::plus<thrust::complex<double>>(), thrust::multiplies<thrust::complex<double>>());
-    comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
+    //comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
 
     double beta = std::sqrt(nsum.real());
     thrust::complex<double> inv_beta(1. / beta, 0.);
@@ -191,12 +191,12 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
       devR = devR_low;
 
       cublasZgemv(cublasH, CUBLAS_OP_C, N, i + 1, reinterpret_cast<cuDoubleComplex*>(&one), Vdata, N, Rdata, 1, reinterpret_cast<cuDoubleComplex*>(&zero), &Hdata[i * ld], 1);
-      levelCommSum(i + 1, thrust::raw_pointer_cast(&H[i * ld]), AllComm, DupComm, stream);
+      //levelCommSum(i + 1, thrust::raw_pointer_cast(&H[i * ld]), AllComm, DupComm, stream);
       cublasZgemv(cublasH, CUBLAS_OP_N, N, i + 1, reinterpret_cast<cuDoubleComplex*>(&minus_one), Vdata, N, &Hdata[i * ld], 1, reinterpret_cast<cuDoubleComplex*>(&one), Rdata, 1);
 
       nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
         thrust::complex<double>(0., 0.), thrust::plus<thrust::complex<double>>(), thrust::multiplies<thrust::complex<double>>());
-      comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
+      //comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
 
       H[i * (ld + 1) + 1] = std::sqrt(nsum.real());
       thrust::complex<double> inv_beta(1. / std::sqrt(nsum.real()), 0.);
@@ -213,7 +213,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
 
     nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
       thrust::complex<double>(0., 0.), thrust::plus<thrust::complex<double>>(), thrust::multiplies<thrust::complex<double>>());
-    comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
+    //comm.level_sum(reinterpret_cast<std::complex<double>*>(&nsum), 1);
     resid[++iters] = std::sqrt(nsum.real()) / normb;
   }
 
@@ -223,7 +223,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
 }
 
 template <>
-long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<float>> desc[], long long mlevels, deviceMatrixDesc_t<std::complex<float>> desc_m[], double tol, std::complex<float>* X, const std::complex<float>* B, long long inner_iters, long long outer_iters, double resid[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<float>> desc[], long long mlevels, deviceMatrixDesc_t<std::complex<float>> desc_m[], double tol, std::complex<float>* X, const std::complex<float>* B, long long inner_iters, long long outer_iters, double resid[]) {
     long long N = desc[levels]->X->lenX;
   long long ld = inner_iters + 1;
 
@@ -243,8 +243,8 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
   cuComplex* Sdata = reinterpret_cast<cuComplex*>(thrust::raw_pointer_cast(s.data()));
   cuComplex** Pdata = reinterpret_cast<cuComplex**>(thrust::raw_pointer_cast(ptr.data()));
 
-  ncclComm_t AllComm = findNcclComm(comm.AllReduceComm, nccl_comms);
-  ncclComm_t DupComm = findNcclComm(comm.DupComm, nccl_comms);
+  //ncclComm_t AllComm = findNcclComm(comm.AllReduceComm, nccl_comms);
+  //ncclComm_t DupComm = findNcclComm(comm.DupComm, nccl_comms);
   cudaStream_t stream = handle->compute_stream;
   cublasHandle_t cublasH = handle->cublasH;
   int* dev_info;
@@ -253,7 +253,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
   auto conjR = thrust::make_transform_iterator(devR.begin(), conjugateFunc());
   thrust::complex<float> nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
     thrust::complex<float>(0., 0.), thrust::plus<thrust::complex<float>>(), thrust::multiplies<thrust::complex<float>>());
-  comm.level_sum(reinterpret_cast<std::complex<float>*>(&nsum), 1);
+  //comm.level_sum(reinterpret_cast<std::complex<float>*>(&nsum), 1);
 
   float normb = std::sqrt(nsum.real());
   if (normb == 0.)
@@ -267,7 +267,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
     matSolvePreconditionDeviceH2(handle, mlevels, desc_m, reinterpret_cast<std::complex<float>*>(Rdata));
     nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
       thrust::complex<float>(0., 0.), thrust::plus<thrust::complex<float>>(), thrust::multiplies<thrust::complex<float>>());
-    comm.level_sum(reinterpret_cast<std::complex<float>*>(&nsum), 1);
+    //comm.level_sum(reinterpret_cast<std::complex<float>*>(&nsum), 1);
 
     float beta = std::sqrt(nsum.real());
     thrust::complex<float> inv_beta(1. / beta, 0.);
@@ -283,12 +283,12 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
       matSolvePreconditionDeviceH2(handle, mlevels, desc_m, reinterpret_cast<std::complex<float>*>(Rdata));
 
       cublasCgemv(cublasH, CUBLAS_OP_C, N, i + 1, reinterpret_cast<cuComplex*>(&one), Vdata, N, Rdata, 1, reinterpret_cast<cuComplex*>(&zero), &Hdata[i * ld], 1);
-      levelCommSum(i + 1, thrust::raw_pointer_cast(&H[i * ld]), AllComm, DupComm, stream);
+      //levelCommSum(i + 1, thrust::raw_pointer_cast(&H[i * ld]), AllComm, DupComm, stream);
       cublasCgemv(cublasH, CUBLAS_OP_N, N, i + 1, reinterpret_cast<cuComplex*>(&minus_one), Vdata, N, &Hdata[i * ld], 1, reinterpret_cast<cuComplex*>(&one), Rdata, 1);
 
       nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
         thrust::complex<float>(0., 0.), thrust::plus<thrust::complex<float>>(), thrust::multiplies<thrust::complex<float>>());
-      comm.level_sum(reinterpret_cast<std::complex<float>*>(&nsum), 1);
+      //comm.level_sum(reinterpret_cast<std::complex<float>*>(&nsum), 1);
 
       H[i * (ld + 1) + 1] = std::sqrt(nsum.real());
       thrust::complex<float> inv_beta(1. / std::sqrt(nsum.real()), 0.);
@@ -305,7 +305,7 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
 
     nsum = thrust::inner_product(thrust::cuda::par.on(stream), conjR, conjR + N, devR.begin(), 
       thrust::complex<float>(0., 0.), thrust::plus<thrust::complex<float>>(), thrust::multiplies<thrust::complex<float>>());
-    comm.level_sum(reinterpret_cast<std::complex<float>*>(&nsum), 1);
+    //comm.level_sum(reinterpret_cast<std::complex<float>*>(&nsum), 1);
     resid[++iters] = std::sqrt(nsum.real()) / normb;
   }
 
@@ -315,11 +315,11 @@ long long solveDeviceGMRES(deviceHandle_t handle, long long levels, CsrMatVecDes
 }
 
 template <>
-long long solveDeviceGMRES(deviceHandle_t, long long, CsrMatVecDesc_t<double>[], long long, deviceMatrixDesc_t<double>[], double, double*, const double*, long long, long long, double[], const ColCommMPI&, const ncclComms) {
+long long solveDeviceGMRES(deviceHandle_t, long long, CsrMatVecDesc_t<double>[], long long, deviceMatrixDesc_t<double>[], double, double*, const double*, long long, long long, double[]) {
   std::cout<<"Not implemented"<<std::endl;
 }
 
 template <>
-long long solveDeviceGMRES(deviceHandle_t, long long, CsrMatVecDesc_t<float>[], long long, deviceMatrixDesc_t<float>[], double, float*, const float*, long long, long long, double[], const ColCommMPI&, const ncclComms) {
+long long solveDeviceGMRES(deviceHandle_t, long long, CsrMatVecDesc_t<float>[], long long, deviceMatrixDesc_t<float>[], double, float*, const float*, long long, long long, double[]) {
   std::cout<<"Not implemented"<<std::endl;
 }

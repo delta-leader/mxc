@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
   //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
-  matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
+  matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
