@@ -63,9 +63,9 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
   wsa_time = MPI_Wtime() - wsa_time;
   double const_time = MPI_Wtime();
   bool fix_rank = (epi == 0.);
-  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels], A[levels], comm[levels]);
+  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, bodies, wsa[levels], comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1]);
+    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1]);
 
   const_time = MPI_Wtime() - const_time;
   double finish_time = MPI_Wtime();
@@ -79,6 +79,72 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
   //std::cout << "Construction Time: " << const_time << std::endl;
   //std::cout << "Finish Time: " << finish_time << std::endl;
 }
+
+template <typename DT>
+void H2MatrixSolver<DT>::construct_factorize(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, ncclComms& nccl_comms, deviceHandle_t& handle, MPI_Comm world) {
+  this->levels = levels;
+  A = std::vector<H2Matrix<DT>>(levels+1);
+  local_bodies = std::pair<long long, long long>(0, 0);
+
+  double init_time = MPI_Wtime();
+  
+  CSR Near('N', cells, cells, theta);
+  CSR Far('F', cells, cells, theta);
+  int mpi_size = 1;
+  MPI_Comm_size(world, &mpi_size);
+
+  std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
+  std::vector<std::pair<long long, long long>> tree(cells.size());
+  std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
+  
+  for (long long i = 0; i <= levels; i++)
+    comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
+  initNcclComms(&nccl_comms, allocedComm);
+
+  init_time = MPI_Wtime() - init_time;
+  double wsa_time = MPI_Wtime();
+  auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
+  std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
+  for (long long l = 1; l <= levels; l++)
+    wsa[l].construct(eval, epi, rank_func(l), comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
+
+  wsa_time = MPI_Wtime() - wsa_time;
+  double const_time = MPI_Wtime();
+  bool fix_rank = (epi == 0.);
+  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, bodies, wsa[levels], comm[levels], A[levels], comm[levels]);
+  desc.resize(levels + 1);
+  long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
+  long long lrank = *std::max_element(A[levels].DimsLr.begin(), A[levels].DimsLr.end());
+  createMatrixDesc(&desc[levels], bdim, lrank, deviceMatrixDesc_t<DT>(), comm[levels], nccl_comms);
+  copyDataInMatrixDesc(desc[levels], A[levels].A[0], A[levels].Q[0], handle->compute_stream);
+  compute_factorize(handle, desc[levels], deviceMatrixDesc_t<DT>());
+  for (long long l = levels - 1; l >= 0; l--) {
+    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1]);
+    bdim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
+    lrank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
+    createMatrixDesc(&desc[l], bdim, lrank, desc[l + 1], comm[l], nccl_comms);
+    copyDataInMatrixDesc(desc[l], A[l].A[0], A[l].Q[0], handle->memory_stream);
+    cudaDeviceSynchronize();
+    compute_factorize(handle, desc[l], desc[l + 1]);
+  }
+
+  const_time = MPI_Wtime() - const_time;
+  double finish_time = MPI_Wtime();
+  long long llen = comm[levels].lenLocal();
+  long long gbegin = comm[levels].oGlobal();
+  local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
+  long long lenX = bdim * comm[levels].lenLocal();
+  cudaMalloc(reinterpret_cast<void**>(&X_dev), lenX * sizeof(DT));
+  finish_time = MPI_Wtime() - finish_time;
+
+  cudaDeviceSynchronize();
+
+  //std::cout << "Init Time: " << init_time << std::endl;
+  //std::cout << "WSA Time: " << wsa_time << std::endl;
+  //std::cout << "Construction Time: " << const_time << std::endl;
+  //std::cout << "Finish Time: " << finish_time << std::endl;
+}
+
 
 template <typename DT>
 H2MatrixSolver<DT>& H2MatrixSolver<DT>::operator=(const H2MatrixSolver<DT>& solver) {

@@ -61,7 +61,7 @@ public:
   template <typename OT>
   H2Matrix(const H2Matrix<OT>& h2matrix);
   
-  void construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm);
+  void construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm);
 
   void matVecUpwardPass(const DT* X_in, const ColCommMPI& comm);
   void matVecHorizontalandDownwardPass(DT* Y_out, const ColCommMPI& comm);

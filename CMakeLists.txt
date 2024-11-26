@@ -24,5 +24,5 @@ target_compile_definitions(main.app PRIVATE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
 target_include_directories(main.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(main.app PRIVATE "-Wall" "-Wextra" "-fexceptions" "-O3" "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>")
+    target_compile_options(main.app PRIVATE "-Wall" "-Wextra" "-fexceptions" "-O3")
 endif()

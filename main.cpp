@@ -12,10 +12,10 @@ int main(int argc, char* argv[]) {
   typedef std::complex<float> DT_low;
   MPI_Init(&argc, &argv);
 
-  //deviceHandle_t handle;
-  //ncclComms nccl_comms = nullptr;
-  //cudaSetDevice();
-  //initGpuEnvs(&handle);
+  deviceHandle_t handle;
+  ncclComms nccl_comms = nullptr;
+  cudaSetDevice();
+  initGpuEnvs(&handle);
 
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
@@ -79,9 +79,9 @@ int main(int argc, char* argv[]) {
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
-  //initNcclComms(&nccl_comms, matA.allocedComm);
-  //matA.init_gpu_handles(nccl_comms);
-  //matA.allocSparseMV(handle, nccl_comms);
+  initNcclComms(&nccl_comms, matA.allocedComm);
+  matA.init_gpu_handles(nccl_comms);
+  matA.allocSparseMV(handle, nccl_comms);
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   MyVector<DT> X1(lenX, DT(0., 0.));
@@ -91,8 +91,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  matA.matVecMul(&X1[0]);
-  //matA.matVecMulSp(handle, &X1[0]);
+  //matA.matVecMul(&X1[0]);
+  matA.matVecMulSp(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
@@ -122,10 +122,12 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   H2MatrixSolver<DT> matM;
+  std::cout<<"init"<<std::endl;
   if (mode.compare("h2") == 0)
-    matM = H2MatrixSolver<DT>(eval, 0., rank, leveled_rank, cell, theta, &body[0], levels);
+    matM.construct_factorize(eval, 0., rank, leveled_rank, cell, theta, &body[0], levels, nccl_comms, handle);
   else if (mode.compare("hss") == 0)
-    matM = H2MatrixSolver<DT>(eval, 0., rank, leveled_rank, cell, 0., &body[0], levels);
+    matM.construct_factorize(eval, 0., rank, leveled_rank, cell, 0., &body[0], levels, nccl_comms, handle);
+  std::cout<<"init finished"<<std::endl;
 
   //H2MatrixSolver<DT_low> matM_low(matM);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -136,12 +138,12 @@ int main(int argc, char* argv[]) {
   matM.matVecMul(&X1[0]);
   double cerr_m = solveRelErr(lenX, &X1[0], &X2[0]);
 
-  //initNcclComms(&nccl_comms, matM_low.allocedComm);
-  //matM_low.init_gpu_handles(nccl_comms);
+  //initNcclComms(&nccl_comms, matM.allocedComm);
+  //matM.init_gpu_handles(nccl_comms);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
-  matM.factorizeM();
+  //matM.factorizeM();
   //matM.factorizeDeviceM(handle);
   //matM_low.factorizeDeviceM(handle, CUBLAS_COMPUTE_32F_FAST_16F);
 
@@ -154,8 +156,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  matM.solvePrecondition(&X1[0]);
-  //matM.solvePreconditionDevice(handle, &X1[0]);
+  //matM.solvePrecondition(&X1[0]);
+  matM.solvePreconditionDevice(handle, &X1[0]);
   //matM_low.solvePreconditionDevice(handle, &X1_low[0]);
   //X1 = MyVector<DT>(X1_low);
 
@@ -175,8 +177,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
-  //matA.solveGMRESDevice(handle, epi, matM_low, &X1[0], &X2[0], 10, 50, nccl_comms);
+  //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
+  matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
@@ -199,10 +201,10 @@ int main(int argc, char* argv[]) {
   matM.free_all_comms();
   MPI_Finalize();
 
-  //matA.freeSparseMV();
-  //matA.free_gpu_handles();
-  //matM_low.free_gpu_handles();
-  //finalizeGpuEnvs(handle);
-  //finalizeNcclComms(nccl_comms);
+  matA.freeSparseMV();
+  matA.free_gpu_handles();
+  matM.free_gpu_handles();
+  finalizeGpuEnvs(handle);
+  finalizeNcclComms(nccl_comms);
   return 0;
 }

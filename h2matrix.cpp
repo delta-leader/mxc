@@ -159,7 +159,7 @@ H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : UpperStride(h2matrix.Uppe
   X(h2matrix.X), Y(h2matrix.Y), Z(h2matrix.Z), W(h2matrix.W) {}
 
 template <typename DT>
-void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm) {
+void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
@@ -283,10 +283,15 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
     comm.dataSizesToNeighborOffsets(Ssizes.data());
     comm.neighbor_bcast(S[0], Ssizes.data());
     std::vector<std::vector<double>> cbodies(nodes);
+
+    // epi is not accessed until here
+    // same goes for wsa, so until here everything should be fine
     for (long long i = 0; i < nodes; i++) {
+      // gets the number of sampled points
       long long fsize = wsa.fbodies_size_at_i(i);
       const double* fbodies = wsa.fbodies_at_i(i);
 
+      //when the rank is fixed
       if (1. <= epi) {
         std::vector<long long>::iterator neighbors = ACols.begin() + ARows[i];
         std::vector<long long>::iterator neighbors_end = ACols.begin() + ARows[i + 1];
@@ -304,12 +309,14 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
         }
         std::copy(fbodies, &fbodies[3 * fsize], cbodies[i].begin() + loc);
       }
+      //when the accuracy is fixed
       else {
         cbodies[i] = std::vector<double>(3 * fsize);
         std::copy(fbodies, &fbodies[3 * fsize], cbodies[i].begin());
       }
     }
 
+    // fbodies is different
     for (long long i = 0; i < nodes; i++) {
       long long fsize = cbodies[i].size() / 3;
       const double* fbodies = cbodies[i].data();

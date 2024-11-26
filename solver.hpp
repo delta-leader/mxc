@@ -30,6 +30,7 @@ public:
   
   H2MatrixSolver();
   H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
+  void construct_factorize(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, ncclComms& nccl_comms, deviceHandle_t& handle, MPI_Comm world = MPI_COMM_WORLD);
   H2MatrixSolver<DT>& operator=(const H2MatrixSolver<DT>& solver);
   H2MatrixSolver(const H2MatrixSolver<DT>& solver);
   template <typename OT>
@@ -42,7 +43,7 @@ public:
 
   void matVecMul(DT X[]);
   void factorizeM();
-    void factorizeDeviceM(deviceHandle_t handle);
+  void factorizeDeviceM(deviceHandle_t handle);
   void factorizeDeviceM(deviceHandle_t handle, const cublasComputeType_t COMP);
   void solvePrecondition(DT X[]);
   void solvePreconditionDevice(deviceHandle_t handle, DT X[]);
