@@ -11,17 +11,17 @@
 template class H2MatrixSolver<std::complex<double>>;
 template void H2MatrixSolver<std::complex<double>>::solveGMRES<std::complex<float>>(double, H2MatrixSolver<std::complex<float>>&, std::complex<double>[], const std::complex<double>[], long long, long long);
 template void H2MatrixSolver<std::complex<double>>::solveGMRESDevice<std::complex<float>>(deviceHandle_t, double, H2MatrixSolver<std::complex<float>>&, std::complex<double>[], const std::complex<double>[], long long, long long); 
-template double solveRelErr<std::complex<double>>(long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
+template double solveRelErr<std::complex<double>>(long long, const std::complex<double> X[], const std::complex<double> ref[]);
 // complex float
 template class H2MatrixSolver<std::complex<float>>;
-template double solveRelErr<std::complex<float>>(long long, const std::complex<float> X[], const std::complex<float> ref[], MPI_Comm);
+template double solveRelErr<std::complex<float>>(long long, const std::complex<float> X[], const std::complex<float> ref[]);
 // double
 template class H2MatrixSolver<double>;
 template void H2MatrixSolver<double>::solveGMRES<float>(double, H2MatrixSolver<float>&, double[], const double[], long long, long long);
-template double solveRelErr<double>(long long, const double X[], const double ref[], MPI_Comm);
+template double solveRelErr<double>(long long, const double X[], const double ref[]);
 // float
 template class H2MatrixSolver<float>;
-template double solveRelErr<float>(long long, const float X[], const float ref[], MPI_Comm);
+template double solveRelErr<float>(long long, const float X[], const float ref[]);
 
 /* supported type conversions */
 // (complex) double to float
@@ -63,9 +63,9 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
   wsa_time = MPI_Wtime() - wsa_time;
   double const_time = MPI_Wtime();
   bool fix_rank = (epi == 0.);
-  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, bodies, wsa[levels], comm[levels], A[levels], comm[levels]);
+  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels].lenLocal(), A[levels], comm[levels].lenLocal());
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1]);
+    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l].lenLocal(), A[l + 1], comm[l + 1].lenLocal());
 
   const_time = MPI_Wtime() - const_time;
   double finish_time = MPI_Wtime();
@@ -111,7 +111,7 @@ void H2MatrixSolver<DT>::construct_factorize(const MatrixAccessor<DT>& eval, dou
   wsa_time = MPI_Wtime() - wsa_time;
   double const_time = MPI_Wtime();
   bool fix_rank = (epi == 0.);
-  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, bodies, wsa[levels], comm[levels], A[levels], comm[levels]);
+  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels].lenLocal(), A[levels], comm[levels].lenLocal());
   desc.resize(levels + 1);
   long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
   long long lrank = *std::max_element(A[levels].DimsLr.begin(), A[levels].DimsLr.end());
@@ -119,7 +119,7 @@ void H2MatrixSolver<DT>::construct_factorize(const MatrixAccessor<DT>& eval, dou
   copyDataInMatrixDesc(desc[levels], A[levels].A[0], A[levels].Q[0], handle->compute_stream);
   compute_factorize(handle, desc[levels], deviceMatrixDesc_t<DT>());
   for (long long l = levels - 1; l >= 0; l--) {
-    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, bodies, wsa[l], comm[l], A[l + 1], comm[l + 1]);
+    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l].lenLocal(), A[l + 1], comm[l + 1].lenLocal());
     bdim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
     lrank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
     createMatrixDesc(&desc[l], bdim, lrank, desc[l + 1], comm[l], nccl_comms);
@@ -244,22 +244,22 @@ void H2MatrixSolver<DT>::matVecMul(DT X[]) {
   if (levels < 0)
     return;
 
-  A[levels].matVecUpwardPass(X, comm[levels]);
+  A[levels].matVecUpwardPass(X, comm[levels].lenLocal());
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].matVecUpwardPass(A[l + 1].Z[0], comm[l]);
+    A[l].matVecUpwardPass(A[l + 1].Z[0], comm[l].lenLocal());
 
   for (long long l = 0; l < levels; l++)
-    A[l].matVecHorizontalandDownwardPass(A[l + 1].W[0], comm[l]);
+    A[l].matVecHorizontalandDownwardPass(A[l + 1].W[0], comm[l].lenLocal());
 
-  A[levels].matVecLeafHorizontalPass(X, comm[levels]);
+  A[levels].matVecLeafHorizontalPass(X, comm[levels].lenLocal());
 }
 
 template <typename DT>
 void H2MatrixSolver<DT>::factorizeM() {
   for (long long l = levels; l >= 0; l--) {
-    A[l].factorize(comm[l]);
+    A[l].factorize(comm[l].lenLocal());
     if (0 < l)
-      A[l - 1].factorizeCopyNext(A[l], comm[l]);
+      A[l - 1].factorizeCopyNext(A[l], comm[l].lenLocal());
   }
 }
 
@@ -279,7 +279,7 @@ void H2MatrixSolver<DT>::factorizeDeviceM(deviceHandle_t handle) {
   cudaDeviceSynchronize();
 
   for (long long l = levels; l >= 0; l--)
-    if (check_info(desc[l], comm[l]))
+    if (check_info(desc[l], comm[l].lenLocal()))
       printf("singularity detected at level %lld.\n", l);
 }
 
@@ -299,7 +299,7 @@ void H2MatrixSolver<DT>::factorizeDeviceM(deviceHandle_t handle, const cublasCom
   cudaDeviceSynchronize();
 
   for (long long l = levels; l >= 0; l--)
-    if (check_info(desc[l], comm[l]))
+    if (check_info(desc[l], comm[l].lenLocal()))
       printf("singularity detected at level %lld of %lld.\n", l, levels);
 }
 
@@ -308,13 +308,13 @@ void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   if (levels < 0)
     return;
 
-  A[levels].forwardSubstitute(X, comm[levels]);
+  A[levels].forwardSubstitute(X, comm[levels].lenLocal());
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].forwardSubstitute(A[l + 1].Z[0], comm[l]);
+    A[l].forwardSubstitute(A[l + 1].Z[0], comm[l].lenLocal());
 
   for (long long l = 0; l < levels; l++)
-    A[l].backwardSubstitute(A[l + 1].W[0], comm[l]);
-  A[levels].backwardSubstitute(X, comm[levels]);
+    A[l].backwardSubstitute(A[l + 1].W[0], comm[l].lenLocal());
+  A[levels].backwardSubstitute(X, comm[levels].lenLocal());
 }
 
 template <typename DT>
@@ -512,7 +512,7 @@ double solveRelErr(long long lenX, const DT X[], const DT ref[], MPI_Comm world)
 
 // Eigen version
 template <typename DT>
-double solveRelErr(long long lenX, const DT X[], const DT ref[], MPI_Comm world) {
+double solveRelErr(long long lenX, const DT X[], const DT ref[]) {
   double err[2] = { 0., 0. };
   typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
   Eigen::Map<const Vector_dt> x1(X, lenX);
@@ -521,6 +521,6 @@ double solveRelErr(long long lenX, const DT X[], const DT ref[], MPI_Comm world)
   err[0] = diff.squaredNorm();
   err[1] = x2.squaredNorm();
 
-  MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
+  //MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
   return std::sqrt(err[0] / err[1]);
 }

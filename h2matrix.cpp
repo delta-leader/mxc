@@ -159,27 +159,44 @@ H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : UpperStride(h2matrix.Uppe
   X(h2matrix.X), Y(h2matrix.Y), Z(h2matrix.Z), W(h2matrix.W) {}
 
 template <typename DT>
-void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm) {
-  long long xlen = comm.lenNeighbors();
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
-  long long ybegin = comm.oGlobal();
+void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const long long nodes, H2Matrix<DT>& lowerA, const long long lowerNodes) {
+  //long long nodes = comm.lenNeighbors();
+  //long long ibegin = comm.oLocal();
+  //long long nodes = comm.lenLocal();
+  //std::cout<<"ilocal "<<lowerComm.lenLocal()<<std::endl;
+  long long ybegin = nodes - 1;
 
-  Dims.resize(xlen, 0);
-  DimsLr.resize(xlen, 0);
+  Dims.resize(nodes, 0);
+  DimsLr.resize(nodes, 0);
   UpperStride.resize(nodes, 0);
 
-  ARows.insert(ARows.begin(), comm.ARowOffsets.begin(), comm.ARowOffsets.end());
-  ACols.insert(ACols.begin(), comm.AColumns.begin(), comm.AColumns.end());
-  CRows.insert(CRows.begin(), comm.CRowOffsets.begin(), comm.CRowOffsets.end());
-  CCols.insert(CCols.begin(), comm.CColumns.begin(), comm.CColumns.end());
+  long long tbegin = nodes - 1;
+  long long tend = tbegin + nodes;
+  //ARows.insert(ARows.begin(), comm.ARowOffsets.begin(), comm.ARowOffsets.end());
+  ARows.insert(ARows.begin(), Near.RowIndex.begin() + tbegin, Near.RowIndex.begin() + tend + 1);
+  long long offset = ARows[0];
+  std::for_each(ARows.begin(), ARows.end(), [=](long long& i) { i = i - offset; });
+  //ACols.insert(ACols.begin(), comm.AColumns.begin(), comm.AColumns.end());
+  ACols.insert(ACols.begin(), Near.ColIndex.begin() + Near.RowIndex[tbegin], Near.ColIndex.begin() + Near.RowIndex[tend]);
+  std::for_each(ACols.begin(), ACols.end(), [=](long long& i) { i = i - tbegin; });
+  //CRows.insert(CRows.begin(), comm.CRowOffsets.begin(), comm.CRowOffsets.end());
+  CRows.insert(CRows.begin(), Far.RowIndex.begin() + tbegin, Far.RowIndex.begin() + tend + 1);
+  offset = CRows[0];
+  std::for_each(CRows.begin(), CRows.end(), [=](long long& i) { i = i - offset; });
+  //CCols.insert(CCols.begin(), comm.CColumns.begin(), comm.CColumns.end());
+  CCols.insert(CCols.begin(), Far.ColIndex.begin() + Far.RowIndex[tbegin], Far.ColIndex.begin() + Far.RowIndex[tend]);
+  std::for_each(CCols.begin(), CCols.end(), [=](long long& i) { i = i - tbegin; });
   NA.resize(ARows[nodes], -1);
+
+  //std::cout<<ARows.size()<<std::endl;
+  //std::cout<<ACols.size()<<std::endl;
 
   long long localChildLen = cells[ybegin + nodes - 1].Child[1] - cells[ybegin].Child[0];
   std::vector<long long> localChildOffsets(nodes + 1, -1);
   
   if (0 < localChildLen) {
-    long long lowerBegin = lowerComm.oLocal() + comm.LowerX;
+    //long long lowerBegin = comm.LowerX;
+    long long lowerBegin = 0;
     long long localChildIndex = lowerBegin - cells[ybegin].Child[0];
     std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
     localChildOffsets[0] = lowerBegin;
@@ -188,37 +205,37 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
     std::inclusive_scan(lowerA.DimsLr.begin() + localChildOffsets[0], lowerA.DimsLr.begin() + localChildOffsets[nodes], ranks_offsets.begin() + 1);
     ranks_offsets[0] = 0;
 
-    std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
+    std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[0],
       [&](long long start, long long end) { return ranks_offsets[end - lowerBegin] - ranks_offsets[start - lowerBegin]; });
 
     lenX = ranks_offsets.back();
     LowerZ = std::reduce(lowerA.DimsLr.begin(), lowerA.DimsLr.begin() + lowerBegin, 0ll);
   }
   else {
-    std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
-    lenX = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
+    std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[0], [](const Cell& c) { return c.Body[1] - c.Body[0]; });
+    lenX = std::reduce(&Dims[0], &Dims[nodes]);
     LowerZ = 0;
   }
 
-  std::vector<long long> neighbor_ones(xlen, 1ll);
+  std::vector<long long> neighbor_ones(nodes, 1ll);
   //comm.dataSizesToNeighborOffsets(neighbor_ones.data());
   //comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
-  X.alloc(xlen, Dims.data());
-  Y.alloc(xlen, Dims.data());
+  X.alloc(nodes, Dims.data());
+  Y.alloc(nodes, Dims.data());
 
-  std::vector<long long> Qsizes(xlen, 0);
+  std::vector<long long> Qsizes(nodes, 0);
   std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
-  Q.alloc(xlen, Qsizes.data());
-  R.alloc(xlen, Qsizes.data());
+  Q.alloc(nodes, Qsizes.data());
+  R.alloc(nodes, Qsizes.data());
 
-  std::vector<long long> Ssizes(xlen);
+  std::vector<long long> Ssizes(nodes);
   std::transform(Dims.begin(), Dims.end(), Ssizes.begin(), [](const long long d) { return 3 * d; });
-  S.alloc(xlen, Ssizes.data());
+  S.alloc(nodes, Ssizes.data());
 
   std::vector<long long> Asizes(ARows[nodes]);
   for (long long i = 0; i < nodes; i++)
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
-      [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
+      [&](long long col) { return Dims[i] * Dims[col]; });
   A.alloc(ARows[nodes], Asizes.data());
 
   typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
@@ -226,19 +243,20 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
   typedef Eigen::Map<Matrix_dt, Eigen::Unaligned, Stride_t> MatrixMap_dt;
 
   if (std::reduce(Dims.begin(), Dims.end())) {
-    long long pbegin = lowerComm.oLocal();
-    long long pend = pbegin + lowerComm.lenLocal();
+    long long pbegin = 0;
+    //long long pend = pbegin + lowerComm.lenLocal();
+    long long pend = pbegin + lowerNodes;
 
     for (long long i = 0; i < nodes; i++) {
-      long long M = Dims[i + ibegin];
+      long long M = Dims[i];
       long long childi = localChildOffsets[i];
       long long cendi = localChildOffsets[i + 1];
-      Eigen::Map<Matrix_dt> Qi(Q[i + ibegin], M, M);
+      Eigen::Map<Matrix_dt> Qi(Q[i], M, M);
 
       for (long long y = childi; y < cendi; y++) { // Intermediate levels
         long long offset_y = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[y]);
         long long ny = lowerA.DimsLr[y];
-        std::copy(lowerA.S[y], lowerA.S[y] + (ny * 3), &(S[i + ibegin])[offset_y * 3]);
+        std::copy(lowerA.S[y], lowerA.S[y] + (ny * 3), &(S[i])[offset_y * 3]);
 
         MatrixMap_dt Ry(lowerA.R[y], ny, ny, Stride_t(lowerA.Dims[y], 1));
         Qi.block(offset_y, offset_y, ny, ny) = Ry;
@@ -249,7 +267,8 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
 
           for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
             long long j_global = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-            long long childj = lowerComm.iLocal(cells[j_global].Child[0]);
+            //long long childj = lowerComm.iLocal(cells[j_global].Child[0]);
+            long long childj = cells[j_global].Child[0] - lowerNodes + 1; 
             long long cendj = (0 <= childj) ? (childj + cells[j_global].Child[1] - cells[j_global].Child[0]) : -1;
 
             for (long long x = childj; x < cendj; x++) {
@@ -269,7 +288,7 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
 
       if (cendi <= childi) { // Leaf level
         long long ci = i + ybegin;
-        std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
+        std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i]);
         Qi = Matrix_dt::Identity(M, M);
 
         for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
@@ -295,14 +314,14 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
       if (1. <= epi) {
         std::vector<long long>::iterator neighbors = ACols.begin() + ARows[i];
         std::vector<long long>::iterator neighbors_end = ACols.begin() + ARows[i + 1];
-        long long csize = std::transform_reduce(neighbors, neighbors_end, -Dims[i + ibegin], std::plus<long long>(), [&](long long col) { return Dims[col]; });
+        long long csize = std::transform_reduce(neighbors, neighbors_end, -Dims[i], std::plus<long long>(), [&](long long col) { return Dims[col]; });
 
         cbodies[i] = std::vector<double>(3 * (fsize + csize));
         long long loc = 0;
         for (long long n = 0; n < (ARows[i + 1] - ARows[i]); n++) {
           long long col = neighbors[n];
           long long len = 3 * Dims[col];
-          if (col != (i + ibegin)) {
+          if (col != i) {
             std::copy(S[col], S[col] + len, cbodies[i].begin() + loc);
             loc += len;
           }
@@ -320,8 +339,8 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
     for (long long i = 0; i < nodes; i++) {
       long long fsize = cbodies[i].size() / 3;
       const double* fbodies = cbodies[i].data();
-      long long rank = compute_basis(eval, epi, Dims[i + ibegin], fsize, S[i + ibegin], fbodies, Q[i + ibegin], R[i + ibegin], 1. <= epi);
-      DimsLr[i + ibegin] = rank;
+      long long rank = compute_basis(eval, epi, Dims[i], fsize, S[i], fbodies, Q[i], R[i], 1. <= epi);
+      DimsLr[i] = rank;
     }
 
     //comm.dataSizesToNeighborOffsets(Qsizes.data());
@@ -335,17 +354,17 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
     std::vector<long long> Csizes(CRows[nodes]);
     for (long long i = 0; i < nodes; i++)
       std::transform(CCols.begin() + CRows[i], CCols.begin() + CRows[i + 1], Csizes.begin() + CRows[i],
-        [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
+        [&](long long col) { return DimsLr[i] * DimsLr[col]; });
     C.alloc(CRows[nodes], Csizes.data());
 
     std::vector<long long> Usizes(nodes);
-    std::transform(&Dims[ibegin], &Dims[ibegin + nodes], &DimsLr[ibegin], Usizes.begin(), std::multiplies<long long>());
+    std::transform(&Dims[0], &Dims[nodes], &DimsLr[0], Usizes.begin(), std::multiplies<long long>());
     U.alloc(nodes, Usizes.data());
-    Z.alloc(xlen, DimsLr.data());
-    W.alloc(xlen, DimsLr.data());
+    Z.alloc(nodes, DimsLr.data());
+    W.alloc(nodes, DimsLr.data());
 
     for (long long i = 0; i < nodes; i++) {
-      long long y = i + ibegin;
+      long long y = i;
       long long M = DimsLr[y];
       MatrixMap_dt Ry(R[y], M, M, Stride_t(Dims[y], 1));
       Eigen::Map<Matrix_dt>(U[i], Dims[y], M) = Eigen::Map<Matrix_dt>(Q[y], Dims[y], M);
@@ -374,21 +393,21 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
 }
 
 template <typename DT>
-void H2Matrix<DT>::matVecUpwardPass(const DT* X_in, const ColCommMPI& comm) {
+void H2Matrix<DT>::matVecUpwardPass(const DT* X_in, const long long nodes) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
-  std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], X[ibegin]);
+  //long long ibegin = comm.oLocal();
+  //long long nodes = comm.lenLocal();
+  std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], X[0]);
 
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long N = DimsLr[i + ibegin];
-    VectorMap_dt x(X[i + ibegin], M);
+    long long M = Dims[i];
+    long long N = DimsLr[i];
+    VectorMap_dt x(X[i], M);
     if (0 < N) {
-      VectorMap_dt z(Z[i + ibegin], N);
-      MatrixMap_dt q(Q[i + ibegin], M, N);
+      VectorMap_dt z(Z[i], N);
+      MatrixMap_dt q(Q[i], M, N);
       z = q.transpose() * x;
     }
   }
@@ -397,18 +416,18 @@ void H2Matrix<DT>::matVecUpwardPass(const DT* X_in, const ColCommMPI& comm) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::matVecHorizontalandDownwardPass(DT* Y_out, const ColCommMPI& comm) {
+void H2Matrix<DT>::matVecHorizontalandDownwardPass(DT* Y_out, const long long nodes) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
+  //long long ibegin = comm.oLocal();
+  //long long nodes = comm.lenLocal();
 
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long K = DimsLr[i + ibegin];
+    long long M = Dims[i];
+    long long K = DimsLr[i];
     if (0 < K) {
-      VectorMap_dt w(W[i + ibegin], K);
+      VectorMap_dt w(W[i], K);
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         long long j = CCols[ij];
         long long N = DimsLr[j];
@@ -418,33 +437,33 @@ void H2Matrix<DT>::matVecHorizontalandDownwardPass(DT* Y_out, const ColCommMPI& 
         w.noalias() += c * z;
       }
 
-      MatrixMap_dt q(Q[i + ibegin], M, K);
-      VectorMap_dt y(Y[i + ibegin], M);
+      MatrixMap_dt q(Q[i], M, K);
+      VectorMap_dt y(Y[i], M);
       y.noalias() = q * w;
     }
   }
 
-  std::copy(Y[ibegin], Y[ibegin + nodes], &Y_out[LowerZ]);
+  std::copy(Y[0], Y[nodes], &Y_out[LowerZ]);
 }
 
 template <typename DT>
-void H2Matrix<DT>::matVecLeafHorizontalPass(DT* X_io, const ColCommMPI& comm) {
+void H2Matrix<DT>::matVecLeafHorizontalPass(DT* X_io, const long long nodes) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
-  std::copy(&X_io[0], &X_io[lenX], X[ibegin]);
+  //long long ibegin = comm.oLocal();
+  //long long nodes = comm.lenLocal();
+  std::copy(&X_io[0], &X_io[lenX], X[0]);
   //comm.neighbor_bcast(X[0], NbXoffsets.data());
 
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long K = DimsLr[i + ibegin];
-    VectorMap_dt y(Y[i + ibegin], M);
+    long long M = Dims[i];
+    long long K = DimsLr[i];
+    VectorMap_dt y(Y[i], M);
     y.setZero();
 
     if (0 < K) {
-      VectorMap_dt w(W[i + ibegin], K);
+      VectorMap_dt w(W[i], K);
       for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
         long long j = CCols[ij];
         long long N = DimsLr[j];
@@ -454,7 +473,7 @@ void H2Matrix<DT>::matVecLeafHorizontalPass(DT* X_io, const ColCommMPI& comm) {
         w.noalias() += c * z;
       }
 
-      MatrixMap_dt q(Q[i + ibegin], M, K);
+      MatrixMap_dt q(Q[i], M, K);
       y.noalias() += q * w;
     }
 
@@ -468,36 +487,37 @@ void H2Matrix<DT>::matVecLeafHorizontalPass(DT* X_io, const ColCommMPI& comm) {
     }
   }
 
-  std::copy(Y[ibegin], Y[ibegin + nodes], X_io);
+  std::copy(Y[0], Y[nodes], X_io);
 }
 
 template <typename DT>
-void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
-  long long xlen = comm.lenNeighbors();
+void H2Matrix<DT>::factorize(const long long nodes) {
+  //long long ibegin = comm.oLocal();
+  //long long nodes = comm.lenLocal();
+  //long long xlen = comm.lenNeighbors();
+
   long long dims_max = *std::max_element(Dims.begin(), Dims.end());
   typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
   typedef Eigen::Map<Matrix_dt> MatrixMap_dt;
 
-  std::vector<long long> Bsizes(xlen);
+  std::vector<long long> Bsizes(nodes);
   std::fill(Bsizes.begin(), Bsizes.end(), dims_max * dims_max);
   MatrixDataContainer<DT> B;
-  B.alloc(xlen, Bsizes.data());
+  B.alloc(nodes, Bsizes.data());
 
-  if (nodes == 1)
+  //if (nodes == 1)
     //comm.level_merge(A[0], A.size());
 
   for (long long i = 0; i < nodes; i++) {
-    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
-    long long M = Dims[i + ibegin];
-    long long Ms = DimsLr[i + ibegin];
+    long long diag = lookupIJ(ARows, ACols, i, i);
+    long long M = Dims[i];
+    long long Ms = DimsLr[i];
     long long Mr = M - Ms;
 
-    MatrixMap_dt Ui(Q[i + ibegin], M, M);
-    MatrixMap_dt V(R[i + ibegin], M, M);
+    MatrixMap_dt Ui(Q[i], M, M);
+    MatrixMap_dt V(R[i], M, M);
     MatrixMap_dt Aii(A[diag], M, M);
-    MatrixMap_dt b(B[i + ibegin], dims_max, M);
+    MatrixMap_dt b(B[i], dims_max, M);
 
     b.topRows(M).noalias() = Ui.adjoint() * Aii.transpose();
     Aii.noalias() = Ui.adjoint() * b.topRows(M).transpose();
@@ -531,9 +551,9 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
   //comm.neighbor_bcast(B[0], Bsizes.data());
 
   for (long long i = 0; i < nodes; i++) {
-    long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
-    long long M = Dims[i + ibegin];
-    long long Ms = DimsLr[i + ibegin];
+    long long diag = lookupIJ(ARows, ACols, i, i);
+    long long M = Dims[i];
+    long long Ms = DimsLr[i];
     long long Mr = M - Ms;
     MatrixMap_dt Aii(A[diag], M, M);
 
@@ -553,17 +573,17 @@ void H2Matrix<DT>::factorize(const ColCommMPI& comm) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::factorizeCopyNext(const H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm) {
-  long long ibegin = lowerComm.oLocal();
-  long long nodes = lowerComm.lenLocal();
+void H2Matrix<DT>::factorizeCopyNext(const H2Matrix<DT>& lowerA, const long long nodes) {
+  //long long ibegin = lowerComm.oLocal();
+  //long long nodes = lowerComm.lenLocal();
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
   for (long long i = 0; i < nodes; i++)
     for (long long ij = lowerA.ARows[i]; ij < lowerA.ARows[i + 1]; ij++) {
       long long j = lowerA.ACols[ij];
-      long long M = lowerA.Dims[i + ibegin];
+      long long M = lowerA.Dims[i];
       long long N = lowerA.Dims[j];
-      long long Ms = lowerA.DimsLr[i + ibegin];
+      long long Ms = lowerA.DimsLr[i];
       long long Ns = lowerA.DimsLr[j];
 
       MatrixMap_dt Aij(lowerA.A[ij], M, N);
@@ -575,21 +595,21 @@ void H2Matrix<DT>::factorizeCopyNext(const H2Matrix<DT>& lowerA, const ColCommMP
 }
 
 template <typename DT>
-void H2Matrix<DT>::forwardSubstitute(const DT* X_in, const ColCommMPI& comm) {
+void H2Matrix<DT>::forwardSubstitute(const DT* X_in, const long long nodes) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
-  std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], Y[ibegin]);
+  //long long ibegin = comm.oLocal();
+  //long long nodes = comm.lenLocal();
+  std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], Y[0]);
 
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
+    long long M = Dims[i];
 
     if (0 < M) {
-      VectorMap_dt x(X[i + ibegin], M);
-      VectorMap_dt y(Y[i + ibegin], M);
-      MatrixMap_dt q(R[i + ibegin], M, M);
+      VectorMap_dt x(X[i], M);
+      VectorMap_dt y(Y[i], M);
+      MatrixMap_dt q(R[i], M, M);
       x.noalias() = q * y;
     }
   }
@@ -597,12 +617,12 @@ void H2Matrix<DT>::forwardSubstitute(const DT* X_in, const ColCommMPI& comm) {
   //comm.neighbor_bcast(X[0], NbXoffsets.data());
 
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long Ms = DimsLr[i + ibegin];
+    long long M = Dims[i];
+    long long Ms = DimsLr[i];
 
     if (0 < Ms) {
-      VectorMap_dt z(Z[i + ibegin], Ms);
-      z = VectorMap_dt(X[i + ibegin], Ms);
+      VectorMap_dt z(Z[i], Ms);
+      z = VectorMap_dt(X[i], Ms);
 
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
         long long j = ACols[ij];
@@ -623,21 +643,21 @@ void H2Matrix<DT>::forwardSubstitute(const DT* X_in, const ColCommMPI& comm) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::backwardSubstitute(DT* Y_out, const ColCommMPI& comm) {
+void H2Matrix<DT>::backwardSubstitute(DT* Y_out, const long long nodes) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
+  //long long ibegin = comm.oLocal();
+  //long long nodes = comm.lenLocal();
   //comm.neighbor_bcast(W[0], NbZoffsets.data());
 
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
-    long long Ms = DimsLr[i + ibegin];
+    long long M = Dims[i];
+    long long Ms = DimsLr[i];
     long long Mr = M - Ms;
 
-    VectorMap_dt x(X[i + ibegin], M);
-    x.topRows(Ms) = VectorMap_dt(W[i + ibegin], Ms);
+    VectorMap_dt x(X[i], M);
+    x.topRows(Ms) = VectorMap_dt(W[i], Ms);
       
     if (0 < Mr) {
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
@@ -655,14 +675,14 @@ void H2Matrix<DT>::backwardSubstitute(DT* Y_out, const ColCommMPI& comm) {
   }
 
   for (long long i = 0; i < nodes; i++) {
-    long long M = Dims[i + ibegin];
+    long long M = Dims[i];
     if (0 < M) {
-      VectorMap_dt x(X[i + ibegin], M);
-      VectorMap_dt y(Y[i + ibegin], M);
-      MatrixMap_dt q(Q[i + ibegin], M, M);
+      VectorMap_dt x(X[i], M);
+      VectorMap_dt y(Y[i], M);
+      MatrixMap_dt q(Q[i], M, M);
       y.noalias() = q.conjugate() * x;
     }
   }
 
-  std::copy(Y[ibegin], Y[ibegin + nodes], &Y_out[LowerZ]);
+  std::copy(Y[0], Y[nodes], &Y_out[LowerZ]);
 }

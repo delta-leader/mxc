@@ -206,5 +206,5 @@ template <typename DT>
 void matSolvePreconditionDeviceH2(deviceHandle_t handle, long long levels, deviceMatrixDesc_t<DT> A[], DT* devX);
 
 template <typename DT>
-int check_info(deviceMatrixDesc_t<DT> A, const ColCommMPI& comm);
+int check_info(deviceMatrixDesc_t<DT> A, const long long M);
 

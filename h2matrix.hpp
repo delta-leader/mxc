@@ -61,15 +61,15 @@ public:
   template <typename OT>
   H2Matrix(const H2Matrix<OT>& h2matrix);
   
-  void construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const ColCommMPI& comm, H2Matrix<DT>& lowerA, const ColCommMPI& lowerComm);
+  void construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const long long nodes, H2Matrix<DT>& lowerA, const long long lowerNodes);
 
-  void matVecUpwardPass(const DT* X_in, const ColCommMPI& comm);
-  void matVecHorizontalandDownwardPass(DT* Y_out, const ColCommMPI& comm);
-  void matVecLeafHorizontalPass(DT* X_io, const ColCommMPI& comm);
+  void matVecUpwardPass(const DT* X_in, const long long nodes);
+  void matVecHorizontalandDownwardPass(DT* Y_out, const long long nodes);
+  void matVecLeafHorizontalPass(DT* X_io, const long long nodes);
 
-  void factorize(const ColCommMPI& comm);
-  void factorizeCopyNext(const H2Matrix& lowerA, const ColCommMPI& lowerComm);
-  void forwardSubstitute(const DT* X_in, const ColCommMPI& comm);
-  void backwardSubstitute(DT* Y_out, const ColCommMPI& comm);
+  void factorize(const long long nodes);
+  void factorizeCopyNext(const H2Matrix& lowerA, const long long nodes);
+  void forwardSubstitute(const DT* X_in, const long long nodes);
+  void backwardSubstitute(DT* Y_out, const long long nodes);
 };
 

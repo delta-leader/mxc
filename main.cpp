@@ -176,17 +176,17 @@ int main(int argc, char* argv[]) {
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
-  double gmres_time = MPI_Wtime(), gmres_comm_time;
+  double gmres_time = MPI_Wtime();
   //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
   matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
-  gmres_comm_time = ColCommMPI::get_comm_time();
+ //gmres_comm_time = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
     std::cout << "GMRES Residual: " << matA.resid[matA.iters] << ", Iters: " << matA.iters << std::endl;
-    std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
+    std::cout << "GMRES Time: " << gmres_time << std::endl;
     for (long long i = 0; i <= matA.iters; i++)
       std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
 
@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
       write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
         h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
         m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
-        matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());
+        matA.resid[matA.iters], matA.iters, gmres_time, matA.resid.data());
   }
 
   matA.free_all_comms();

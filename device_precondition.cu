@@ -18,25 +18,25 @@ template void createMatrixDesc(deviceMatrixDesc_t<std::complex<double>>* desc, l
 template void destroyMatrixDesc(deviceMatrixDesc_t<std::complex<double>> desc);
 template void copyDataInMatrixDesc(deviceMatrixDesc_t<std::complex<double>> desc, const std::complex<double>* A, const std::complex<double>* U, cudaStream_t stream);
 template void copyDataOutMatrixDesc(deviceMatrixDesc_t<std::complex<double>> desc, std::complex<double>* A, std::complex<double>* V, cudaStream_t stream);
-template int check_info(deviceMatrixDesc_t<std::complex<double>> A, const ColCommMPI& comm);
+template int check_info(deviceMatrixDesc_t<std::complex<double>> A, const long long);
 // complex float
 template void createMatrixDesc(deviceMatrixDesc_t<std::complex<float>>* desc, long long bdim, long long rank, deviceMatrixDesc_t<std::complex<float>> lower, const ColCommMPI& comm, const ncclComms nccl_comms); 
 template void destroyMatrixDesc(deviceMatrixDesc_t<std::complex<float>> desc);
 template void copyDataInMatrixDesc(deviceMatrixDesc_t<std::complex<float>> desc, const std::complex<float>* A, const std::complex<float>* U, cudaStream_t stream);
 template void copyDataOutMatrixDesc(deviceMatrixDesc_t<std::complex<float>> desc, std::complex<float>* A, std::complex<float>* V, cudaStream_t stream);
-template int check_info(deviceMatrixDesc_t<std::complex<float>> A, const ColCommMPI& comm);
+template int check_info(deviceMatrixDesc_t<std::complex<float>> A, const long long);
 // double
 template void createMatrixDesc(deviceMatrixDesc_t<double>* desc, long long bdim, long long rank, deviceMatrixDesc_t<double> lower, const ColCommMPI& comm, const ncclComms nccl_comms); 
 template void destroyMatrixDesc(deviceMatrixDesc_t<double> desc);
 template void copyDataInMatrixDesc(deviceMatrixDesc_t<double> desc, const double* A, const double* U, cudaStream_t stream);
 template void copyDataOutMatrixDesc(deviceMatrixDesc_t<double> desc, double* A, double* V, cudaStream_t stream);
-template int check_info(deviceMatrixDesc_t<double> A, const ColCommMPI& comm);
+template int check_info(deviceMatrixDesc_t<double> A, const long long);
 // float
 template void createMatrixDesc(deviceMatrixDesc_t<float>* desc, long long bdim, long long rank, deviceMatrixDesc_t<float> lower, const ColCommMPI& comm, const ncclComms nccl_comms); 
 template void destroyMatrixDesc(deviceMatrixDesc_t<float> desc);
 template void copyDataInMatrixDesc(deviceMatrixDesc_t<float> desc, const float* A, const float* U, cudaStream_t stream);
 template void copyDataOutMatrixDesc(deviceMatrixDesc_t<float> desc, float* A, float* V, cudaStream_t stream);
-template int check_info(deviceMatrixDesc_t<float> A, const ColCommMPI& comm);
+template int check_info(deviceMatrixDesc_t<float> A, const long long);
 
 struct keysD {
   long long D;
@@ -255,8 +255,7 @@ void copyDataOutMatrixDesc(deviceMatrixDesc_t<DT> desc, DT* A, DT* V, cudaStream
 }
 
 template <typename DT>
-int check_info(deviceMatrixDesc_t<DT> A, const ColCommMPI& comm) {
-  long long M = comm.lenLocal();
+int check_info(deviceMatrixDesc_t<DT> A, const long long M) {
   thrust::device_ptr<int> info_ptr(A.Info);
   int sum = thrust::inner_product(info_ptr, info_ptr + M, info_ptr, 0);
   return 0 < sum;

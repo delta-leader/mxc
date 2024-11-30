@@ -137,7 +137,7 @@ void read_sorted_bodies(long long* nbodies, long long lbuckets, double* bodies, 
 void write_to_csv(const char* fname, int mpi_size, long long N, double theta, long long leaf_size, long long rank, double epi, const char* mode, 
   double h2cerr, double h2ctime, double h2ctime_comm, double h2mvtime, double h2mvtime_comm, double dense_mvtime,
   double mctime, double mctime_comm, double mcerr, double factor_time, double factor_time_comm, double sub_time, double sub_time_comm, double sub_err,
-  double gmres_err, double gmres_iters, double gmres_time, double gmres_time_comm, const double* iter_err) {
+  double gmres_err, double gmres_iters, double gmres_time, const double* iter_err) {
   
   std::ofstream file(fname, std::ios_base::app);
   if (!file.bad())
@@ -145,7 +145,7 @@ void write_to_csv(const char* fname, int mpi_size, long long N, double theta, lo
     file << mpi_size << ',' << N << ',' << theta << ',' << leaf_size << ',' << rank << ',' << epi << ',' << mode << ','; // 0 - 6
     file << h2cerr << ',' << h2ctime << ',' << h2ctime_comm << ',' << h2mvtime << ',' << h2mvtime_comm << ',' << dense_mvtime << ','; // 7 - 12
     file << mctime << ',' << mctime_comm << ',' << mcerr << ',' << factor_time << ',' << factor_time_comm << ',' << sub_time << ',' << sub_time_comm << ',' << sub_err << ','; // 13 - 20
-    file << gmres_err << ',' << gmres_iters << ',' << gmres_time << ',' << gmres_time_comm; // 21 - 24
+    file << gmres_err << ',' << gmres_iters << ',' << gmres_time; // 21 - 24
     for (long long i = 0; i <= gmres_iters; i++)
       file << ',' << iter_err[i];
     file << std::endl;

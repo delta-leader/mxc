@@ -60,4 +60,4 @@ public:
 };
 
 template <typename DT>
-double solveRelErr(long long lenX, const DT X[], const DT ref[], MPI_Comm world = MPI_COMM_WORLD);
+double solveRelErr(long long lenX, const DT X[], const DT ref[]);
