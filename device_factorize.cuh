@@ -3,6 +3,7 @@
 #include <gpu_handles.cuh>
 #include <complex>
 #include <cuComplex.h>
+#include <h2matrix.hpp>
 
 //#define STD_CTYPE std::complex<double>
 //#define THRUST_CTYPE thrust::complex<double>
@@ -185,7 +186,7 @@ struct deviceMatrixDesc_t<std::complex<float>> {
 
 // TODO why is lower not a reference?
 template <typename DT>
-void createMatrixDesc(deviceMatrixDesc_t<DT>* desc, long long bdim, long long rank, deviceMatrixDesc_t<DT> lower, const ColCommMPI& comm, const ncclComms nccl_comms);
+void createMatrixDesc(deviceMatrixDesc_t<DT>* desc, long long bdim, long long rank, deviceMatrixDesc_t<DT> lower, H2Matrix<DT>& matrix);
 template <typename DT>
 void destroyMatrixDesc(deviceMatrixDesc_t<DT> desc);
 

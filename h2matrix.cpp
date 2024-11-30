@@ -159,11 +159,12 @@ H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : UpperStride(h2matrix.Uppe
   X(h2matrix.X), Y(h2matrix.Y), Z(h2matrix.Z), W(h2matrix.W) {}
 
 template <typename DT>
-void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const long long nodes, H2Matrix<DT>& lowerA, const long long lowerNodes) {
+void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const long long nodes, H2Matrix<DT>& lowerA, const long long lowerNodes, const std::pair<long long, long long> Tree[]) {
   //long long nodes = comm.lenNeighbors();
   //long long ibegin = comm.oLocal();
   //long long nodes = comm.lenLocal();
   //std::cout<<"ilocal "<<lowerComm.lenLocal()<<std::endl;
+  this->nodes = nodes;
   long long ybegin = nodes - 1;
 
   Dims.resize(nodes, 0);
@@ -187,6 +188,43 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
   CCols.insert(CCols.begin(), Far.ColIndex.begin() + Far.RowIndex[tbegin], Far.ColIndex.begin() + Far.RowIndex[tend]);
   std::for_each(CCols.begin(), CCols.end(), [=](long long& i) { i = i - tbegin; });
   NA.resize(ARows[nodes], -1);
+  
+  //std::cout<<lowerNodes<<std::endl;
+  //std::cout<<nodes<<std::endl;
+  if (lowerNodes - nodes > 0) {
+    long long lbegin = lowerNodes -1;
+    long long lend = lbegin + lowerNodes;
+    //std::cout<<"lbegin "<<lbegin<<std::endl;
+    //std::cout<<"lend "<<lend<<std::endl;
+    long long lenAl = Near.RowIndex[lend] - Near.RowIndex[lbegin];
+    long long lenCl = Far.RowIndex[lend] - Far.RowIndex[lbegin];
+
+    //LowerX = Tree[tbegin].first - lbegin;
+    LowerIndA.resize(lenAl);
+    LowerIndC.resize(lenCl);
+
+    for (long long i = tbegin; i < tend; i++) {
+      long long childi = Tree[i].first;
+      long long cendi = Tree[i].second;
+
+      for (long long ij = Near.RowIndex[i]; ij < Near.RowIndex[i + 1]; ij++) {
+        long long j = Near.ColIndex[ij];
+        long long childj = Tree[j].first;
+        long long cendj = Tree[j].second;
+
+        for (long long y = std::max(lbegin, childi); y < std::min(lend, cendi); y++)
+          for (long long x = childj; x < cendj; x++) {
+            long long A_yx = std::distance(&Near.ColIndex[Near.RowIndex[lbegin]], std::find(&Near.ColIndex[Near.RowIndex[y]], &Near.ColIndex[Near.RowIndex[y + 1]], x));
+            long long C_yx = std::distance(&Far.ColIndex[Far.RowIndex[lbegin]], std::find(&Far.ColIndex[Far.RowIndex[y]], &Far.ColIndex[Far.RowIndex[y + 1]], x));
+
+            if (A_yx < (Near.RowIndex[y + 1] - Near.RowIndex[lbegin]))
+              LowerIndA[A_yx] = std::make_tuple(y - childi, x - childj, ij - Near.RowIndex[tbegin]);
+            else if (C_yx < (Far.RowIndex[y + 1] - Far.RowIndex[lbegin]))
+              LowerIndC[C_yx] = std::make_tuple(y - childi, x - childj, ij - Near.RowIndex[tbegin]);
+          }
+      }
+    }
+  }
 
   //std::cout<<ARows.size()<<std::endl;
   //std::cout<<ACols.size()<<std::endl;
@@ -393,7 +431,7 @@ void H2Matrix<DT>::construct(const MatrixAccessor<DT>& eval, double epi, const C
 }
 
 template <typename DT>
-void H2Matrix<DT>::matVecUpwardPass(const DT* X_in, const long long nodes) {
+void H2Matrix<DT>::matVecUpwardPass(const DT* X_in) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
@@ -416,7 +454,7 @@ void H2Matrix<DT>::matVecUpwardPass(const DT* X_in, const long long nodes) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::matVecHorizontalandDownwardPass(DT* Y_out, const long long nodes) {
+void H2Matrix<DT>::matVecHorizontalandDownwardPass(DT* Y_out) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
@@ -447,7 +485,7 @@ void H2Matrix<DT>::matVecHorizontalandDownwardPass(DT* Y_out, const long long no
 }
 
 template <typename DT>
-void H2Matrix<DT>::matVecLeafHorizontalPass(DT* X_io, const long long nodes) {
+void H2Matrix<DT>::matVecLeafHorizontalPass(DT* X_io) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
@@ -491,7 +529,7 @@ void H2Matrix<DT>::matVecLeafHorizontalPass(DT* X_io, const long long nodes) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::factorize(const long long nodes) {
+void H2Matrix<DT>::factorize() {
   //long long ibegin = comm.oLocal();
   //long long nodes = comm.lenLocal();
   //long long xlen = comm.lenNeighbors();
@@ -573,7 +611,7 @@ void H2Matrix<DT>::factorize(const long long nodes) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::factorizeCopyNext(const H2Matrix<DT>& lowerA, const long long nodes) {
+void H2Matrix<DT>::factorizeCopyNext(const H2Matrix<DT>& lowerA) {
   //long long ibegin = lowerComm.oLocal();
   //long long nodes = lowerComm.lenLocal();
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
@@ -595,7 +633,7 @@ void H2Matrix<DT>::factorizeCopyNext(const H2Matrix<DT>& lowerA, const long long
 }
 
 template <typename DT>
-void H2Matrix<DT>::forwardSubstitute(const DT* X_in, const long long nodes) {
+void H2Matrix<DT>::forwardSubstitute(const DT* X_in) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 
@@ -643,7 +681,7 @@ void H2Matrix<DT>::forwardSubstitute(const DT* X_in, const long long nodes) {
 }
 
 template <typename DT>
-void H2Matrix<DT>::backwardSubstitute(DT* Y_out, const long long nodes) {
+void H2Matrix<DT>::backwardSubstitute(DT* Y_out) {
   typedef Eigen::Map<Eigen::Matrix<DT, Eigen::Dynamic, 1>> VectorMap_dt;
   typedef Eigen::Map<const Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic>> MatrixMap_dt;
 

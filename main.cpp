@@ -80,7 +80,8 @@ int main(int argc, char* argv[]) {
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
   initNcclComms(&nccl_comms, matA.allocedComm);
-  matA.init_gpu_handles(nccl_comms);
+  //TODO is this really necessary?
+  matA.init_gpu_handles();
   matA.allocSparseMV(handle, nccl_comms);
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
@@ -122,12 +123,10 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   H2MatrixSolver<DT> matM;
-  std::cout<<"init"<<std::endl;
   if (mode.compare("h2") == 0)
-    matM.construct_factorize(eval, 0., rank, leveled_rank, cell, theta, &body[0], levels, nccl_comms, handle);
+    matM.construct_factorize(eval, 0., rank, leveled_rank, cell, theta, &body[0], levels, handle);
   else if (mode.compare("hss") == 0)
-    matM.construct_factorize(eval, 0., rank, leveled_rank, cell, 0., &body[0], levels, nccl_comms, handle);
-  std::cout<<"init finished"<<std::endl;
+    matM.construct_factorize(eval, 0., rank, leveled_rank, cell, 0., &body[0], levels, handle);
 
   //H2MatrixSolver<DT_low> matM_low(matM);
   MPI_Barrier(MPI_COMM_WORLD);

@@ -12,27 +12,29 @@
 #include <thrust/iterator/constant_iterator.h>
 #include <thrust/inner_product.h>
 
+#include <iostream>
+
 /* explicit template instantiation */
 // complex double
-template void createMatrixDesc(deviceMatrixDesc_t<std::complex<double>>* desc, long long bdim, long long rank, deviceMatrixDesc_t<std::complex<double>> lower, const ColCommMPI& comm, const ncclComms nccl_comms); 
+template void createMatrixDesc(deviceMatrixDesc_t<std::complex<double>>* desc, long long bdim, long long rank, deviceMatrixDesc_t<std::complex<double>> lower, H2Matrix<std::complex<double>>& matrix); 
 template void destroyMatrixDesc(deviceMatrixDesc_t<std::complex<double>> desc);
 template void copyDataInMatrixDesc(deviceMatrixDesc_t<std::complex<double>> desc, const std::complex<double>* A, const std::complex<double>* U, cudaStream_t stream);
 template void copyDataOutMatrixDesc(deviceMatrixDesc_t<std::complex<double>> desc, std::complex<double>* A, std::complex<double>* V, cudaStream_t stream);
 template int check_info(deviceMatrixDesc_t<std::complex<double>> A, const long long);
 // complex float
-template void createMatrixDesc(deviceMatrixDesc_t<std::complex<float>>* desc, long long bdim, long long rank, deviceMatrixDesc_t<std::complex<float>> lower, const ColCommMPI& comm, const ncclComms nccl_comms); 
+template void createMatrixDesc(deviceMatrixDesc_t<std::complex<float>>* desc, long long bdim, long long rank, deviceMatrixDesc_t<std::complex<float>> lower,  H2Matrix<std::complex<float>>& matrix); 
 template void destroyMatrixDesc(deviceMatrixDesc_t<std::complex<float>> desc);
 template void copyDataInMatrixDesc(deviceMatrixDesc_t<std::complex<float>> desc, const std::complex<float>* A, const std::complex<float>* U, cudaStream_t stream);
 template void copyDataOutMatrixDesc(deviceMatrixDesc_t<std::complex<float>> desc, std::complex<float>* A, std::complex<float>* V, cudaStream_t stream);
 template int check_info(deviceMatrixDesc_t<std::complex<float>> A, const long long);
 // double
-template void createMatrixDesc(deviceMatrixDesc_t<double>* desc, long long bdim, long long rank, deviceMatrixDesc_t<double> lower, const ColCommMPI& comm, const ncclComms nccl_comms); 
+template void createMatrixDesc(deviceMatrixDesc_t<double>* desc, long long bdim, long long rank, deviceMatrixDesc_t<double> lower, H2Matrix<double>& matrix); 
 template void destroyMatrixDesc(deviceMatrixDesc_t<double> desc);
 template void copyDataInMatrixDesc(deviceMatrixDesc_t<double> desc, const double* A, const double* U, cudaStream_t stream);
 template void copyDataOutMatrixDesc(deviceMatrixDesc_t<double> desc, double* A, double* V, cudaStream_t stream);
 template int check_info(deviceMatrixDesc_t<double> A, const long long);
 // float
-template void createMatrixDesc(deviceMatrixDesc_t<float>* desc, long long bdim, long long rank, deviceMatrixDesc_t<float> lower, const ColCommMPI& comm, const ncclComms nccl_comms); 
+template void createMatrixDesc(deviceMatrixDesc_t<float>* desc, long long bdim, long long rank, deviceMatrixDesc_t<float> lower, H2Matrix<float>& matrix); 
 template void destroyMatrixDesc(deviceMatrixDesc_t<float> desc);
 template void copyDataInMatrixDesc(deviceMatrixDesc_t<float> desc, const float* A, const float* U, cudaStream_t stream);
 template void copyDataOutMatrixDesc(deviceMatrixDesc_t<float> desc, float* A, float* V, cudaStream_t stream);
@@ -78,19 +80,24 @@ void fill_one(deviceMatrixDesc_t<std::complex<float>>* desc) {
 }
 
 template <typename DT>
-void createMatrixDesc(deviceMatrixDesc_t<DT>* desc, long long bdim, long long rank, deviceMatrixDesc_t<DT> lower, const ColCommMPI& comm, const ncclComms nccl_comms) {
+void createMatrixDesc(deviceMatrixDesc_t<DT>* desc, long long bdim, long long rank, deviceMatrixDesc_t<DT> lower, H2Matrix<DT>& matrix) {
   typedef typename deviceMatrixDesc_t<DT>::CT CT;
   desc->bdim = bdim;
   desc->rank = rank;
-  desc->diag_offset = comm.oLocal();
-  desc->lower_offset = (comm.LowerX + lower.diag_offset) * lower.rank;
-  long long lenA = desc->lenA = comm.ARowOffsets.back();
-  long long M = desc->lenM = comm.lenLocal();
-  long long N = desc->lenN = comm.lenNeighbors();
+  //desc->diag_offset = comm.oLocal();
+  //desc->lower_offset = (comm.LowerX + lower.diag_offset) * lower.rank;
+  //long long lenA = desc->lenA = comm.ARowOffsets.back();
+  long long lenA = desc->lenA = matrix.ARows.back();
+  //long long M = desc->lenM = comm.lenLocal();
+  //long long N = desc->lenN = comm.lenNeighbors();
+  long long M = desc->lenM = matrix.nodes;
+  long long N = desc->lenN = matrix.nodes;
 
-  thrust::device_vector<long long> ARowOffset(comm.ARowOffsets.begin(), comm.ARowOffsets.end());
+  //thrust::device_vector<long long> ARowOffset(comm.ARowOffsets.begin(), comm.ARowOffsets.end());
+  thrust::device_vector<long long> ARowOffset(matrix.ARows.begin(), matrix.ARows.end());
   thrust::device_vector<long long> ARows(lenA, 0ll);
-  thrust::device_vector<long long> ACols(comm.AColumns.begin(), comm.AColumns.end());
+  //thrust::device_vector<long long> ACols(comm.AColumns.begin(), comm.AColumns.end());
+  thrust::device_vector<long long> ACols(matrix.ACols.begin(), matrix.ACols.end());
   thrust::device_vector<long long> ADistCols(lenA);
   thrust::device_vector<long long> AInd(lenA);
   
@@ -104,8 +111,10 @@ void createMatrixDesc(deviceMatrixDesc_t<DT>* desc, long long bdim, long long ra
   thrust::stable_partition(A_iter, A_iter + lenA, keysD(desc->diag_offset));
 
   desc->reducLen = 1ll + thrust::reduce(ADistCols.begin(), ADistCols.end(), 0ll, thrust::maximum<long long>());
-  long long lenLA = comm.LowerIndA.size();
-  const thrust::tuple<long long, long long, long long>* commLA = reinterpret_cast<const thrust::tuple<long long, long long, long long>*>(comm.LowerIndA.data());
+  //long long lenLA = comm.LowerIndA.size();
+  long long lenLA = matrix.LowerIndA.size();
+  //const thrust::tuple<long long, long long, long long>* commLA = reinterpret_cast<const thrust::tuple<long long, long long, long long>*>(comm.LowerIndA.data());
+  const thrust::tuple<long long, long long, long long>* commLA = reinterpret_cast<const thrust::tuple<long long, long long, long long>*>(matrix.LowerIndA.data());
   thrust::device_vector<thrust::tuple<long long, long long, long long>> LInd(commLA, commLA + lenLA);
 
   cudaMalloc(reinterpret_cast<void**>(&desc->A_ss), lenA * sizeof(CT*));
@@ -179,7 +188,7 @@ void createMatrixDesc(deviceMatrixDesc_t<DT>* desc, long long bdim, long long ra
   fill_one(desc); 
   //thrust::fill(thrust::device_ptr<CT>(desc->ONEdata), thrust::device_ptr<CT>(&(desc->ONEdata)[desc->reducLen]), make_cuDoubleComplex(1., 0.));
 
-  desc->Neighbor = reinterpret_cast<long long*>(std::malloc(comm.BoxOffsets.size() * sizeof(long long)));
+  /*desc->Neighbor = reinterpret_cast<long long*>(std::malloc(comm.BoxOffsets.size() * sizeof(long long)));
   std::copy(comm.BoxOffsets.begin(), comm.BoxOffsets.end(), desc->Neighbor);
 
   desc->LenComms = comm.NeighborComm.size();
@@ -194,7 +203,7 @@ void createMatrixDesc(deviceMatrixDesc_t<DT>* desc, long long bdim, long long ra
   }
 
   desc->DupComm = findNcclComm(comm.DupComm, nccl_comms);
-  desc->MergeComm = findNcclComm(comm.MergeComm, nccl_comms);
+  desc->MergeComm = findNcclComm(comm.MergeComm, nccl_comms);*/
 }
 
 template <typename DT>

@@ -63,9 +63,9 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
   wsa_time = MPI_Wtime() - wsa_time;
   double const_time = MPI_Wtime();
   bool fix_rank = (epi == 0.);
-  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels].lenLocal(), A[levels], comm[levels].lenLocal());
+  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels].lenLocal(), A[levels], comm[levels].lenLocal(), &tree[0]);
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l].lenLocal(), A[l + 1], comm[l + 1].lenLocal());
+    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l].lenLocal(), A[l + 1], comm[l + 1].lenLocal(), &tree[0]);
 
   const_time = MPI_Wtime() - const_time;
   double finish_time = MPI_Wtime();
@@ -81,7 +81,7 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, l
 }
 
 template <typename DT>
-void H2MatrixSolver<DT>::construct_factorize(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, ncclComms& nccl_comms, deviceHandle_t& handle, MPI_Comm world) {
+void H2MatrixSolver<DT>::construct_factorize(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, deviceHandle_t& handle) {
   this->levels = levels;
   A = std::vector<H2Matrix<DT>>(levels+1);
   local_bodies = std::pair<long long, long long>(0, 0);
@@ -90,39 +90,41 @@ void H2MatrixSolver<DT>::construct_factorize(const MatrixAccessor<DT>& eval, dou
   
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
-  int mpi_size = 1;
-  MPI_Comm_size(world, &mpi_size);
+  //int mpi_size = 1;
+  //MPI_Comm_size(world, &mpi_size);
 
-  std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
+  //std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
   std::vector<std::pair<long long, long long>> tree(cells.size());
   std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
-  for (long long i = 0; i <= levels; i++)
-    comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
-  initNcclComms(&nccl_comms, allocedComm);
+  //for (long long i = 0; i <= levels; i++)
+  //  comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
+  //initNcclComms(&nccl_comms, allocedComm);
 
   init_time = MPI_Wtime() - init_time;
   double wsa_time = MPI_Wtime();
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
   std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
-  for (long long l = 1; l <= levels; l++)
-    wsa[l].construct(eval, epi, rank_func(l), comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
+  for (long long l = 1; l <= levels; l++){
+    wsa[l].construct(eval, epi, rank_func(l), (1<<l) - 1, 1<<l, cells.data(), Far, bodies, wsa[l - 1]);
+  }
 
   wsa_time = MPI_Wtime() - wsa_time;
   double const_time = MPI_Wtime();
   bool fix_rank = (epi == 0.);
-  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels].lenLocal(), A[levels], comm[levels].lenLocal());
+  long long llen = 1<<levels;
+  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], llen, A[levels], llen, &tree[0]);
   desc.resize(levels + 1);
   long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
   long long lrank = *std::max_element(A[levels].DimsLr.begin(), A[levels].DimsLr.end());
-  createMatrixDesc(&desc[levels], bdim, lrank, deviceMatrixDesc_t<DT>(), comm[levels], nccl_comms);
+  createMatrixDesc(&desc[levels], bdim, lrank, deviceMatrixDesc_t<DT>(), A[levels]);
   copyDataInMatrixDesc(desc[levels], A[levels].A[0], A[levels].Q[0], handle->compute_stream);
   compute_factorize(handle, desc[levels], deviceMatrixDesc_t<DT>());
   for (long long l = levels - 1; l >= 0; l--) {
-    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l].lenLocal(), A[l + 1], comm[l + 1].lenLocal());
+    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], 1<<l, A[l + 1], 1<<l<<1, &tree[0]);
     bdim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
     lrank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
-    createMatrixDesc(&desc[l], bdim, lrank, desc[l + 1], comm[l], nccl_comms);
+    createMatrixDesc(&desc[l], bdim, lrank, desc[l + 1], A[l]);
     copyDataInMatrixDesc(desc[l], A[l].A[0], A[l].Q[0], handle->memory_stream);
     cudaDeviceSynchronize();
     compute_factorize(handle, desc[l], desc[l + 1]);
@@ -130,10 +132,12 @@ void H2MatrixSolver<DT>::construct_factorize(const MatrixAccessor<DT>& eval, dou
 
   const_time = MPI_Wtime() - const_time;
   double finish_time = MPI_Wtime();
-  long long llen = comm[levels].lenLocal();
-  long long gbegin = comm[levels].oGlobal();
+  //long long llen = comm[levels].lenLocal();
+  //long long gbegin = comm[levels].oGlobal();
+  long long gbegin = llen - 1;
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
-  long long lenX = bdim * comm[levels].lenLocal();
+  //long long lenX = bdim * comm[levels].lenLocal();
+  long long lenX = bdim * llen;
   cudaMalloc(reinterpret_cast<void**>(&X_dev), lenX * sizeof(DT));
   finish_time = MPI_Wtime() - finish_time;
 
@@ -204,16 +208,16 @@ H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
 }
 
 template <typename DT>
-void H2MatrixSolver<DT>::init_gpu_handles(const ncclComms nccl_comms) {
+void H2MatrixSolver<DT>::init_gpu_handles() {
   desc.resize(levels + 1);
   long long bdim = *std::max_element(A[levels].Dims.begin(), A[levels].Dims.end());
   long long rank = *std::max_element(A[levels].DimsLr.begin(), A[levels].DimsLr.end());
-  createMatrixDesc(&desc[levels], bdim, rank, deviceMatrixDesc_t<DT>(), comm[levels], nccl_comms);
+  createMatrixDesc(&desc[levels], bdim, rank, deviceMatrixDesc_t<DT>(), A[levels]);
 
   for (long long l = levels - 1; l >= 0; l--) {
     long long bdim = *std::max_element(A[l].Dims.begin(), A[l].Dims.end());
     long long rank = *std::max_element(A[l].DimsLr.begin(), A[l].DimsLr.end());
-    createMatrixDesc(&desc[l], bdim, rank, desc[l + 1], comm[l], nccl_comms);
+    createMatrixDesc(&desc[l], bdim, rank, desc[l + 1], A[l]);
   }
 
   long long lenX = bdim * comm[levels].lenLocal();
@@ -244,22 +248,22 @@ void H2MatrixSolver<DT>::matVecMul(DT X[]) {
   if (levels < 0)
     return;
 
-  A[levels].matVecUpwardPass(X, comm[levels].lenLocal());
+  A[levels].matVecUpwardPass(X);
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].matVecUpwardPass(A[l + 1].Z[0], comm[l].lenLocal());
+    A[l].matVecUpwardPass(A[l + 1].Z[0]);
 
   for (long long l = 0; l < levels; l++)
-    A[l].matVecHorizontalandDownwardPass(A[l + 1].W[0], comm[l].lenLocal());
+    A[l].matVecHorizontalandDownwardPass(A[l + 1].W[0]);
 
-  A[levels].matVecLeafHorizontalPass(X, comm[levels].lenLocal());
+  A[levels].matVecLeafHorizontalPass(X);
 }
 
 template <typename DT>
 void H2MatrixSolver<DT>::factorizeM() {
   for (long long l = levels; l >= 0; l--) {
-    A[l].factorize(comm[l].lenLocal());
+    A[l].factorize();
     if (0 < l)
-      A[l - 1].factorizeCopyNext(A[l], comm[l].lenLocal());
+      A[l - 1].factorizeCopyNext(A[l]);
   }
 }
 
@@ -308,13 +312,13 @@ void H2MatrixSolver<DT>::solvePrecondition(DT X[]) {
   if (levels < 0)
     return;
 
-  A[levels].forwardSubstitute(X, comm[levels].lenLocal());
+  A[levels].forwardSubstitute(X);
   for (long long l = levels - 1; l >= 0; l--)
-    A[l].forwardSubstitute(A[l + 1].Z[0], comm[l].lenLocal());
+    A[l].forwardSubstitute(A[l + 1].Z[0]);
 
   for (long long l = 0; l < levels; l++)
-    A[l].backwardSubstitute(A[l + 1].W[0], comm[l].lenLocal());
-  A[levels].backwardSubstitute(X, comm[levels].lenLocal());
+    A[l].backwardSubstitute(A[l + 1].W[0]);
+  A[levels].backwardSubstitute(X);
 }
 
 template <typename DT>

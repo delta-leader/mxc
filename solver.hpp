@@ -30,12 +30,12 @@ public:
   
   H2MatrixSolver();
   H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
-  void construct_factorize(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, ncclComms& nccl_comms, deviceHandle_t& handle, MPI_Comm world = MPI_COMM_WORLD);
+  void construct_factorize(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, deviceHandle_t& handle);
   H2MatrixSolver<DT>& operator=(const H2MatrixSolver<DT>& solver);
   H2MatrixSolver(const H2MatrixSolver<DT>& solver);
   template <typename OT>
   H2MatrixSolver(const H2MatrixSolver<OT>& solver);
-  void init_gpu_handles(const ncclComms nccl_comms);
+  void init_gpu_handles();
   void move_data_gpu();
 
   void allocSparseMV(deviceHandle_t handle, const ncclComms nccl_comms);

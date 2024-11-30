@@ -37,6 +37,7 @@ private:
 
 public:
   template <typename OT> friend class H2Matrix;
+  long long nodes;
   long long lenX;
   long long LowerZ;
 
@@ -55,21 +56,24 @@ public:
   MatrixDataContainer<DT> Y;
   MatrixDataContainer<DT> Z;
   MatrixDataContainer<DT> W;
+
+  std::vector<std::tuple<long long, long long, long long>> LowerIndA;
+  std::vector<std::tuple<long long, long long, long long>> LowerIndC;
   
   H2Matrix() = default;
   H2Matrix(const H2Matrix<DT>& h2matrix);
   template <typename OT>
   H2Matrix(const H2Matrix<OT>& h2matrix);
   
-  void construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const long long nodes, H2Matrix<DT>& lowerA, const long long lowerNodes);
+  void construct(const MatrixAccessor<DT>& eval, double epi, const Cell cells[], const CSR& Near, const CSR& Far, const double bodies[], const WellSeparatedApproximation<DT>& wsa, const long long nodes, H2Matrix<DT>& lowerA, const long long lowerNodes, const std::pair<long long, long long> Tree[]);
 
-  void matVecUpwardPass(const DT* X_in, const long long nodes);
-  void matVecHorizontalandDownwardPass(DT* Y_out, const long long nodes);
-  void matVecLeafHorizontalPass(DT* X_io, const long long nodes);
+  void matVecUpwardPass(const DT* X_in);
+  void matVecHorizontalandDownwardPass(DT* Y_out);
+  void matVecLeafHorizontalPass(DT* X_io);
 
-  void factorize(const long long nodes);
-  void factorizeCopyNext(const H2Matrix& lowerA, const long long nodes);
-  void forwardSubstitute(const DT* X_in, const long long nodes);
-  void backwardSubstitute(DT* Y_out, const long long nodes);
+  void factorize();
+  void factorizeCopyNext(const H2Matrix& lowerA);
+  void forwardSubstitute(const DT* X_in);
+  void backwardSubstitute(DT* Y_out);
 };
 
