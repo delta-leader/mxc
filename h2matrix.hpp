@@ -28,9 +28,6 @@ private:
   std::vector<long long> UpperStride;
   MatrixDataContainer<double> S;
 
-  std::vector<long long> CRows;
-  std::vector<long long> CCols;
-
   std::vector<long long> NA;
   std::vector<long long> NbXoffsets;
   std::vector<long long> NbZoffsets;
@@ -46,6 +43,8 @@ public:
 
   std::vector<long long> ARows;
   std::vector<long long> ACols;
+  std::vector<long long> CRows;
+  std::vector<long long> CCols;
   MatrixDataContainer<DT> Q;
   MatrixDataContainer<DT> R;
   MatrixDataContainer<DT> A;

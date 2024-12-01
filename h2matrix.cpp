@@ -146,16 +146,16 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
 
 template <typename DT>
 H2Matrix<DT>::H2Matrix(const H2Matrix<DT>& h2matrix) : UpperStride(h2matrix.UpperStride), S(h2matrix.S),
-  CRows(h2matrix.CRows), CCols(h2matrix.CCols), NA(h2matrix.NA), NbXoffsets(h2matrix.NbXoffsets), NbZoffsets(h2matrix.NbZoffsets),
+  NA(h2matrix.NA), NbXoffsets(h2matrix.NbXoffsets), NbZoffsets(h2matrix.NbZoffsets), nodes(h2matrix.nodes),
   lenX(h2matrix.lenX), LowerZ(h2matrix.LowerZ), Dims(h2matrix.Dims), DimsLr(h2matrix.DimsLr), ARows(h2matrix.ARows), ACols(h2matrix.ACols),
-  Q(h2matrix.Q), R(h2matrix.R), A(h2matrix.A), C(h2matrix.C), U(h2matrix.U),
+  CRows(h2matrix.CRows), CCols(h2matrix.CCols), Q(h2matrix.Q), R(h2matrix.R), A(h2matrix.A), C(h2matrix.C), U(h2matrix.U),
   X(h2matrix.X), Y(h2matrix.Y), Z(h2matrix.Z), W(h2matrix.W) {}
 
 template <typename DT> template <typename OT>
 H2Matrix<DT>::H2Matrix(const H2Matrix<OT>& h2matrix) : UpperStride(h2matrix.UpperStride), S(h2matrix.S),
-  CRows(h2matrix.CRows), CCols(h2matrix.CCols), NA(h2matrix.NA), NbXoffsets(h2matrix.NbXoffsets), NbZoffsets(h2matrix.NbZoffsets),
+  NA(h2matrix.NA), NbXoffsets(h2matrix.NbXoffsets), NbZoffsets(h2matrix.NbZoffsets), nodes(h2matrix.nodes),
   lenX(h2matrix.lenX), LowerZ(h2matrix.LowerZ), Dims(h2matrix.Dims), DimsLr(h2matrix.DimsLr), ARows(h2matrix.ARows), ACols(h2matrix.ACols),
-  Q(h2matrix.Q), R(h2matrix.R), A(h2matrix.A), C(h2matrix.C), U(h2matrix.U),
+  CRows(h2matrix.CRows), CCols(h2matrix.CCols), Q(h2matrix.Q), R(h2matrix.R), A(h2matrix.A), C(h2matrix.C), U(h2matrix.U),
   X(h2matrix.X), Y(h2matrix.Y), Z(h2matrix.Z), W(h2matrix.W) {}
 
 template <typename DT>

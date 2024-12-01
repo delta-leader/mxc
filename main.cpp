@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
   deviceHandle_t handle;
-  ncclComms nccl_comms = nullptr;
+  //ncclComms nccl_comms = nullptr;
   cudaSetDevice();
   initGpuEnvs(&handle);
 
@@ -79,10 +79,10 @@ int main(int argc, char* argv[]) {
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
-  initNcclComms(&nccl_comms, matA.allocedComm);
+  //initNcclComms(&nccl_comms, matA.allocedComm);
   //TODO is this really necessary?
-  matA.init_gpu_handles();
-  matA.allocSparseMV(handle, nccl_comms);
+  //matA.init_gpu_handles();
+  matA.allocSparseMV(handle);
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   MyVector<DT> X1(lenX, DT(0., 0.));
@@ -196,14 +196,14 @@ int main(int argc, char* argv[]) {
         matA.resid[matA.iters], matA.iters, gmres_time, matA.resid.data());
   }
 
-  matA.free_all_comms();
-  matM.free_all_comms();
+  //matA.free_all_comms();
+  //matM.free_all_comms();
   MPI_Finalize();
 
   matA.freeSparseMV();
-  matA.free_gpu_handles();
+  //matA.free_gpu_handles();
   matM.free_gpu_handles();
   finalizeGpuEnvs(handle);
-  finalizeNcclComms(nccl_comms);
+  //finalizeNcclComms(nccl_comms);
   return 0;
 }

@@ -14,8 +14,8 @@ public:
 
   long long levels;
   std::vector<H2Matrix<DT>> A;
-  std::vector<ColCommMPI> comm;
-  std::vector<MPI_Comm> allocedComm;
+  //std::vector<ColCommMPI> comm;
+  //std::vector<MPI_Comm> allocedComm;
 
   std::vector<CsrMatVecDesc_t<DT>> A_mv;
 
@@ -29,7 +29,7 @@ public:
   long long iters;
   
   H2MatrixSolver();
-  H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels);
   void construct_factorize(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, deviceHandle_t& handle);
   H2MatrixSolver<DT>& operator=(const H2MatrixSolver<DT>& solver);
   H2MatrixSolver(const H2MatrixSolver<DT>& solver);
@@ -38,7 +38,7 @@ public:
   void init_gpu_handles();
   void move_data_gpu();
 
-  void allocSparseMV(deviceHandle_t handle, const ncclComms nccl_comms);
+  void allocSparseMV(deviceHandle_t handle);
   void matVecMulSp(deviceHandle_t handle, DT X[]);
 
   void matVecMul(DT X[]);

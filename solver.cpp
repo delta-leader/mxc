@@ -32,45 +32,54 @@ template H2MatrixSolver<std::complex<double>>::H2MatrixSolver(const H2MatrixSolv
 template H2MatrixSolver<double>::H2MatrixSolver(const H2MatrixSolver<float>&);
 
 template <typename DT>
-H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
+//H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), comm(), allocedComm(), local_bodies(0, 0) {
+H2MatrixSolver<DT>::H2MatrixSolver() : levels(-1), A(), local_bodies(0, 0) {
 }
 
 template <typename DT>
-H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world) : 
+H2MatrixSolver<DT>::H2MatrixSolver(const MatrixAccessor<DT>& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels) : 
   levels(levels), A(levels + 1), local_bodies(0, 0) {
 
   double init_time = MPI_Wtime();
   
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
-  int mpi_size = 1;
-  MPI_Comm_size(world, &mpi_size);
+  //int mpi_size = 1;
+  //MPI_Comm_size(world, &mpi_size);
 
-  std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
+  //std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
   std::vector<std::pair<long long, long long>> tree(cells.size());
   std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
-  for (long long i = 0; i <= levels; i++)
-    comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
+  //for (long long i = 0; i <= levels; i++)
+  //  comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
 
   init_time = MPI_Wtime() - init_time;
   double wsa_time = MPI_Wtime();
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
   std::vector<WellSeparatedApproximation<DT>> wsa(levels + 1);
-  for (long long l = 1; l <= levels; l++)
-    wsa[l].construct(eval, epi, rank_func(l), comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), Far, bodies, wsa[l - 1]);
+  long long llen;
+  for (long long l = 1; l <= levels; l++){
+    llen = 1 << l;
+    wsa[l].construct(eval, epi, rank_func(l), llen -1, llen, cells.data(), Far, bodies, wsa[l - 1]);
+  }
 
+  llen = 1 << levels;
   wsa_time = MPI_Wtime() - wsa_time;
   double const_time = MPI_Wtime();
   bool fix_rank = (epi == 0.);
-  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], comm[levels].lenLocal(), A[levels], comm[levels].lenLocal(), &tree[0]);
-  for (long long l = levels - 1; l >= 0; l--)
-    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], comm[l].lenLocal(), A[l + 1], comm[l + 1].lenLocal(), &tree[0]);
+  A[levels].construct(eval, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, Far, bodies, wsa[levels], llen, A[levels], llen, &tree[0]);
+  for (long long l = levels - 1; l >= 0; l--) {
+    llen = 1 << l;
+    A[l].construct(eval, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, Far, bodies, wsa[l], llen, A[l + 1], llen << 1, &tree[0]);
+  }
 
   const_time = MPI_Wtime() - const_time;
   double finish_time = MPI_Wtime();
-  long long llen = comm[levels].lenLocal();
-  long long gbegin = comm[levels].oGlobal();
+  //long long llen = comm[levels].lenLocal();
+  //long long gbegin = comm[levels].oGlobal();
+  llen = 1 << levels;
+  long long gbegin = llen - 1;
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
   finish_time = MPI_Wtime() - finish_time;
 
@@ -152,18 +161,18 @@ void H2MatrixSolver<DT>::construct_factorize(const MatrixAccessor<DT>& eval, dou
 
 template <typename DT>
 H2MatrixSolver<DT>& H2MatrixSolver<DT>::operator=(const H2MatrixSolver<DT>& solver) {
-  free_all_comms();
+  //free_all_comms();
   A.clear();
   levels = solver.levels;
   local_bodies = solver.local_bodies;
-  for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
-    MPI_Comm mpi_comm = MPI_COMM_NULL;
-    MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
-    allocedComm.emplace_back(mpi_comm);
-  }
-  for (size_t i = 0; i < solver.comm.size(); ++i) {
-    comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
-  }
+  //for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
+  //  MPI_Comm mpi_comm = MPI_COMM_NULL;
+  //  MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
+  //  allocedComm.emplace_back(mpi_comm);
+  //}
+  //for (size_t i = 0; i < solver.comm.size(); ++i) {
+  //  comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
+  //}
   A.reserve(solver.A.size());
   for (size_t i = 0; i < solver.A.size(); ++i) {
     A.emplace_back(H2Matrix<DT>(solver.A[i]));
@@ -176,14 +185,14 @@ H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<DT>& solver) :
   levels(solver.levels), local_bodies(solver.local_bodies) {
   // A_mv, desc and X_dev can remain empty as they are allocated from the GPU functions
   // and we don't need to copy resid or iters since we only copy the factorization matrix
-  for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
-    MPI_Comm mpi_comm = MPI_COMM_NULL;
-    MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
-    allocedComm.emplace_back(mpi_comm);
-  }
-  for (size_t i = 0; i < solver.comm.size(); ++i) {
-    comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
-  }
+  //for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
+  //  MPI_Comm mpi_comm = MPI_COMM_NULL;
+  //  MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
+  //  allocedComm.emplace_back(mpi_comm);
+  //}
+  //for (size_t i = 0; i < solver.comm.size(); ++i) {
+  //  comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
+  //}
   A.reserve(solver.A.size());
   for (size_t i = 0; i < solver.A.size(); ++i) {
     A.emplace_back(H2Matrix<DT>(solver.A[i]));
@@ -193,14 +202,14 @@ H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<DT>& solver) :
 template <typename DT> template <typename OT>
 H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver<OT>& solver) :
   levels(solver.levels), local_bodies(solver.local_bodies) {
-  for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
-    MPI_Comm mpi_comm = MPI_COMM_NULL;
-    MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
-    allocedComm.emplace_back(mpi_comm);
-  }
-  for (size_t i = 0; i < solver.comm.size(); ++i) {
-    comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
-  }
+  //for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
+  //  MPI_Comm mpi_comm = MPI_COMM_NULL;
+  //  MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
+  //  allocedComm.emplace_back(mpi_comm);
+  //}
+  //for (size_t i = 0; i < solver.comm.size(); ++i) {
+  //  comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
+  //}
   A.reserve(solver.A.size());
   for (size_t i = 0; i < solver.A.size(); ++i) {
     A.emplace_back(H2Matrix<DT>(solver.A[i]));
@@ -220,15 +229,16 @@ void H2MatrixSolver<DT>::init_gpu_handles() {
     createMatrixDesc(&desc[l], bdim, rank, desc[l + 1], A[l]);
   }
 
-  long long lenX = bdim * comm[levels].lenLocal();
+  //long long lenX = bdim * comm[levels].lenLocal();
+  long long lenX = bdim * A[levels].nodes;
   cudaMalloc(reinterpret_cast<void**>(&X_dev), lenX * sizeof(DT));
 }
 
 template <typename DT>
-void H2MatrixSolver<DT>::allocSparseMV(deviceHandle_t handle, const ncclComms nccl_comms) {
+void H2MatrixSolver<DT>::allocSparseMV(deviceHandle_t handle) {
   A_mv.resize(levels + 1);
   for (long long l = 0; l <= levels; l++) {
-    createSpMatrixDesc(handle, &A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], comm[l], nccl_comms);
+    createSpMatrixDesc(handle, &A_mv[l], l == levels, A[l].LowerZ, A[l].Dims.data(), A[l].DimsLr.data(), A[l].U[0], A[l].C[0], A[l].A[0], A[l]);
   }
 }
 
@@ -283,7 +293,7 @@ void H2MatrixSolver<DT>::factorizeDeviceM(deviceHandle_t handle) {
   cudaDeviceSynchronize();
 
   for (long long l = levels; l >= 0; l--)
-    if (check_info(desc[l], comm[l].lenLocal()))
+    if (check_info(desc[l], A[l].nodes))
       printf("singularity detected at level %lld.\n", l);
 }
 
@@ -303,7 +313,7 @@ void H2MatrixSolver<DT>::factorizeDeviceM(deviceHandle_t handle, const cublasCom
   cudaDeviceSynchronize();
 
   for (long long l = levels; l >= 0; l--)
-    if (check_info(desc[l], comm[l].lenLocal()))
+    if (check_info(desc[l], A[l].nodes))
       printf("singularity detected at level %lld of %lld.\n", l, levels);
 }
 
@@ -479,9 +489,9 @@ void H2MatrixSolver<DT>::solveGMRESDevice(deviceHandle_t handle, double tol, H2M
 
 template <typename DT>
 void H2MatrixSolver<DT>::free_all_comms() {
-  for (MPI_Comm& c : allocedComm)
-    MPI_Comm_free(&c);
-  allocedComm.clear();
+  //for (MPI_Comm& c : allocedComm)
+  //  MPI_Comm_free(&c);
+  //allocedComm.clear();
 }
 
 template <typename DT>

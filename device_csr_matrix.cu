@@ -8,12 +8,13 @@
 #include <thrust/sort.h>
 #include <thrust/iterator/constant_iterator.h>
 
+
 /* explicit template instantiation */
 // complex double
 template void createDeviceCsr(CsrContainer_t<std::complex<double>>* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<double> data[]);
-template void createDeviceVec(VecDnContainer_t<std::complex<double>>* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template void createDeviceVec(VecDnContainer_t<std::complex<double>>* X, const long long RowDims[], const long long nodes);
 template void destroyDeviceVec(VecDnContainer_t<std::complex<double>> X);
-template void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<std::complex<double>>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<std::complex<double>>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<double> U[], const std::complex<double> C[], const std::complex<double> A[], const H2Matrix<std::complex<double>>& matrix);
 template void destroySpMatrixDesc(CsrMatVecDesc_t<std::complex<double>> desc);
 template void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t<std::complex<double>> desc, const std::complex<double>* X_in);
 template void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t<std::complex<double>> desc, std::complex<double>* Y_out);
@@ -21,9 +22,9 @@ template void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t<st
 template void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<double>> desc[], std::complex<double>* devX);
 // complex float
 template void createDeviceCsr(CsrContainer_t<std::complex<float>>* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const std::complex<float> data[]);
-template void createDeviceVec(VecDnContainer_t<std::complex<float>>* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template void createDeviceVec(VecDnContainer_t<std::complex<float>>* X, const long long RowDims[], const long long nodes);
 template void destroyDeviceVec(VecDnContainer_t<std::complex<float>> X);
-template void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<std::complex<float>>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<float> U[], const std::complex<float> C[], const std::complex<float> A[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<std::complex<float>>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const std::complex<float> U[], const std::complex<float> C[], const std::complex<float> A[], const H2Matrix<std::complex<float>>& matrix);
 template void destroySpMatrixDesc(CsrMatVecDesc_t<std::complex<float>> desc);
 template void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t<std::complex<float>> desc, const std::complex<float>* X_in);
 template void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t<std::complex<float>> desc, std::complex<float>* Y_out);
@@ -31,9 +32,9 @@ template void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t<st
 template void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<std::complex<float>> desc[], std::complex<float>* devX);
 // double
 template void createDeviceCsr(CsrContainer_t<double>* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const double data[]);
-template void createDeviceVec(VecDnContainer_t<double>* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template void createDeviceVec(VecDnContainer_t<double>* X, const long long RowDims[], const long long nodes);
 template void destroyDeviceVec(VecDnContainer_t<double> X);
-template void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<double>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const double U[], const double C[], const double A[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<double>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const double U[], const double C[], const double A[], const H2Matrix<double>& matrix);
 template void destroySpMatrixDesc(CsrMatVecDesc_t<double> desc);
 template void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t<double> desc, const double* X_in);
 template void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t<double> desc, double* Y_out);
@@ -41,9 +42,9 @@ template void matVecLeafHorizontalPass(deviceHandle_t handle, CsrMatVecDesc_t<do
 template void matVecDeviceH2(deviceHandle_t handle, long long levels, CsrMatVecDesc_t<double> desc[], double* devX);
 // float
 template void createDeviceCsr(CsrContainer_t<float>* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const float data[]);
-template void createDeviceVec(VecDnContainer_t<float>* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template void createDeviceVec(VecDnContainer_t<float>* X, const long long RowDims[], const long long nodes);
 template void destroyDeviceVec(VecDnContainer_t<float> X);
-template void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<float>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const float U[], const float C[], const float A[], const ColCommMPI& comm, const ncclComms nccl_comms);
+template void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<float>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const float U[], const float C[], const float A[], const H2Matrix<float>& matrix);
 template void destroySpMatrixDesc(CsrMatVecDesc_t<float> desc);
 template void matVecUpwardPass(deviceHandle_t handle, CsrMatVecDesc_t<float> desc, const float* X_in);
 template void matVecHorizontalandDownwardPass(deviceHandle_t handle, CsrMatVecDesc_t<float> desc, float* Y_out);
@@ -186,20 +187,23 @@ void destroyDeviceCsr(CsrContainer_t<DT> A) {
 }
 
 template <typename DT>
-void createDeviceVec(VecDnContainer_t<DT>* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+void createDeviceVec(VecDnContainer_t<DT>* X, const long long RowDims[], const long long nodes) {
   *X = new struct VecDnContainer<DT>();
-  long long Mb = comm.lenNeighbors();
+  //long long Mb = comm.lenNeighbors();
+  long long Mb = nodes;
   std::vector<long long> DimsOffsets(Mb + 1);
   std::inclusive_scan(RowDims, &RowDims[Mb], DimsOffsets.begin() + 1);
   DimsOffsets[0] = 0;
 
   long long N = (*X)->N = DimsOffsets[Mb];
   if (0 < N) {
-    (*X)->Xbegin = DimsOffsets[comm.oLocal()];
-    (*X)->lenX = DimsOffsets[comm.oLocal() + comm.lenLocal()] - (*X)->Xbegin;
+    //(*X)->Xbegin = DimsOffsets[comm.oLocal()];
+    (*X)->Xbegin = DimsOffsets[0];
+    //(*X)->lenX = DimsOffsets[comm.oLocal() + comm.lenLocal()] - (*X)->Xbegin;
+    (*X)->lenX = DimsOffsets[nodes] - (*X)->Xbegin;
     cudaMalloc(reinterpret_cast<void**>(&((*X)->Vals)), sizeof(DT) * N);
 
-    (*X)->Neighbor = reinterpret_cast<long long*>(std::malloc(comm.BoxOffsets.size() * sizeof(long long)));
+    /*(*X)->Neighbor = reinterpret_cast<long long*>(std::malloc(comm.BoxOffsets.size() * sizeof(long long)));
     std::transform(comm.BoxOffsets.begin(), comm.BoxOffsets.end(), (*X)->Neighbor, [&](long long i) { return DimsOffsets[i]; });
 
     (*X)->LenComms = comm.NeighborComm.size();
@@ -213,14 +217,15 @@ void createDeviceVec(VecDnContainer_t<DT>* X, const long long RowDims[], const C
         [=](const std::pair<int, MPI_Comm>& comm) { return findNcclComm(comm.second, nccl_comms); });
     }
 
-    (*X)->DupComm = findNcclComm(comm.DupComm, nccl_comms);
+    (*X)->DupComm = findNcclComm(comm.DupComm, nccl_comms);*/
   }
 }
 
 template <typename DT>
 void destroyDeviceVec(VecDnContainer_t<DT> X) {
   if (X->N) {
-    std::free(X->Neighbor);
+    if (X->Neighbor)
+      std::free(X->Neighbor);
     cudaFree(X->Vals);
     if (X->LenComms) {
       std::free(X->NeighborRoots);
@@ -315,24 +320,28 @@ inline cusparseStatus_t spMV_bufferSize(cusparseHandle_t handle, cusparseOperati
 }
 
 template <typename DT>
-void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<DT>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const DT U[], const DT C[], const DT A[], const ColCommMPI& comm, const ncclComms nccl_comms) {
+void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<DT>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const DT U[], const DT C[], const DT A[], const H2Matrix<DT>& matrix) {
   *desc = new struct CsrMatVecDesc<DT>();
   (*desc)->lowerZ = lowerZ;
-  createDeviceVec(&((*desc)->X), Dims, comm, nccl_comms);
-  createDeviceVec(&((*desc)->Y), Dims, comm, nccl_comms);
-  createDeviceVec(&((*desc)->Z), Ranks, comm, nccl_comms);
-  createDeviceVec(&((*desc)->W), Ranks, comm, nccl_comms);
-
-  long long ibegin = comm.oLocal();
-  long long nodes = comm.lenLocal();
-  long long xlen = comm.lenNeighbors();
+  
+  //long long ibegin = comm.oLocal();
+  //long long nodes = comm.lenLocal();
+  //long long xlen = comm.lenNeighbors();
+  long long nodes = matrix.nodes;
+  long long xlen = nodes;
+  createDeviceVec(&((*desc)->X), Dims, nodes);
+  createDeviceVec(&((*desc)->Y), Dims, nodes);
+  createDeviceVec(&((*desc)->Z), Ranks, nodes);
+  createDeviceVec(&((*desc)->W), Ranks, nodes);
   std::vector<long long> seq(nodes + 1);
   std::iota(seq.begin(), seq.end(), 0ll);
-  createDeviceCsr(&((*desc)->U), nodes, nodes, &Dims[ibegin], &Ranks[ibegin], &seq[0], &seq[0], U);
-  createDeviceCsr(&((*desc)->C), nodes, xlen, &Ranks[ibegin], Ranks, comm.CRowOffsets.data(), comm.CColumns.data(), C);
-  if (is_leaf)
-    createDeviceCsr(&((*desc)->A), nodes, xlen, &Dims[ibegin], Dims, comm.ARowOffsets.data(), comm.AColumns.data(), A);
-  else
+  createDeviceCsr(&((*desc)->U), nodes, nodes, &Dims[0], &Ranks[0], &seq[0], &seq[0], U);
+  //createDeviceCsr(&((*desc)->C), nodes, xlen, &Ranks[0], Ranks, comm.CRowOffsets.data(), comm.CColumns.data(), C);
+  createDeviceCsr(&((*desc)->C), nodes, xlen, &Ranks[0], Ranks, matrix.CRows.data(), matrix.CCols.data(), C);
+  if (is_leaf) {
+    //createDeviceCsr(&((*desc)->A), nodes, xlen, &Dims[0], Dims, comm.ARowOffsets.data(), comm.AColumns.data(), A);
+    createDeviceCsr(&((*desc)->A), nodes, xlen, &Dims[0], Dims, matrix.ARows.data(), matrix.ACols.data(), A);
+  } else
     (*desc)->A = new struct CsrContainer<DT>();
   if ((*desc)->X->N) {
     createDnVec(&((*desc)->descX), (*desc)->X->N, (*desc)->X->Vals);

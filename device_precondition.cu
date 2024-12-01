@@ -12,7 +12,6 @@
 #include <thrust/iterator/constant_iterator.h>
 #include <thrust/inner_product.h>
 
-#include <iostream>
 
 /* explicit template instantiation */
 // complex double

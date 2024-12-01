@@ -2,6 +2,7 @@
 
 #include <gpu_handles.cuh>
 #include <complex>
+#include <h2matrix.hpp>
 
 class ColCommMPI;
 template <typename DT>
@@ -72,12 +73,12 @@ using CsrMatVecDesc_t = struct CsrMatVecDesc<DT>*;
 template <typename DT>
 void createDeviceCsr(CsrContainer_t<DT>* A, long long Mb, long long Nb, const long long RowDims[], const long long ColDims[], const long long ARows[], const long long ACols[], const DT data[]);
 template <typename DT>
-void createDeviceVec(VecDnContainer_t<DT>* X, const long long RowDims[], const ColCommMPI& comm, const ncclComms nccl_comms);
+void createDeviceVec(VecDnContainer_t<DT>* X, const long long RowDims[], const long long nodes);
 template <typename DT>
 void destroyDeviceVec(VecDnContainer_t<DT> X);
 
 template <typename DT>
-void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<DT>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const DT U[], const DT C[], const DT A[], const ColCommMPI& comm, const ncclComms nccl_comms);
+void createSpMatrixDesc(deviceHandle_t handle, CsrMatVecDesc_t<DT>* desc, bool is_leaf, long long lowerZ, const long long Dims[], const long long Ranks[], const DT U[], const DT C[], const DT A[], const H2Matrix<DT>& matrix);
 template <typename DT>
 void destroySpMatrixDesc(CsrMatVecDesc_t<DT> desc);
 
