@@ -5,13 +5,42 @@
 
 #include <Eigen/Dense>
 
+/*class Helmholtz3D : public MatrixAccessor {
+public:
+  double k;
+  double singularity;
+  Helmholtz3D(double wave_number, double s) : k(wave_number), singularity(1. / s) {}
+  std::complex<double> operator()(double d) const override {
+    if (d == 0.)
+      return std::complex<double>(singularity, 0.);
+    else
+      return std::exp(std::complex(0., -k * d)) / d;
+  }
+};
+
+void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]) {
+  const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
+  const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * m]);
+  const std::array<double, 3>* bj3 = reinterpret_cast<const std::array<double, 3>*>(bj);
+  const std::array<double, 3>* bj3_end = reinterpret_cast<const std::array<double, 3>*>(&bj[3 * n]);
+
+  std::for_each(bj3, bj3_end, [&](const std::array<double, 3>& j) -> void {
+    long long ix = std::distance(bj3, &j);
+    std::for_each(bi3, bi3_end, [&](const std::array<double, 3>& i) -> void {
+      long long iy = std::distance(bi3, &i);
+      double d = std::hypot(i[0] - j[0], i[1] - j[1], i[2] - j[2]);
+      Aij[iy + ix * m] = eval(d);
+    });
+  });
+}*/
+
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
-  deviceHandle_t handle;
+  /*deviceHandle_t handle;
   ncclComms nccl_comms = nullptr;
   cudaSetDevice();
-  initGpuEnvs(&handle);
+  initGpuEnvs(&handle);*/
 
   long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
@@ -51,6 +80,9 @@ int main(int argc, char* argv[]) {
   ncells = Nleaf + 1;
   levels = 1;*/
 
+  DenseZMat denseA(Nbody, Nbody);
+  gen_matrix(eval, Nbody, Nbody, &body[0], &body[0], denseA.A);
+
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
   H2MatrixSolver matA(eval, epi, rank, leveled_rank, cell, theta, &body[0], levels);
@@ -59,9 +91,9 @@ int main(int argc, char* argv[]) {
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
 
-  initNcclComms(&nccl_comms, matA.allocedComm);
+  /*initNcclComms(&nccl_comms, matA.allocedComm);
   matA.init_gpu_handles(nccl_comms);
-  matA.allocSparseMV(handle, nccl_comms);
+  matA.allocSparseMV(handle, nccl_comms);*/
 
   long long lenX = matA.local_bodies.second - matA.local_bodies.first;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
@@ -71,16 +103,16 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
-  //matA.matVecMul(&X1[0]);
-  matA.matVecMulSp(handle, &X1[0]);
+  matA.matVecMul(&X1[0]);
+  //matA.matVecMulSp(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
   matvec_comm_time = ColCommMPI::get_comm_time();
 
   double refmatvec_time = MPI_Wtime();
+  denseA.Aij_mulB(lenX, 1, Nbody, matA.local_bodies.first, 0, &Xbody[0], Nbody, &X2[0], lenX);
 
-  mat_vec_reference(eval, lenX, Nbody, &X2[0], &Xbody[0], &body[matA.local_bodies.first * 3], &body[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
@@ -115,14 +147,14 @@ int main(int argc, char* argv[]) {
   matM.matVecMul(&X1[0]);
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
-  initNcclComms(&nccl_comms, matM.allocedComm);
-  matM.init_gpu_handles(nccl_comms);
+  //initNcclComms(&nccl_comms, matM.allocedComm);
+  //matM.init_gpu_handles(nccl_comms);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
-  //matM.factorizeM();
-  matM.factorizeDeviceM(handle);
+  matM.factorizeM();
+  //matM.factorizeDeviceM(handle);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_factor_time = MPI_Wtime() - h2_factor_time;
@@ -132,8 +164,8 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  //matM.solvePrecondition(&X1[0]);
-  matM.solvePreconditionDevice(handle, &X1[0]);
+  matM.solvePrecondition(&X1[0]);
+  //matM.solvePreconditionDevice(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
@@ -151,8 +183,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
-  matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
+  matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
+  //matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
 
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
@@ -175,11 +207,11 @@ int main(int argc, char* argv[]) {
   matM.free_all_comms();
   MPI_Finalize();
 
-  matA.freeSparseMV();
+  /*matA.freeSparseMV();
   matA.free_gpu_handles();
   matM.free_gpu_handles();
   finalizeGpuEnvs(handle);
-  finalizeNcclComms(nccl_comms);
+  finalizeNcclComms(nccl_comms);*/
   return 0;
 }
 

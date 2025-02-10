@@ -5,8 +5,114 @@
 #include <numeric>
 #include <vector>
 #include <array>
+#include <random>
 
 #include <Eigen/Dense>
+#include <Eigen/SVD>
+
+DenseDMat::DenseDMat(long long M, long long N) : Accessor(M, N), A(nullptr) {
+  if (0 < M && 0 < N) {
+    A = (double*)malloc(M * N * sizeof(double));
+    std::fill(A, &A[M * N], 0.);
+  }
+}
+
+DenseDMat::~DenseDMat() {
+  if (A)
+    free(A);
+}
+
+void DenseDMat::Aij(long long m, long long n, long long i, long long j, double* A_out, long long stride) const {
+  Eigen::Stride<Eigen::Dynamic, 1> lda(stride, 1), ld;
+  Eigen::Map<Eigen::MatrixXd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> mat_out(A_out, m, n, ld);
+  mat_out = Eigen::Map<const Eigen::MatrixXd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(&A[i + j * M], m, n, lda);
+}
+
+void DenseDMat::Aij_mulB(long long mC, long long nC, long long k, long long iA, long long jA, const double* B_in, long long strideB, double* C_out, long long strideC) const {
+  Eigen::Stride<Eigen::Dynamic, 1> lda(M, 1), ldb(strideB, 1), ldc(strideC, 1);
+  Eigen::Map<Eigen::MatrixXd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matC(C_out, mC, nC, ldc);
+  Eigen::Map<const Eigen::MatrixXd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matB(B_in, k, nC, ldb);
+  matC.noalias() = Eigen::Map<const Eigen::MatrixXd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(&A[iA + jA * M], mC, k, lda) * matB;
+}
+
+DenseZMat::DenseZMat(long long M, long long N) : Accessor(M, N), A(nullptr) {
+  if (0 < M && 0 < N) {
+    A = (std::complex<double>*)malloc(M * N * sizeof(std::complex<double>));
+    std::fill(A, &A[M * N], 0.);
+  }
+}
+
+DenseZMat::~DenseZMat() {
+  if (A)
+    free(A);
+}
+
+void DenseZMat::Aij(long long m, long long n, long long i, long long j, std::complex<double>* A_out, long long stride) const {
+  Eigen::Stride<Eigen::Dynamic, 1> lda(stride, 1), ld;
+  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> mat_out(A_out, m, n, ld);
+  mat_out = Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(&A[i + j * M], m, n, lda);
+}
+
+void DenseZMat::Aij_mulB(long long mC, long long nC, long long k, long long iA, long long jA, const std::complex<double>* B_in, long long strideB, std::complex<double>* C_out, long long strideC) const {
+  Eigen::Stride<Eigen::Dynamic, 1> lda(M, 1), ldb(strideB, 1), ldc(strideC, 1);
+  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matC(C_out, mC, nC, ldc);
+  Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matB(B_in, k, nC, ldb);
+  matC.noalias() = Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(&A[iA + jA * M], mC, k, lda) * matB;
+}
+
+void Drsvd(long long m, long long n, long long k, long long p, long long niters, const double* A, long long lda, double* S, double* U, long long ldu, double* V, long long ldv) {
+  k = std::min(k, std::min(m, n));
+  p = std::min(k + p, std::min(m, n));
+  Eigen::MatrixXd R(n, p);
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::normal_distribution<double> norm_dist(0., 1.);
+  std::generate(R.reshaped().begin(), R.reshaped().end(), [&]() { return norm_dist(gen); });
+
+  Eigen::Stride<Eigen::Dynamic, 1> ldA(lda, 1), ldU(ldu, 1), ldV(ldv, 1);
+  Eigen::Map<const Eigen::MatrixXd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matA(A, m, n, ldA);
+  Eigen::MatrixXd Q = matA * R;
+  while (0 < --niters)
+    Q.noalias() = matA * (matA.adjoint() * Q);
+
+  Eigen::Map<Eigen::MatrixXd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matU(U, m, k, ldU);
+  Eigen::Map<Eigen::MatrixXd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matV(V, n, k, ldV);
+  Eigen::HouseholderQR<Eigen::MatrixXd> qr(Q);
+  Q = qr.householderQ() * Eigen::MatrixXd::Identity(m, p);
+
+  Eigen::Map<Eigen::VectorXd> vecS(S, k);
+  Eigen::BDCSVD<Eigen::MatrixXd> svd(matV, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  vecS = svd.singularValues().topRows(k);
+  matV = svd.matrixU().leftCols(k);
+  matU.noalias() = Q * svd.matrixV().leftCols(k).adjoint();
+}
+
+void Zrsvd(long long m, long long n, long long k, long long p, long long niters, const std::complex<double>* A, long long lda, double* S, std::complex<double>* U, long long ldu, std::complex<double>* V, long long ldv) {
+  k = std::min(k, std::min(m, n));
+  p = std::min(k + p, std::min(m, n));
+  Eigen::MatrixXcd R(n, p);
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::normal_distribution<double> norm_dist(0., 1.);
+  std::generate(R.reshaped().begin(), R.reshaped().end(), [&]() { return std::complex<double>(norm_dist(gen), norm_dist(gen)); });
+
+  Eigen::Stride<Eigen::Dynamic, 1> ldA(lda, 1), ldU(ldu, 1), ldV(ldv, 1);
+  Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matA(A, m, n, ldA);
+  Eigen::MatrixXcd Q = matA * R;
+  while (0 < --niters)
+    Q.noalias() = matA * (matA.adjoint() * Q);
+
+  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matU(U, m, k, ldU);
+  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matV(V, n, k, ldV);
+  Eigen::HouseholderQR<Eigen::MatrixXcd> qr(Q);
+  Q = qr.householderQ() * Eigen::MatrixXcd::Identity(m, p);
+
+  Eigen::Map<Eigen::VectorXd> vecS(S, k);
+  Eigen::BDCSVD<Eigen::MatrixXcd> svd(Q.adjoint() * matA, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  vecS = svd.singularValues().topRows(k);
+  matV = svd.matrixV().leftCols(k);
+  matU.noalias() = Q * svd.matrixU().leftCols(k);
+}
 
 void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]) {
   const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
@@ -23,85 +129,3 @@ void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const doub
     });
   });
 }
-
-long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], long long jpiv[], std::complex<double> u[], std::complex<double> v[]) {
-  Eigen::MatrixXcd U(M, K), V(K, N);
-  Eigen::VectorXcd Acol(M), Arow(N);
-  Eigen::VectorXi Ipiv(K), Jpiv(K);
-  long long x = 0, y = 0;
-
-  gen_matrix(eval, 1, N, bi, bj, Arow.data());
-  Arow.cwiseAbs().maxCoeff(&x);
-  gen_matrix(eval, M, 1, bi, &bj[x * 3], Acol.data());
-  Acol.cwiseAbs().maxCoeff(&y);
-  Acol *= 1. / Acol(y);
-  gen_matrix(eval, 1, N, &bi[y * 3], bj, Arow.data());
-  
-  U.leftCols(1) = Acol;
-  V.topRows(1) = Arow.transpose();
-  Ipiv(0) = y;
-  Jpiv(0) = x;
-
-  Arow(x) = std::complex<double>(0., 0.);
-  Arow.cwiseAbs().maxCoeff(&x);
-  double nrm_z = Arow.norm() * Acol.norm();
-  double nrm_k = nrm_z;
-
-  long long iters = 1;
-  while (iters < K && std::numeric_limits<double>::min() < nrm_z && epi * nrm_z <= nrm_k) {
-    gen_matrix(eval, M, 1, bi, &bj[x * 3], &Acol[0]);
-    Acol -= U.leftCols(iters) * V.block(0, x, iters, 1);
-    Acol(Ipiv.head(iters)).setZero();
-    Acol.cwiseAbs().maxCoeff(&y);
-    Acol *= 1. / Acol(y);
-
-    gen_matrix(eval, 1, N, &bi[y * 3], bj, Arow.data());
-    Arow -= (U.block(y, 0, 1, iters) * V.topRows(iters)).transpose();
-
-    U.middleCols(iters, 1) = Acol;
-    V.middleRows(iters, 1) = Arow.transpose();
-    Ipiv(iters) = y;
-    Jpiv(iters) = x;
-
-    Eigen::VectorXcd Unrm = U.leftCols(iters).adjoint() * Acol;
-    Eigen::VectorXcd Vnrm = V.topRows(iters).conjugate() * Arow;
-    std::complex<double> Z_k = Unrm.transpose() * Vnrm;
-    nrm_k = Arow.norm() * Acol.norm();
-    nrm_z = std::sqrt(nrm_z * nrm_z + 2 * std::abs(Z_k) + nrm_k * nrm_k);
-    iters++;
-
-    Arow(Jpiv.head(iters)).setZero();
-    Arow.cwiseAbs().maxCoeff(&x);
-  }
-
-  if (ipiv)
-    std::transform(Ipiv.data(), Ipiv.data() + K, ipiv, [](int p) { return (long long)p; });
-  if (jpiv)
-    std::transform(Jpiv.data(), Jpiv.data() + K, jpiv, [](int p) { return (long long)p; });
-  if (u)
-    Eigen::Map<Eigen::MatrixXcd>(u, M, K) = U;
-  if (v)
-    Eigen::Map<Eigen::MatrixXcd>(v, K, N) = V;
-
-  return iters;
-}
-
-void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]) {
-  constexpr long long size = 256;
-  Eigen::Map<const Eigen::VectorXcd> x(X, N);
-  Eigen::Map<Eigen::VectorXcd> b(B, M);
-  
-  for (long long i = 0; i < M; i += size) {
-    long long m = std::min(M - i, size);
-    const double* bi = &ibodies[i * 3];
-    Eigen::MatrixXcd A(m, size);
-
-    for (long long j = 0; j < N; j += size) {
-      const double* bj = &jbodies[j * 3];
-      long long n = std::min(N - j, size);
-      gen_matrix(eval, m, n, bi, bj, A.data());
-      b.segment(i, m) += A.leftCols(n) * x.segment(j, n);
-    }
-  }
-}
-

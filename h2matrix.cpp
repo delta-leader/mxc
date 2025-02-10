@@ -8,8 +8,6 @@
 #include <cmath>
 
 #include <Eigen/Dense>
-#include <Eigen/QR>
-#include <Eigen/LU>
 
 void WellSeparatedApproximation::construct(long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) {
   WellSeparatedApproximation::lbegin = lbegin;
@@ -51,7 +49,7 @@ long long compute_basis(const MatrixAccessor& eval, double epi, long long M, lon
     }
     else
       gen_matrix(eval, N, M, Fbodies, Xbodies, RX.data());
-    
+
     Eigen::ColPivHouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> rrqr(RX);
     rank = std::min(K, (long long)std::floor(epi));
     if (epi < 1.) {

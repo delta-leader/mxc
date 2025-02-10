@@ -3,6 +3,35 @@
 #include <complex>
 #include <cmath>
 
+template<class T> class Accessor {
+public:
+  long long M, N;
+  Accessor(long long M, long long N) : M(M), N(N) {};
+  virtual void Aij(long long m, long long n, long long i, long long j, T* A_out, long long stride) const = 0;
+  virtual void Aij_mulB(long long mC, long long nC, long long k, long long iA, long long jA, const T* B_in, long long strideB, T* C_out, long long strideC) const = 0;
+};
+
+class DenseDMat : public Accessor<double> {
+public:
+  double* A;
+  DenseDMat(long long M, long long N);
+  ~DenseDMat();
+  void Aij(long long m, long long n, long long i, long long j, double* A_out, long long stride) const override;
+  void Aij_mulB(long long mC, long long nC, long long k, long long iA, long long jA, const double* B_in, long long strideB, double* C_out, long long strideC) const override;
+};
+
+class DenseZMat : public Accessor<std::complex<double>> {
+public:
+  std::complex<double>* A;
+  DenseZMat(long long M, long long N);
+  ~DenseZMat();
+  void Aij(long long m, long long n, long long i, long long j, std::complex<double>* A_out, long long stride) const override;
+  void Aij_mulB(long long mC, long long nC, long long k, long long iA, long long jA, const std::complex<double>* B_in, long long strideB, std::complex<double>* C_out, long long strideC) const override;
+};
+
+void Drsvd(long long m, long long n, long long k, long long p, long long niters, const double* A, long long lda, double* S, double* U, long long ldu, double* V, long long ldv);
+void Zrsvd(long long m, long long n, long long k, long long p, long long niters, const std::complex<double>* A, long long lda, double* S, std::complex<double>* U, long long ldu, std::complex<double>* V, long long ldv);
+
 class MatrixAccessor {
 public:
   virtual std::complex<double> operator()(double d) const = 0;
@@ -59,6 +88,3 @@ public:
 
 void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]);
 
-long long adaptive_cross_approximation(double epi, const MatrixAccessor& eval, long long M, long long N, long long K, const double bi[], const double bj[], long long ipiv[], long long jpiv[], std::complex<double> u[], std::complex<double> v[]);
-
-void mat_vec_reference(const MatrixAccessor& eval, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const double ibodies[], const double jbodies[]);
