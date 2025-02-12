@@ -82,10 +82,10 @@ int main(int argc, char* argv[]) {
 
   DenseZMat denseA(Nbody, Nbody);
   gen_matrix(eval, Nbody, Nbody, &body[0], &body[0], denseA.A);
-
+  
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-  H2MatrixSolver matA(eval, epi, rank, leveled_rank, cell, theta, &body[0], levels);
+  H2MatrixSolver matA(denseA, eval, epi, rank, leveled_rank, cell, theta, &body[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
   matvec_comm_time = ColCommMPI::get_comm_time();
 
   double refmatvec_time = MPI_Wtime();
-  denseA.Aij_mulB(lenX, 1, Nbody, matA.local_bodies.first, 0, &Xbody[0], Nbody, &X2[0], lenX);
+  denseA.op_Aij_mulB('N', lenX, 1, Nbody, matA.local_bodies.first, 0, &Xbody[0], Nbody, &X2[0], lenX);
 
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
@@ -135,9 +135,9 @@ int main(int argc, char* argv[]) {
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   H2MatrixSolver matM;
   if (mode.compare("h2") == 0)
-    matM = H2MatrixSolver(eval, 0., rank, leveled_rank, cell, theta, &body[0], levels);
+    matM = H2MatrixSolver(denseA, eval, 0., rank, leveled_rank, cell, theta, &body[0], levels);
   else if (mode.compare("hss") == 0)
-    matM = H2MatrixSolver(eval, 0., rank, leveled_rank, cell, 0., &body[0], levels);
+    matM = H2MatrixSolver(denseA, eval, 0., rank, leveled_rank, cell, 0., &body[0], levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;

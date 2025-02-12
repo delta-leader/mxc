@@ -3,6 +3,7 @@
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
 #include <h2matrix.hpp>
+#include <h-matrix.hpp>
 #include <kernel.hpp>
 #include <device_factorize.cuh>
 #include <device_csr_matrix.cuh>
@@ -24,7 +25,7 @@ public:
   long long iters;
   
   H2MatrixSolver();
-  H2MatrixSolver(const MatrixAccessor& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver(const Accessor& eval_d, const MatrixAccessor& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
   void init_gpu_handles(const ncclComms nccl_comms);
   void move_data_gpu();
 

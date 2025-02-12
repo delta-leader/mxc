@@ -3,21 +3,10 @@
 #include <matrix_container.hpp>
 
 class MatrixAccessor;
+class WellSeparatedApproximation;
 class CSR;
 class Cell;
 class ColCommMPI;
-
-class WellSeparatedApproximation {
-private:
-  long long lbegin = 0;
-  long long lend = 0;
-  std::vector<std::vector<double>> M;
-
-public:
-  void construct(long long lbegin, long long lend, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper);
-  long long fbodies_size_at_i(long long i) const;
-  const double* fbodies_at_i(long long i) const;
-};
 
 class H2Matrix {
 private:
