@@ -38,8 +38,7 @@ void Zrsvd(double epi, long long m, long long n, long long* k, long long p, long
   long long rank = std::min(*k, std::min(m, n));
   p = std::min(rank + p, std::min(m, n));
   Eigen::MatrixXcd R(n, p), Q(m, p);
-  std::random_device rd;
-  std::mt19937 gen(rd());
+  std::mt19937_64 gen(__seed_rsvd);
   std::normal_distribution<double> norm_dist(0., 1.);
   std::generate(R.reshaped().begin(), R.reshaped().end(), [&]() { return std::complex<double>(norm_dist(gen), norm_dist(gen)); });
 
@@ -55,7 +54,7 @@ void Zrsvd(double epi, long long m, long long n, long long* k, long long p, long
   Q = qr.householderQ() * Eigen::MatrixXcd::Identity(m, p);
   A.op_Aij_mulB('C', n, p, m, iA, jA, Q.data(), m, R.data(), n);
 
-  Eigen::BDCSVD<Eigen::MatrixXcd> svd(R, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(R, Eigen::ComputeThinU | Eigen::ComputeThinV);
   if (0. < epi && epi < 1.)
   { svd.setThreshold(epi); *k = rank = std::min(rank, (long long)svd.rank()); }
 
