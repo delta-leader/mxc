@@ -16,10 +16,11 @@ private:
 
 public:
   LowRankMatrix(double epi, long long m, long long n, long long k, long long p, long long niters, const Accessor& eval, long long iA, long long jA);
+  void projectBasis(char opU, char opV, long long m, long long n, const std::complex<double>* Up, long long ldu, const std::complex<double>* Vp, long long ldv, std::complex<double>* Sp, long long lds) const;
   static void lowRankSumRow(double epi, long long m, long long n, long long* k, std::complex<double>* A, long long lda, long long lenL, const LowRankMatrix L[]);
 };
 
-class WellSeparatedApproximation {
+class Hmatrix {
 private:
   long long lbegin = 0;
   long long lend = 0;
@@ -30,7 +31,7 @@ private:
   std::vector<std::vector<double>> m;
 
 public:
-  void construct(double epi, const Accessor& eval, long long rank, long long p, long long niters, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper);
+  void construct(double epi, const Accessor& eval, long long rank, long long p, long long niters, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const Hmatrix& upper);
   long long fbodies_size_at_i(long long i) const;
   const double* fbodies_at_i(long long i) const;
 };

@@ -27,7 +27,7 @@ H2MatrixSolver::H2MatrixSolver(const Accessor& eval_d, const MatrixAccessor& eva
 
   bool fix_rank = (epi == 0.);
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
-  std::vector<WellSeparatedApproximation> wsa(levels + 1);
+  std::vector<Hmatrix> wsa(levels + 1);
   for (long long l = 1; l <= levels; l++)
     wsa[l].construct(epi, eval_d, rank_func(l), rank * 2, 2, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), fix_rank ? HSS_Far : Far, bodies, wsa[l - 1]);
 

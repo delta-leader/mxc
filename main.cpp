@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
 
-  std::mt19937 gen(999);
+  std::mt19937_64 gen;
   std::uniform_real_distribution uniform_dist(0., 1.);
   std::generate(Xbody.begin(), Xbody.end(), 
     [&]() { return std::complex<double>(uniform_dist(gen), 0.); });

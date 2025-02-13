@@ -3,7 +3,7 @@
 #include <matrix_container.hpp>
 
 class MatrixAccessor;
-class WellSeparatedApproximation;
+class Hmatrix;
 class CSR;
 class Cell;
 class ColCommMPI;
@@ -40,8 +40,10 @@ public:
   MatrixDataContainer<std::complex<double>> Z;
   MatrixDataContainer<std::complex<double>> W;
   int info;
+
+  void constructSharedHMatrix(double epi, long long rank, const Cell cells[], const CSR& Far, const Hmatrix& hA, const ColCommMPI& comm, const H2Matrix& Aupper);
   
-  void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
+  void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const Hmatrix& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
 
   void matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm);
   void matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm);

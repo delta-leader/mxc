@@ -69,7 +69,7 @@ inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vec
   return (k < RowIndex[i + 1]) ? k : -1;
 }
 
-void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const WellSeparatedApproximation& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm) {
+void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const Hmatrix& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm) {
   long long xlen = comm.lenNeighbors();
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();

@@ -16,6 +16,31 @@ LowRankMatrix::LowRankMatrix(double epi, long long m, long long n, long long k, 
   }
 }
 
+void LowRankMatrix::projectBasis(char opU, char opV, long long m, long long n, const std::complex<double>* Up, long long ldu, const std::complex<double>* Vp, long long ldv, std::complex<double>* Sp, long long lds) const {
+  Eigen::Stride<Eigen::Dynamic, 1> ldU(ldu, 1), ldV(ldv, 1), ldS(lds, 1);
+  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> Sout(Sp, m, n, ldS);
+
+  Eigen::MatrixXcd X = Eigen::Map<const Eigen::MatrixXcd>(U.data(), M, rank) * Eigen::Map<const Eigen::VectorXd>(S.data(), rank).asDiagonal();
+  Eigen::MatrixXcd Y(m, rank), Z(n, rank);
+  Eigen::Map<const Eigen::MatrixXcd> matV(V.data(), N, rank);
+
+  if (opU == 'T' || opU == 't')
+    Y.noalias() = X.adjoint() * Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(Up, m, M, ldU).transpose();
+  else if (opU == 'C' || opU == 'c')
+    Y.noalias() = X.adjoint() * Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(Up, m, M, ldU).adjoint();
+  else
+    Y.noalias() = X.adjoint() * Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(Up, M, m, ldU);
+
+  if (opV == 'T' || opV == 't')
+    Z.noalias() = Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(Vp, N, n, ldU).transpose() * matV;
+  else if (opV == 'C' || opV == 'c')
+    Z.noalias() = Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(Vp, N, n, ldU).adjoint() * matV;
+  else
+    Z.noalias() = Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(Vp, n, N, ldU) * matV;
+
+  Sout.noalias() = Y.adjoint() * Z.adjoint();
+}
+
 void LowRankMatrix::lowRankSumRow(double epi, long long m, long long n, long long* k, std::complex<double>* A, long long lda, long long lenL, const LowRankMatrix L[]) {
   Eigen::Stride<Eigen::Dynamic, 1> ldA(lda, 1);
   Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matA_in(A, m, n, ldA);
@@ -41,11 +66,11 @@ void LowRankMatrix::lowRankSumRow(double epi, long long m, long long n, long lon
   { svd.setThreshold(epi); *k = std::min(*k, (long long)svd.rank()); }
 
   Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matA_out(A, m, *k, ldA);
-  matA_out = svd.matrixU().leftCols(*k);
+  matA_out = svd.matrixU().leftCols(*k) * svd.singularValues().topRows(*k).asDiagonal();
 }
 
-void WellSeparatedApproximation::construct(double epi, const Accessor& eval, long long rank, long long p, long long niters, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const WellSeparatedApproximation& upper) {
-  WellSeparatedApproximation::lbegin = lbegin;
+void Hmatrix::construct(double epi, const Accessor& eval, long long rank, long long p, long long niters, long long lbegin, long long len, const Cell cells[], const CSR& Far, const double bodies[], const Hmatrix& upper) {
+  Hmatrix::lbegin = lbegin;
   lend = lbegin + len;
 
   long long llen = Far.RowIndex[lend] - Far.RowIndex[lbegin];
@@ -77,11 +102,7 @@ void WellSeparatedApproximation::construct(double epi, const Accessor& eval, lon
 
     for (long long yx = Far.RowIndex[y]; yx < Far.RowIndex[y + 1]; yx++) {
       long long x = Far.ColIndex[yx];
-      long long n = cells[x].Body[1] - cells[x].Body[0];
-      long long mm = cells[y].Body[1] - cells[y].Body[0];
-      const double* xbodies = &bodies[3 * cells[x].Body[0]];
-      m[y - lbegin].insert(m[y - lbegin].end(), xbodies, &xbodies[3 * n]);
-      L.emplace_back(epi, mm, n, rank, p, niters, eval, cells[y].Body[0], cells[x].Body[0]);
+      L.emplace_back(epi, M[y - lbegin], cells[x].Body[1] - cells[x].Body[0], rank, p, niters, eval, cells[y].Body[0], cells[x].Body[0]);
     }
 
     long long r = 0;
@@ -97,14 +118,21 @@ void WellSeparatedApproximation::construct(double epi, const Accessor& eval, lon
     if (r < rank)
       A[y - lbegin].resize(M[y - lbegin] * r);
     N[y - lbegin] = r;
+
+    for (long long yx = Far.RowIndex[y]; yx < Far.RowIndex[y + 1]; yx++) {
+      long long x = Far.ColIndex[yx];
+      long long n = cells[x].Body[1] - cells[x].Body[0];
+      const double* xbodies = &bodies[3 * cells[x].Body[0]];
+      m[y - lbegin].insert(m[y - lbegin].end(), xbodies, &xbodies[3 * n]);
+    }
   }
 }
 
-long long WellSeparatedApproximation::fbodies_size_at_i(long long i) const {
+long long Hmatrix::fbodies_size_at_i(long long i) const {
   return 0 <= i && i < (long long)m.size() ? m[i].size() / 3 : 0;
 }
   
-const double* WellSeparatedApproximation::fbodies_at_i(long long i) const {
+const double* Hmatrix::fbodies_at_i(long long i) const {
   return 0 <= i && i < (long long)m.size() ? m[i].data() : nullptr;
 }
 

@@ -38,7 +38,7 @@ void Zrsvd(double epi, long long m, long long n, long long* k, long long p, long
   long long rank = std::min(*k, std::min(m, n));
   p = std::min(rank + p, std::min(m, n));
   Eigen::MatrixXcd R(n, p), Q(m, p);
-  std::mt19937_64 gen(__seed_rsvd);
+  std::mt19937_64 gen;
   std::normal_distribution<double> norm_dist(0., 1.);
   std::generate(R.reshaped().begin(), R.reshaped().end(), [&]() { return std::complex<double>(norm_dist(gen), norm_dist(gen)); });
 
