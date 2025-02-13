@@ -34,9 +34,9 @@ void DenseZMat::op_Aij_mulB(char opA, long long mC, long long nC, long long k, l
     matC.noalias() = Eigen::Map<const Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>>(&A[iA + jA * M], mC, k, lda) * matB;
 }
 
-void Zrsvd(long long m, long long n, long long k, long long p, long long niters, const Accessor& A, long long iA, long long jA, double* S, std::complex<double>* U, long long ldu, std::complex<double>* V, long long ldv) {
-  k = std::min(k, std::min(m, n));
-  p = std::min(k + p, std::min(m, n));
+void Zrsvd(double epi, long long m, long long n, long long* k, long long p, long long niters, const Accessor& A, long long iA, long long jA, double* S, std::complex<double>* U, long long ldu, std::complex<double>* V, long long ldv) {
+  long long rank = std::min(*k, std::min(m, n));
+  p = std::min(rank + p, std::min(m, n));
   Eigen::MatrixXcd R(n, p), Q(m, p);
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -45,22 +45,28 @@ void Zrsvd(long long m, long long n, long long k, long long p, long long niters,
 
   A.op_Aij_mulB('N', m, p, n, iA, jA, R.data(), n, Q.data(), m);
   while (0 < --niters) {
+    Eigen::HouseholderQR<Eigen::MatrixXcd> qr(Q);
+    Q = qr.householderQ() * Eigen::MatrixXcd::Identity(m, p);
     A.op_Aij_mulB('C', n, p, m, iA, jA, Q.data(), m, R.data(), n);
     A.op_Aij_mulB('N', m, p, n, iA, jA, R.data(), n, Q.data(), m);
   }
 
-  Eigen::Stride<Eigen::Dynamic, 1> ldU(ldu, 1), ldV(ldv, 1);
-  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matU(U, m, k, ldU);
-  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matV(V, n, k, ldV);
   Eigen::HouseholderQR<Eigen::MatrixXcd> qr(Q);
   Q = qr.householderQ() * Eigen::MatrixXcd::Identity(m, p);
   A.op_Aij_mulB('C', n, p, m, iA, jA, Q.data(), m, R.data(), n);
 
-  Eigen::Map<Eigen::VectorXd> vecS(S, k);
   Eigen::BDCSVD<Eigen::MatrixXcd> svd(R, Eigen::ComputeThinU | Eigen::ComputeThinV);
-  vecS = svd.singularValues().topRows(k);
-  matV = svd.matrixU().leftCols(k);
-  matU.noalias() = Q * svd.matrixV().leftCols(k);
+  if (0. < epi && epi < 1.)
+  { svd.setThreshold(epi); *k = rank = std::min(rank, (long long)svd.rank()); }
+
+  Eigen::Stride<Eigen::Dynamic, 1> ldU(ldu, 1), ldV(ldv, 1);
+  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matU(U, m, rank, ldU);
+  Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Eigen::Stride<Eigen::Dynamic, 1>> matV(V, n, rank, ldV);
+  Eigen::Map<Eigen::VectorXd> vecS(S, rank);
+
+  vecS = svd.singularValues().topRows(rank);
+  matV = svd.matrixU().leftCols(rank);
+  matU.noalias() = Q * svd.matrixV().leftCols(rank);
 }
 
 void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]) {
