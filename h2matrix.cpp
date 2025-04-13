@@ -96,11 +96,6 @@ long long compute_basis(const Eigen::MatrixXcd& mat, double epi, long long s[], 
       
       Eigen::Map<Eigen::RowVector<long long, Eigen::Dynamic>> indices(s, N);
       indices = indices * rrqr.colsPermutation();
-      std::cout<<"Perm"<<std::endl;
-      for (long long i = 0; i < N; ++i) {
-        std::cout<<indices[i]<<" ";
-      }
-      std::cout<<std::endl;
 
       if (orth) {
         Eigen::MatrixXcd  RX = Q.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * R.topRows(rank).transpose());
@@ -364,10 +359,6 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
     lenX = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
     LowerZ = 0;
   }
-  std::cout<<"Dim: ";
-  for (long long t = ibegin; t < ibegin +nodes; ++t)
-    std::cout<<Dims[t]<<" ";
-    std::cout<<std::endl;;
 
   std::vector<long long> neighbor_ones(xlen, 1ll);
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
@@ -378,7 +369,6 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
   std::vector<long long> Qsizes(xlen, 0);
   // Qs and Rs are square matrices
   std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
-  //std::cout<<"Q_size "<<Q.size()<<std::endl;
   Q.alloc(xlen, Qsizes.data());
   R.alloc(xlen, Qsizes.data());
 
@@ -393,7 +383,6 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   A.alloc(ARows[nodes], Asizes.data());
-  std::cout<<"A_size "<<A.size()<<std::endl;
 
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
   typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
@@ -407,10 +396,10 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
 
     // loop over all nodes
     for (long long i = 0; i < nodes; i++) {
-      std::cout<<"Node "<<i<<std::endl;
+      //std::cout<<"Node "<<i<<std::endl;
       // number of rows in that cell
       long long M = Dims[i + ibegin];
-      std::cout<<"Rows "<<M<<std::endl;
+      //std::cout<<"Rows "<<M<<std::endl;
       long long childi = localChildOffsets[i];
       long long cendi = localChildOffsets[i + 1];
       // get the corresponding Q matrix (as a reference)
@@ -454,34 +443,21 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
       if (cendi <= childi) {
         long long ci = i + ybegin;
         std::iota(S_ind[i + ibegin], S_ind[i + ibegin + 1], cells[ci].Body[0] * 3);
-        //std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
         Qi = Eigen::MatrixXcd::Identity(M, M);
 
         long long far_rows = mat.rows();
         // generate the near field aka dense matrices in A
-        std::cout<<"Generate Near field"<<std::endl;
         for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
           //std::cout<<"J "<<ij<<std::endl;
           long long N = Dims[ACols[ij]];
           far_rows -= N;
-          //std::cout<<"Cols "<<N<<std::endl;
           long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-          //std::cout<<"cj "<<ACols[ij]<<std::endl;
-          //std::cout<<"offset "<<3 * cells[ci].Body[0]<<", "<<3 * cells[cj].Body[0]<<std::endl;
-          //near_start = cells[cj].Body[0] * 3;
-          //near_end = cells[cj].Body[1] * 3;
-          //std::cout<<"Dims "<<M<<", "<<N<<std::endl;
           Eigen::Map<Eigen::MatrixXcd> A_ij(A[ij], M, N);
           A_ij = mat.block(cells[ci].Body[0] * 3, cells[cj].Body[0] * 3, M, N);
-
-          //gen_matrix(eval, M, N, &bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[cj].Body[0]], A[ij]);
         }
-        std::cout<<"Far rows: "<<far_rows<<std::endl;
         // generate the far field only if it exists
         if (far_rows > 0) {
           Eigen::MatrixXcd far(far_rows, M);
-        
-          std::cout<<"Generate Far field "<<far_rows<<" "<<M<<std::endl;
           long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
           //std::cout<<"Current Near "<<current_near<<std::endl;
           //std::cout<<ARows[i]<<" "<<ARows[i+1]<<std::endl;
@@ -510,13 +486,6 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
         }
       }
     }
-    /*std::complex<double> * test = A[0];
-    for (int i = 0; i < 27; ++i) {
-      for (int j = 0; j < 27; ++j) {
-        std::cout<<*(test+ i*27+j)<<", ";
-      }
-      std::cout<<std::endl;
-    }*/
 
     //comm.dataSizesToNeighborOffsets(Ssizes.data());
     //comm.neighbor_bcast(S[0], Ssizes.data());
@@ -528,85 +497,27 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
       }
 
       long long M = Dims[i + ibegin];
-      std::cout<<"Node "<<i<<std::endl;
-      std::cout<<"M "<<M<<std::endl;
       std::vector<long long> far_field(Dims);
       for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        //std::cout<<"Near J "<<ij<<std::endl;
         far_field[ACols[ij]] = 0;
       }
       auto far_rows = std::reduce(far_field.begin(), far_field.end());
-      std::cout<<far_rows<<std::endl;
+      // only compute the far field if it exists
       if (far_rows) {
         std::vector<long long> FS_ind(far_rows);
         long long start = 0;
         for (long long ij = 0; ij < nodes; ij++) {
           if (far_field[ij]) {
-            std::cout<<"Copy "<<far_field[ij]<<std::endl;
             std::copy(S_ind[ij + ibegin], S_ind[ij + ibegin] + far_field[ij], &FS_ind[start]);
             start += far_field[ij];
           }
         }
-        std::cout<<"Far field rows "<<std::endl;
-        for (long long ij = 0; ij < far_rows; ij++) {
-          std::cout<<FS_ind[ij]<<", ";
-        }
-        std::cout<<std::endl;
         Eigen::MatrixXcd F(far_rows, M);
         gen_matrix(mat, far_rows, M, FS_ind.data(), S_ind[i + ibegin], F);
         long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
         std::cout<<"Rank "<<rank<<std::endl;
         DimsLr[i + ibegin] = rank;
       }
-
-      //long long ci = i + ybegin;
-      //std::iota(S_ind[i + ibegin], S_ind[i + ibegin + 1], cells[ci].Body[0] * 3);
-
-      //long long far_rows = mat.rows();
-      // generate the near field aka dense matrices in A
-      //std::cout<<"Generate Near field"<<std::endl;
-      /*for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        std::cout<<"J "<<ij<<std::endl;
-        long long N = Dims[ACols[ij]];
-        far_rows -= N;
-        //std::cout<<"Cols "<<N<<std::endl;
-        long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-        //std::cout<<"cj "<<ACols[ij]<<std::endl;
-        //std::cout<<"offset "<<3 * cells[ci].Body[0]<<", "<<3 * cells[cj].Body[0]<<std::endl;
-        //std::cout<<"Dims "<<M<<", "<<N<<std::endl;
-        //Eigen::Map<Eigen::MatrixXcd> A_ij(A[ij], M, N);
-        //A_ij = mat.block(cells[ci].Body[0] * 3, cells[cj].Body[0] * 3, M, N);
-      }
-      // generate the far differently on the upper levels
-      if (far_rows > 0) {
-        Eigen::MatrixXcd far(far_rows, M);
-        std::cout<<"Generate Far field "<<far_rows<<" "<<M<<std::endl;
-        long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
-        //std::cout<<"Current Near "<<current_near<<std::endl;
-        //std::cout<<ARows[i]<<" "<<ARows[i+1]<<std::endl;
-        long long current_rows = cells[current_near].Body[0] * 3;
-        std::cout<<"Top Rows "<<0<<" "<<cells[ci].Body[0] * 3<<" | "<<current_rows<<" "<<M<<std::endl;
-        far.topRows(current_rows) = mat.block(0, cells[ci].Body[0] * 3, current_rows, M);
-        for (long long ij = ARows[i]; ij < ARows[i + 1] - 1; ij++) {
-          current_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-          //std::cout<<"Current Near "<<current_near<<std::endl;
-          long long next_near = Near.ColIndex[ij + 1 + Near.RowIndex[ybegin]];
-          //std::cout<<"Next Near "<<next_near<<std::endl;
-          long long add_rows = cells[next_near].Body[0] * 3 - cells[current_near].Body[1] * 3;
-          std::cout<<"Middle Rows "<<current_rows<<" "<<add_rows<<std::endl;
-          std::cout<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_rows<<" "<<M<<std::endl;
-          far.middleRows(current_rows, add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
-          current_rows += add_rows;
-        }
-        current_near = Near.ColIndex[ARows[i + 1] - 1 + Near.RowIndex[ybegin]];
-        long long add_rows = mat.rows() - cells[current_near].Body[1] * 3;
-        std::cout<<"Bottom Rows "<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_rows<<" "<<M<<std::endl;
-        //std::cout<<"Current Near "<<current_near<<std::endl;
-        far.bottomRows(add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
-        long long rank = compute_basis(far, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-        std::cout<<"Rank "<<rank<<std::endl;
-        DimsLr[i + ibegin] = rank;
-      }*/
     }
 
     comm.dataSizesToNeighborOffsets(Qsizes.data());
@@ -778,8 +689,6 @@ void H2Matrix::constructBLR(const Eigen::Ref<const Eigen::MatrixXcd> &mat, doubl
         //std::copy(&bodies[3 * cells[ci].Body[0]], &bodies[3 * cells[ci].Body[1]], S[i + ibegin]);
         //Qi = Eigen::MatrixXcd::Identity(M, M);
 
-        // this only works for HSS
-        long long near_start, near_end;
         // generate the near field aka dense matrices in A
         for (long long j = 0; j < nodes; j++)  {
           //std::cout<<"J "<<j<<std::endl;

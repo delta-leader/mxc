@@ -111,14 +111,14 @@ std::vector<long long> read_mesh_data(long long& n_nodes, std::vector<double>& n
         sum[k] += nodes[idx * 3 + k];
       }
     }
-    std::cout<<"[";
+    //std::cout<<"[";
     for (int j = 0; j < 3; ++j) {
       elems[i * 3 + j] = sum[j] / 3;
-      std::cout<<elems[i * 3 + j];
-      if (j != 2)
-        std::cout<<", ";
+      //std::cout<<elems[i * 3 + j];
+      //if (j != 2)
+      //  std::cout<<", ";
     }
-    std::cout<<"],"<<std::endl;
+    //std::cout<<"],"<<std::endl;
     //toPolar(&elems[i*3], &elems_polar[i*2]);
   }
   std::cout<<std::endl;
