@@ -1,6 +1,7 @@
 #pragma once
 
 #include <matrix_container.hpp>
+#include <Eigen/Dense>
 
 class MatrixAccessor;
 class Hmatrix;
@@ -12,6 +13,7 @@ class H2Matrix {
 private:
   std::vector<long long> UpperStride;
   MatrixDataContainer<double> S;
+  MatrixDataContainer<long long> S_ind;
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
@@ -44,6 +46,8 @@ public:
   void constructSharedHMatrix(double epi, long long rank, const Cell cells[], const CSR& Far, const Hmatrix& hA, const ColCommMPI& comm, const H2Matrix& Aupper);
   
   void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const Hmatrix& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
+  void construct(const Eigen::Ref<const Eigen::MatrixXcd>& mat, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
+  void constructBLR(const Eigen::Ref<const Eigen::MatrixXcd>& mat, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
 
   void matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm);
   void matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm);

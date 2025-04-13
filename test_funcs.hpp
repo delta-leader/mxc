@@ -60,35 +60,143 @@ void mesh_sphere(double* bodies, long long nbodies, double r) {
   }
 }
 
-void read_sorted_bodies(long long* nbodies, long long lbuckets, double* bodies, long long buckets[], const char* fname) {
+void toPolar(double* cart_coords, double* polar_coords) {
+  double radius = std::sqrt(cart_coords[0] * cart_coords[0] + cart_coords[1] * cart_coords[1] + cart_coords[2] * cart_coords[2]);
+  double theta = std::acos(cart_coords[2] / radius);
+  double phi = std::acos(cart_coords[0] / std::sqrt(cart_coords[0] * cart_coords[0] + cart_coords[1] * cart_coords[1] )) * (cart_coords[1] < 0 ? -1 : 1);
+  std::cout<<radius<<" "<<theta<<" "<<phi<<std::endl;
+  polar_coords[0] = theta;
+  polar_coords[1] = phi;
+}
+
+std::vector<long long> read_mesh_data(long long& n_nodes, std::vector<double>& nodes, long long& n_elems, std::vector<double>& elems, std::vector<double>& elems_polar, const char* fname) {
   std::ifstream file(fname);
+  std::string line;
+  std::getline(file, line);
+  std::getline(file, line);
+  
+  line.erase(line.begin(), std::find_if(line.begin(), line.end(), std::bind1st(std::not_equal_to<char>(), ' ')));
+  std::stringstream line_stream(line);
+  std::getline(line_stream, line, ' ');
+  n_elems = std::stoi(line);
+  std::getline(file, line);
+  line.erase(line.begin(), std::find_if(line.begin(), line.end(), std::bind1st(std::not_equal_to<char>(), ' ')));
+  line_stream = std::stringstream(line);
+  std::getline(line_stream, line, ' ');
+  n_nodes = std::stoi(line);
+  std::cout<<"File contains "<<n_nodes<<" nodes and " << n_elems <<" elements"<<std::endl;
 
-  long long curr = 1, cbegin = 0, iter = 0, len = *nbodies;
-  while (iter < len && !file.eof()) {
-    long long b = 0;
-    double x = 0., y = 0., z = 0.;
-    file >> x >> y >> z >> b;
+  std::getline(file, line);
+  nodes.resize(n_nodes * 3);
+  std::vector<long long> indices(n_nodes);
+  for (long long i = 0; i < n_nodes; ++i) {
+    file >> nodes[i * 3] >> nodes[i * 3 + 1] >> nodes[i * 3 + 2];
+    indices[i] = i;
+  }
 
-    if (lbuckets < b)
-      len = iter;
-    else if (!file.eof()) {
-      bodies[iter * 3] = x;
-      bodies[iter * 3 + 1] = y;
-      bodies[iter * 3 + 2] = z;
-      while (curr < b && curr <= lbuckets) {
-        buckets[curr - 1] = iter - cbegin;
-        cbegin = iter;
-        curr++;
+  std::getline(file, line);
+  std::getline(file, line);
+  elems.resize(n_elems * 3);
+  elems_polar.resize(n_elems * 2);
+  for (long long i = 0; i < n_elems; ++i) {
+    double sum[3];
+    for (int j = 0; j < 3; ++j) {
+      sum[j] = 0;
+    }
+    for (int j = 0; j < 3; ++j) {
+      long long idx;
+      file >> idx;
+      idx--;
+      for (int k = 0; k < 3; ++k) {
+        sum[k] += nodes[idx * 3 + k];
       }
-      iter++;
+    }
+    std::cout<<"[";
+    for (int j = 0; j < 3; ++j) {
+      elems[i * 3 + j] = sum[j] / 3;
+      std::cout<<elems[i * 3 + j];
+      if (j != 2)
+        std::cout<<", ";
+    }
+    std::cout<<"],"<<std::endl;
+    //toPolar(&elems[i*3], &elems_polar[i*2]);
+  }
+  std::cout<<std::endl;
+  return indices;
+}
+
+void read_data(std::complex<double>* values, const char* fname, const long long n) {
+  std::ifstream file(fname);
+  long long a, b;
+  file >> a >> b;
+  /*if ((a != n) || (b != 3 * a)) {
+    std::cout<<"Number of nodes in the file does not match"<<std::endl;
+    return;
+  }*/
+  std::cout<<"File contains "<<a<<" nodes " <<b<<std::endl;
+  std::string line;
+  double real, img;
+  for (long long i = 0; i < n; ++i) {
+    std::getline(file, line);
+    std::getline(file, line, '(');
+    std::getline(file, line, ',');
+    real = std::stod(line);
+    std::getline(file, line, ')');
+    img = std::stod(line);
+    values[i] = std::complex<double>(real, img);
+  }
+}
+
+void read_vector(std::complex<double>* values, long long* indices, const char* fname, const long long n) {
+  std::ifstream file(fname);
+  long long a, b;
+  file >> a >> b;
+  if ((a != n) || (b != 3 * a)) {
+    std::cout<<"Number of nodes in the file does not match"<<std::endl;
+    return;
+  }
+
+  std::string line;
+  double real, img;
+  for (long long i = 0; i < n; ++i) {
+    for (long long ii = 0; ii < 3; ++ii) {
+      std::getline(file, line);
+      std::getline(file, line, '(');
+      std::getline(file, line, ',');
+      real = std::stod(line);
+      std::getline(file, line, ')');
+      img = std::stod(line);
+      values[3 * indices[i] + ii] = std::complex<double>(real, img);
     }
   }
-  while (curr <= lbuckets) {
-    buckets[curr - 1] = iter - cbegin;
-    cbegin = iter;
-    curr++;
+}
+
+void read_matrix(std::complex<double>* values, long long* indices, const char* fname, const long long n) {
+  std::ifstream file(fname);
+  long long a, b;
+  file >> a >> b;
+  if ((a != n) || (b != 3 * a)) {
+    std::cout<<"Number of nodes in the file does not match"<<std::endl;
+    return;
   }
-  *nbodies = iter;
+
+  std::string line;
+  double real, img;
+  for (long long i = 0; i < n; ++i) {
+    for (long long ii = 0; ii < 3; ++ii) {
+      for (long long j = 0; j < n; ++j) {
+        for (long long jj = 0; jj < 3; ++jj) {
+          std::getline(file, line);
+          std::getline(file, line, '(');
+          std::getline(file, line, ',');
+          real = std::stod(line);
+          std::getline(file, line, ')');
+          img = std::stod(line);
+          values[(3 * indices[i] + ii) * 3 * n + 3 * indices[j] + jj] = std::complex<double>(real, img);
+        }
+      }
+    }
+  }
 }
 
 void write_to_csv(const char* fname, int mpi_size, long long N, double theta, long long leaf_size, long long rank, double epi, const char* mode, 

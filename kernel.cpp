@@ -83,3 +83,25 @@ void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const doub
     });
   });
 }
+
+void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, long long m, long long n, const long long* rows, const long long* cols, Eigen::Ref<Eigen::MatrixXcd> Aij) {
+  for (long long i = 0; i < m; ++i) {
+    for (long long j = 0; j < n; ++j) {
+      Aij(i, j) = mat(rows[i], cols[j]);
+    }
+  }
+}
+
+// probably no longer needed
+void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, std::vector<long long>& rows, std::vector<long long>& cols, Eigen::MatrixXcd& Aij) {
+  long long A_row_offset = 0, A_col_offset = 0;
+  for (size_t i = 0; i < rows.size(); i += 2) {
+    long long row_offset = rows[i] * 3;
+    long long row_num = (rows[i + 1] - rows[i])* 3;
+    for (size_t j = 0; j < cols.size(); j += 2) {
+      long long col_offset = cols[i] * 3;
+      long long col_num = (cols[i + 1] - cols[i])* 3;
+      Aij.block(A_row_offset, A_col_offset, row_num, col_num) = mat.block(row_offset, col_offset, row_num, col_num);
+    }
+  }
+}

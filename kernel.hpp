@@ -3,6 +3,8 @@
 #include <complex>
 #include <cmath>
 
+#include <Eigen/Dense>
+
 class Accessor {
 public:
   long long M, N;
@@ -75,4 +77,6 @@ public:
 
 
 void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]);
+void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, long long m, long long n, const long long* rows, const long long* cols, Eigen::Ref<Eigen::MatrixXcd> Aij);
+void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, std::vector<long long>& rows, std::vector<long long>& cols, Eigen::MatrixXcd& Aij);
 

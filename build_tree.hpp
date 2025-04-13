@@ -24,3 +24,5 @@ public:
 };
 
 void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long levels);
+void buildBinaryTree(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels);
+void buildBinaryTree2(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels);
