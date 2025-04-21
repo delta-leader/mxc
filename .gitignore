@@ -51,3 +51,6 @@ _deps
 *.ptx
 *.cubin
 *.fatbin
+
+# input files
+input/

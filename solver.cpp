@@ -40,7 +40,7 @@ H2MatrixSolver::H2MatrixSolver(const Accessor& eval_d, const MatrixAccessor& eva
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
 }
 
-H2MatrixSolver::  H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, MPI_Comm world) : 
+H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, MPI_Comm world) : 
   levels(levels), A(levels + 1), local_bodies(0, 0) {
   
   CSR Near('N', cells, cells, theta);
@@ -226,6 +226,66 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
 
     R = -X;
     matVecMul(R.data());
+    R += B;
+
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+    resid[++iters] = std::sqrt(nsum.real()) / normb;
+  }
+}
+
+void H2MatrixSolver::solveGMRESDense(double tol, const Eigen::Ref<const Eigen::MatrixXcd>& mat, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
+  long long N = A[levels].lenX;
+  long long ld = inner_iters + 1;
+
+  Eigen::Map<const Eigen::VectorXcd> B(b, N);
+  Eigen::Map<Eigen::VectorXcd> X(x, N);
+
+  std::complex<double> nsum = B.adjoint() * B;
+  comm[levels].level_sum(&nsum, 1);
+  double normb = std::sqrt(nsum.real());
+  if (normb == 0.)
+    normb = 1.;
+
+  Eigen::VectorXcd R = B;
+  resid.resize(outer_iters + 1);
+  resid[0] = 1.;
+  iters = 0;
+
+  while (iters < outer_iters && tol <= resid[iters]) {
+    solvePrecondition(R.data());
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+
+    double beta = std::sqrt(nsum.real());
+    Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(ld, inner_iters);
+    Eigen::MatrixXcd v = Eigen::MatrixXcd::Zero(N, ld);
+    v.col(0) = R * (1. / beta);
+    
+    for (long long i = 0; i < inner_iters; i++) {
+      //R = v.col(i);
+      //matVecMul(R.data());
+      R = mat * v.col(i);
+      solvePrecondition(R.data());
+
+      H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
+      comm[levels].level_sum(H.col(i).data(), i + 1);
+      R.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
+
+      nsum = R.adjoint() * R;
+      comm[levels].level_sum(&nsum, 1);
+      H(i + 1, i) = std::sqrt(nsum.real());
+      v.col(i + 1) = R * (1. / H(i + 1, i));
+    }
+
+    Eigen::VectorXcd s = Eigen::VectorXcd::Zero(ld);
+    s(0) = beta;
+    R = H.householderQr().solve(s);
+    X.noalias() += v.leftCols(inner_iters) * R;
+
+    R = -X;
+    //matVecMul(R.data());
+    R = mat * R;
     R += B;
 
     nsum = R.adjoint() * R;
