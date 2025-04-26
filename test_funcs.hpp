@@ -69,7 +69,7 @@ void toPolar(double* cart_coords, double* polar_coords) {
   polar_coords[1] = phi;
 }
 
-std::vector<long long> read_mesh_data(long long& n_nodes, std::vector<double>& nodes, long long& n_elems, std::vector<double>& elems, std::vector<double>& elems_polar, const char* fname) {
+void read_mesh_data(long long& n_nodes, std::vector<double>& nodes, long long& n_elems, std::vector<double>& elems, std::vector<double>& elems_polar, const std::string& fname) {
   std::ifstream file(fname);
   std::string line;
   std::getline(file, line);
@@ -88,10 +88,8 @@ std::vector<long long> read_mesh_data(long long& n_nodes, std::vector<double>& n
 
   std::getline(file, line);
   nodes.resize(n_nodes * 3);
-  std::vector<long long> indices(n_nodes);
   for (long long i = 0; i < n_nodes; ++i) {
     file >> nodes[i * 3] >> nodes[i * 3 + 1] >> nodes[i * 3 + 2];
-    indices[i] = i;
   }
 
   std::getline(file, line);
@@ -121,11 +119,10 @@ std::vector<long long> read_mesh_data(long long& n_nodes, std::vector<double>& n
     //std::cout<<"],"<<std::endl;
     //toPolar(&elems[i*3], &elems_polar[i*2]);
   }
-  std::cout<<std::endl;
-  return indices;
+  //std::cout<<std::endl;
 }
 
-void read_data(std::complex<double>* values, const char* fname, const long long n) {
+void read_data(std::complex<double>* values, const std::string& fname, const long long n) {
   std::ifstream file(fname);
   long long a, b;
   file >> a >> b;
@@ -133,7 +130,7 @@ void read_data(std::complex<double>* values, const char* fname, const long long 
     std::cout<<"Number of nodes in the file does not match"<<std::endl;
     return;
   }*/
-  std::cout<<"File contains "<<a<<" nodes " <<b<<std::endl;
+  std::cout<<"File contains "<<a<<" data points * 3 = " <<b<<std::endl;
   std::string line;
   double real, img;
   for (long long i = 0; i < n; ++i) {
@@ -147,7 +144,7 @@ void read_data(std::complex<double>* values, const char* fname, const long long 
   }
 }
 
-void read_vector(std::complex<double>* values, long long* indices, const char* fname, const long long n) {
+void read_vector(std::complex<double>* values, long long* indices, const std::string& fname, const long long n) {
   std::ifstream file(fname);
   long long a, b;
   file >> a >> b;
@@ -171,7 +168,7 @@ void read_vector(std::complex<double>* values, long long* indices, const char* f
   }
 }
 
-void read_matrix(std::complex<double>* values, long long* indices, const char* fname, const long long n) {
+void read_matrix(std::complex<double>* values, long long* indices, const std::string& fname, const long long n) {
   std::ifstream file(fname);
   long long a, b;
   file >> a >> b;

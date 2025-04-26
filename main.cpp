@@ -5,35 +5,6 @@
 
 #include <Eigen/Dense>
 
-/*class Helmholtz3D : public MatrixAccessor {
-public:
-  double k;
-  double singularity;
-  Helmholtz3D(double wave_number, double s) : k(wave_number), singularity(1. / s) {}
-  std::complex<double> operator()(double d) const override {
-    if (d == 0.)
-      return std::complex<double>(singularity, 0.);
-    else
-      return std::exp(std::complex(0., -k * d)) / d;
-  }
-};
-
-void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const double* bi, const double* bj, std::complex<double> Aij[]) {
-  const std::array<double, 3>* bi3 = reinterpret_cast<const std::array<double, 3>*>(bi);
-  const std::array<double, 3>* bi3_end = reinterpret_cast<const std::array<double, 3>*>(&bi[3 * m]);
-  const std::array<double, 3>* bj3 = reinterpret_cast<const std::array<double, 3>*>(bj);
-  const std::array<double, 3>* bj3_end = reinterpret_cast<const std::array<double, 3>*>(&bj[3 * n]);
-
-  std::for_each(bj3, bj3_end, [&](const std::array<double, 3>& j) -> void {
-    long long ix = std::distance(bj3, &j);
-    std::for_each(bi3, bi3_end, [&](const std::array<double, 3>& i) -> void {
-      long long iy = std::distance(bi3, &i);
-      double d = std::hypot(i[0] - j[0], i[1] - j[1], i[2] - j[2]);
-      Aij[iy + ix * m] = eval(d);
-    });
-  });
-}*/
-
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
@@ -51,29 +22,35 @@ int main(int argc, char* argv[]) {
   std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
   const char* csv = argc > 8 ? argv[8] : nullptr;
 
+  // leaf size is expressed in terms of #elems, since we don't want to split an elment
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   long long levels = (long long) std::ceil(std::log2((double)Nbody / leaf_size));
   long long Nleaf = (long long)1 << levels;
   long long ncells = Nleaf + Nleaf - 1;
 
+  const std::string MAT = "160";
   long long n_nodes, n_elems;
   std::vector<double> nodes;
   std::vector<double> elems;
   std::vector<double> elems_polar;
   // Reading the mes data (i.e. nodes and elems)
   // For the elements we calculate the centroid and store it in elems
-  // indices is ignored for now
-  std::vector<long long> indices = read_mesh_data(n_nodes, nodes, n_elems, elems, elems_polar, "../input/mesh_sphere_160nodes.inp");
+  read_mesh_data(n_nodes, nodes, n_elems, elems, elems_polar, "../input/mesh_sphere_" + MAT + "nodes.inp");
+  // check that the sizes match
   std::cout<<nodes.size()/3<<" " <<elems.size()/3<<std::endl;
 
-  std::cout<<Nbody<<" "<<leaf_size<<" "<<levels<<" "<<Nleaf<<" "<<ncells<<std::endl;
+  std::cout<<"Elements = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
   std::vector<Cell> cell(ncells);
   // create index array for the elements
   std::vector<long long> idx(n_elems);
   std::iota(idx.begin(), idx.end(), 0);
   // build the tree for U (element-element interactions and reorder the corresponding indices)
   buildBinaryTree(&cell[0], &elems[0], idx.data(), Nbody, levels);
-  //buildBinaryTree2(&cell[0], &elems_polar[0], idx.data(), Nbody, levels);
+  //buildBinaryTree2(&cell[0], &elems_polar[0], idx.data(), Nbody, levels); 
+  for (long long i = 0; i < ncells; ++i) {
+    std::cout<<"Cell "<<i<<": "<<cell[i].Body[1] - cell[i].Body[0]<<std::endl;
+
+  }
 
   /* kmeans */
   /*std::vector<int> counts = {13, 8, 9, 7, 9, 7, 17, 10, 10, 12, 9, 11, 9, 10, 11, 11, 9, 8, 10, 10, 10, 7, 9, 11, 9, 9, 10, 11, 8, 13, 11, 8};
@@ -92,20 +69,16 @@ int main(int argc, char* argv[]) {
   // read the rhs, reference solution and matrix from the file
   long long n_mat = (n_nodes + n_elems) * 3;
   std::vector<std::complex<double>> b(n_mat);
-  read_data(b.data(), "../input/rhs_sphere_160.dat", n_mat);
+  read_data(b.data(), "../input/rhs_sphere_" + MAT + ".dat", n_mat);
   std::vector<std::complex<double>> x(n_mat);
-  read_data(x.data(), "../input/x_sphere_160.dat", n_mat);
+  read_data(x.data(), "../input/x_sphere_" + MAT + ".dat", n_mat);
   std::vector<std::complex<double>> mat(n_mat * n_mat);
-  read_data(mat.data(), "../input/mat_sphere_160.dat", n_mat * n_mat);
+  read_data(mat.data(), "../input/mat_sphere_" + MAT + ".dat", n_mat * n_mat);
 
   // Get the U matrix (element/element interactions and sort it according to the tree)
   Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
   Eigen::MatrixXcd U = A.bottomRightCorner(n_elems * 3, n_elems * 3);
   Eigen::MatrixXcd U_sorted(Nbody * 3, Nbody * 3);
-  std::vector<long long> idx2(Nbody);
-  for (long long i = 0; i < Nbody; ++i) {
-    idx2[idx[i]] = i;
-  }
 
   /*std::vector<int> kmeans = {19,  3, 26,  4, 26,  2,  3, 24, 17,  7,  6, 19, 28, 26, 30, 20, 11,  9, 28,  0, 28, 30, 23,  3,
     23, 30,  9,  1, 11,  6, 12, 19, 29, 11, 19, 28,  1, 19, 20, 11, 24, 10,  0, 26, 12,  2, 18, 14,
@@ -128,51 +101,22 @@ int main(int argc, char* argv[]) {
     for (int j = 0; j < Nbody; ++j) {
       for (int ii = 0; ii < 3; ++ii) {
         for (int jj = 0; jj < 3; ++jj) {
-           //U_sorted(idx2[i] * 3 + ii, idx2[j] * 3 + jj) = U(i * 3 + ii, j * 3 + jj);
            U_sorted(i * 3 + ii, j * 3 + jj) = U(idx[i] * 3 + ii , idx[j] * 3 + jj);
         }
       }
     }
   }
 
-    /*for (int i = 0; i < 30; ++i) {
-      //for (int ii = 0; ii < 3; ++ii) {
-        for (int j = 0; j < 30; ++j) {
-          //for (int jj = 0; jj < 3; ++jj) {
-            std::cout<<U_sorted(88*3+j, 88*3+i)<<", ";
-          //}
-        }
-      //}
-      std::cout<<std::endl;
-    }*/
-  // generate the H2 matrix
-  //H2MatrixSolver matA(U, epi, rank, leveled_rank, cell, theta, levels);
-  std::cout<<"Solver"<<std::endl;
+
+  // generate the H2 matrix (with normal basis)
   H2MatrixSolver matA(U_sorted, epi, rank, leveled_rank, cell, theta, levels);
   
-  //Laplace3D eval(1.);
-  //Yukawa3D eval(1, 1.);
-  //Gaussian eval(0.005);
-//   Helmholtz3D eval(1., 1e-1);
-  
-//   std::vector<double> body(Nbody * 3);
-   std::vector<std::complex<double>> Xbody(Nbody * 3);
-//   std::vector<Cell> cell(ncells);
-
-//   mesh_sphere(&body[0], Nbody, std::sqrt(Nbody / (4 * M_PI)));
-//   //uniform_unit_cube_rnd(&body[0], Nbody, 1, 3, 999);
-//   //uniform_unit_cube(&body[0], Nbody, std::pow(Nbody, 1./3.), 3);
-//   buildBinaryTree(&cell[0], &body[0], Nbody, levels);
-
-   std::mt19937_64 gen;
-   std::uniform_real_distribution uniform_dist(0., 1.);
-   std::generate(Xbody.begin(), Xbody.end(), 
+  // generate random x
+  std::vector<std::complex<double>> Xbody(Nbody * 3);
+  std::mt19937_64 gen;
+  std::uniform_real_distribution uniform_dist(0., 1.);
+  std::generate(Xbody.begin(), Xbody.end(), 
      [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
-
-//   /*cell.erase(cell.begin() + 1, cell.begin() + Nleaf - 1);
-//   cell[0].Child[0] = 1; cell[0].Child[1] = Nleaf + 1;
-//   ncells = Nleaf + 1;
-//   levels = 1;*/
 
 //   DenseZMat denseA(Nbody, Nbody);
 //   gen_matrix(eval, Nbody, Nbody, &body[0], &body[0], denseA.A);
@@ -189,16 +133,20 @@ int main(int argc, char* argv[]) {
 //   matA.init_gpu_handles(nccl_comms);
 //   matA.allocSparseMV(handle, nccl_comms);*/
 
+  // multiply by 3 to get the actual length
+  // this way, we can reduce the number of elems if necessary
   long long lenX = Nbody * 3;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
+  // copy random x into X1, X2
   std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
   std::copy(&Xbody[0], &Xbody[lenX], &X2[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
   matA.matVecMul(&X1[0]);
+  // todo remove this testing code of the transpose
   //matA.matVecMulSp(handle, &X1[0]);
   //Eigen::MatrixXcd RX = U_sorted.triangularView<Eigen::Lower>();
   //Eigen::MatrixXcd RX2 = U_sorted.triangularView<Eigen::StrictlyLower>().transpose();
@@ -206,10 +154,11 @@ int main(int argc, char* argv[]) {
   //Eigen::Map<Eigen::VectorXcd> t2(&X2[0], lenX);
   //Eigen::VectorXcd r = RX3 * t2;
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  matvec_time = MPI_Wtime() - matvec_time;
-  matvec_comm_time = ColCommMPI::get_comm_time();
+  //MPI_Barrier(MPI_COMM_WORLD);
+  //matvec_time = MPI_Wtime() - matvec_time;
+  //matvec_comm_time = ColCommMPI::get_comm_time();
 
+  // calculate reference into X2
   double refmatvec_time = MPI_Wtime();
   Eigen::Map<Eigen::VectorXcd> t(&X2[0], lenX);
   t = U_sorted * t;
@@ -223,7 +172,7 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
   if (mpi_rank == 0) {
-    std::cout << "Construct Err: " << cerr << std::endl;
+    std::cout << "Construct Err (without factorization basis): " << cerr << std::endl;
     //std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
     //std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
     //std::cout << "Dense Matvec Time: " << refmatvec_time << std::endl;
@@ -233,15 +182,17 @@ int main(int argc, char* argv[]) {
     std::cout << "Condition #: " << cond << std::endl;*/
   }
 
+  //Eigen::MatrixXcd RX = U_sorted.topLeftCorner(237, 237);
+  //Eigen::MatrixXcd RX = U_sorted.topLeftCorner(10, 10);
+  //Eigen::PartialPivLU<Eigen::MatrixXcd> fac(U);
+  //Eigen::FullPivLU<Eigen::MatrixXcd> fac(RX);
+  //fac.setThreshold(1e-6);
+  //std::cout<<"is invertible "<<fac.isInvertible()<<" "<<fac.rank()<<std::endl;
+  //std::cout<<"SINGULAR "<<(std::abs(fac.determinant()) <= std::numeric_limits<double>::min()) <<" "<<std::abs(fac.determinant())<<" "<<std::numeric_limits<double>::min()<<std::endl;
+
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  H2MatrixSolver matM;
-  if (mode.compare("h2") == 0)
-    matM = H2MatrixSolver(U_sorted, 0, rank, leveled_rank, cell, theta, levels);
-    //matM = H2MatrixSolver(denseA, eval, 0., rank, leveled_rank, cell, theta, &body[0], levels);
-  else if (mode.compare("hss") == 0)
-    matM = H2MatrixSolver(U_sorted, 0, rank, leveled_rank, cell, 0, levels);
-    //matM = H2MatrixSolver(denseA, eval, 0., rank, leveled_rank, cell, 0., &body[0], levels);
+  H2MatrixSolver matM(U_sorted, 0, rank, leveled_rank, cell, theta, levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
@@ -278,10 +229,10 @@ int main(int argc, char* argv[]) {
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
-    std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
+    //std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
-    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
-    std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
+    //std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
+    //std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
   }
 
@@ -306,6 +257,15 @@ int main(int argc, char* argv[]) {
         h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
         m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
         matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());*/
+  }
+
+  // GMRES without preconditioning
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  matM.solveGMRESDenseNoPrecon(1e-13, U_sorted, &X1[0], &X2[0], 10, 50);
+  if (mpi_rank == 0) {
+    std::cout << "GMRES (no preconditioner) Residual: " << matM.resid[matM.iters] << ", Iters: " << matM.iters << std::endl;
+    for (long long i = 0; i <= matM.iters; i++)
+      std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
   }
 
   matA.free_all_comms();

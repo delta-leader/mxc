@@ -455,34 +455,50 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
           Eigen::Map<Eigen::MatrixXcd> A_ij(A[ij], M, N);
           A_ij = mat.block(cells[ci].Body[0] * 3, cells[cj].Body[0] * 3, M, N);
         }
-        // generate the far field only if it exists
-        if (far_rows > 0) {
+        if (1. <= epi) {
+          // build an HSS basis
+          far_rows = mat.rows() - M;
           Eigen::MatrixXcd far(far_rows, M);
-          long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
-          //std::cout<<"Current Near "<<current_near<<std::endl;
-          //std::cout<<ARows[i]<<" "<<ARows[i+1]<<std::endl;
-          long long current_rows = cells[current_near].Body[0] * 3;
+          long long diag = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
+          long long top = cells[ci].Body[0] * 3;
+          long long bottom = cells[ci].Body[1] * 3;
           //std::cout<<"Top Rows "<<0<<" "<<cells[ci].Body[0] * 3<<" | "<<current_rows<<" "<<M<<std::endl;
-          far.topRows(current_rows) = mat.block(0, cells[ci].Body[0] * 3, current_rows, M);
-          for (long long ij = ARows[i]; ij < ARows[i + 1] - 1; ij++) {
-            current_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-            //std::cout<<"Current Near "<<current_near<<std::endl;
-            long long next_near = Near.ColIndex[ij + 1 + Near.RowIndex[ybegin]];
-            //std::cout<<"Next Near "<<next_near<<std::endl;
-            long long add_rows = cells[next_near].Body[0] * 3 - cells[current_near].Body[1] * 3;
-            //std::cout<<"Middle Rows "<<current_rows<<" "<<add_rows<<std::endl;
-            //std::cout<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_rows<<" "<<M<<std::endl;
-            far.middleRows(current_rows, add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
-            current_rows += add_rows;
-          }
-          current_near = Near.ColIndex[ARows[i + 1] - 1 + Near.RowIndex[ybegin]];
-          long long add_rows = mat.rows() - cells[current_near].Body[1] * 3;
-          //std::cout<<"Bottom Rows "<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_rows<<" "<<M<<std::endl;
-          //std::cout<<"Current Near "<<current_near<<std::endl;
-          far.bottomRows(add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
+          far.topRows(top) = mat.block(0, top, top, M);
+          far.bottomRows(mat.rows() - bottom) = mat.block(bottom, top, mat.rows() - bottom, M);
           long long rank = compute_basis(far, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-          std::cout<<"Rank "<<rank<<std::endl;
+          //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
+        } else {
+          // build an H2 basis
+          // generate the far field only if it exists
+          if (far_rows > 0) {
+            Eigen::MatrixXcd far(far_rows, M);
+            long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
+            //std::cout<<"Current Near "<<current_near<<std::endl;
+            //std::cout<<ARows[i]<<" "<<ARows[i+1]<<std::endl;
+            long long current_rows = cells[current_near].Body[0] * 3;
+            //std::cout<<"Top Rows "<<0<<" "<<cells[ci].Body[0] * 3<<" | "<<current_rows<<" "<<M<<std::endl;
+            far.topRows(current_rows) = mat.block(0, cells[ci].Body[0] * 3, current_rows, M);
+            for (long long ij = ARows[i]; ij < ARows[i + 1] - 1; ij++) {
+              current_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+              //std::cout<<"Current Near "<<current_near<<std::endl;
+              long long next_near = Near.ColIndex[ij + 1 + Near.RowIndex[ybegin]];
+              //std::cout<<"Next Near "<<next_near<<std::endl;
+              long long add_rows = cells[next_near].Body[0] * 3 - cells[current_near].Body[1] * 3;
+              //std::cout<<"Middle Rows "<<current_rows<<" "<<add_rows<<std::endl;
+              //std::cout<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_rows<<" "<<M<<std::endl;
+              far.middleRows(current_rows, add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
+              current_rows += add_rows;
+            }
+            current_near = Near.ColIndex[ARows[i + 1] - 1 + Near.RowIndex[ybegin]];
+            long long add_rows = mat.rows() - cells[current_near].Body[1] * 3;
+            //std::cout<<"Bottom Rows "<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_rows<<" "<<M<<std::endl;
+            //std::cout<<"Current Near "<<current_near<<std::endl;
+            far.bottomRows(add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
+            long long rank = compute_basis(far, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+            //std::cout<<"Rank "<<rank<<std::endl;
+            DimsLr[i + ibegin] = rank;
+          }
         }
       }
     }
@@ -498,8 +514,14 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
 
       long long M = Dims[i + ibegin];
       std::vector<long long> far_field(Dims);
-      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        far_field[ACols[ij]] = 0;
+      if (1. <= epi) {
+        // HSS basis
+        far_field[i] = 0;
+      } else {
+        // H2 basis
+        for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+          far_field[ACols[ij]] = 0;
+        }
       }
       auto far_rows = std::reduce(far_field.begin(), far_field.end());
       // only compute the far field if it exists
@@ -515,7 +537,7 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
         Eigen::MatrixXcd F(far_rows, M);
         gen_matrix(mat, far_rows, M, FS_ind.data(), S_ind[i + ibegin], F);
         long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-        std::cout<<"Rank "<<rank<<std::endl;
+        //std::cout<<"Rank "<<rank<<std::endl;
         DimsLr[i + ibegin] = rank;
       }
     }
@@ -662,14 +684,14 @@ void H2Matrix::constructBLR(const Eigen::Ref<const Eigen::MatrixXcd> &mat, doubl
   std::cout<<"A_size "<<A.size()<<std::endl;
 
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
-  typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
+  //typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
 
   // skip blocks that contain no points (because they are split further)
   if (std::reduce(Dims.begin(), Dims.end())) {
     // index of the first cell for this process on this level
     long long pbegin = lowerComm.oLocal();
     // number of cells for this process/level
-    long long pend = pbegin + lowerComm.lenLocal();
+   //long long pend = pbegin + lowerComm.lenLocal();
 
     // loop over all nodes
     for (long long i = 0; i < nodes; i++) {
@@ -841,13 +863,18 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
     V.topRows(Ms) = Ui.leftCols(Ms).adjoint();
 
     if (0 < Mr) {
+      // this is only a check for singularity, not needed for the actual computation
+      std::vector<int> ipiv(Mr);
+      Eigen::MatrixXcd test = Aii.bottomRightCorner(Mr, Mr);
+      auto error = LAPACKE_zgetrf(LAPACK_COL_MAJOR, Mr, Mr, reinterpret_cast<__complex__ double*>(test.data()), Mr, ipiv.data());
+
       Eigen::PartialPivLU<Eigen::MatrixXcd> fac(Aii.bottomRightCorner(Mr, Mr));
       V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
       if (0 < Ms) {
         Aii.bottomLeftCorner(Mr, Ms).noalias() = V.bottomRows(Mr) * b.topRows(Ms).transpose();
         Aii.topLeftCorner(Ms, Ms).noalias() -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
       }
-      info += (std::abs(fac.determinant()) <= std::numeric_limits<double>::min());
+      info += error; //(std::abs(fac.determinant()) <= std::numeric_limits<double>::min());
     }
 
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 

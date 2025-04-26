@@ -62,10 +62,10 @@ H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, do
   //for (long long l = 1; l <= levels; l++)
   //  wsa[l].construct(epi, eval_d, rank_func(l), rank * 2, 2, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), fix_rank ? HSS_Far : Far, bodies, wsa[l - 1]);
 
-  std::cout<<"Level "<<levels<<std::endl;
+  //std::cout<<"Level "<<levels<<std::endl;
   A[levels].construct(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
-    std::cout<<"Level "<<l<<std::endl;
+    //std::cout<<"Level "<<l<<std::endl;
     A[l].construct(mat, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1]);
   }
 
@@ -267,6 +267,66 @@ void H2MatrixSolver::solveGMRESDense(double tol, const Eigen::Ref<const Eigen::M
       //matVecMul(R.data());
       R = mat * v.col(i);
       solvePrecondition(R.data());
+
+      H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
+      comm[levels].level_sum(H.col(i).data(), i + 1);
+      R.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
+
+      nsum = R.adjoint() * R;
+      comm[levels].level_sum(&nsum, 1);
+      H(i + 1, i) = std::sqrt(nsum.real());
+      v.col(i + 1) = R * (1. / H(i + 1, i));
+    }
+
+    Eigen::VectorXcd s = Eigen::VectorXcd::Zero(ld);
+    s(0) = beta;
+    R = H.householderQr().solve(s);
+    X.noalias() += v.leftCols(inner_iters) * R;
+
+    R = -X;
+    //matVecMul(R.data());
+    R = mat * R;
+    R += B;
+
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+    resid[++iters] = std::sqrt(nsum.real()) / normb;
+  }
+}
+
+void H2MatrixSolver::solveGMRESDenseNoPrecon(double tol, const Eigen::Ref<const Eigen::MatrixXcd>& mat, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
+  long long N = A[levels].lenX;
+  long long ld = inner_iters + 1;
+
+  Eigen::Map<const Eigen::VectorXcd> B(b, N);
+  Eigen::Map<Eigen::VectorXcd> X(x, N);
+
+  std::complex<double> nsum = B.adjoint() * B;
+  comm[levels].level_sum(&nsum, 1);
+  double normb = std::sqrt(nsum.real());
+  if (normb == 0.)
+    normb = 1.;
+
+  Eigen::VectorXcd R = B;
+  resid.resize(outer_iters + 1);
+  resid[0] = 1.;
+  iters = 0;
+
+  while (iters < outer_iters && tol <= resid[iters]) {
+    //solvePrecondition(R.data());
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+
+    double beta = std::sqrt(nsum.real());
+    Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(ld, inner_iters);
+    Eigen::MatrixXcd v = Eigen::MatrixXcd::Zero(N, ld);
+    v.col(0) = R * (1. / beta);
+    
+    for (long long i = 0; i < inner_iters; i++) {
+      //R = v.col(i);
+      //matVecMul(R.data());
+      R = mat * v.col(i);
+      //solvePrecondition(R.data());
 
       H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
       comm[levels].level_sum(H.col(i).data(), i + 1);

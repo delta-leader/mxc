@@ -41,6 +41,7 @@ public:
   void solvePreconditionDevice(deviceHandle_t handle, std::complex<double> X[]);
   void solveGMRES(double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
   void solveGMRESDense(double tol, const Eigen::Ref<const Eigen::MatrixXcd>& mat, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);
+  void solveGMRESDenseNoPrecon(double tol, const Eigen::Ref<const Eigen::MatrixXcd>& mat, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);  
   void solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms);
 
   void free_all_comms();
