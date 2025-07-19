@@ -7,6 +7,8 @@
 #include <array>
 #include <random>
 
+#include <iostream>
+
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 
@@ -88,6 +90,18 @@ void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, long long m, long
   for (long long i = 0; i < m; ++i) {
     for (long long j = 0; j < n; ++j) {
       Aij(i, j) = mat(rows[i], cols[j]);
+    }
+  }
+}
+
+void gen_matrix_hidr(const Eigen::Ref<const Eigen::MatrixXcd> &mat, long long m, long long n, const long long* rows, const long long* cols, Eigen::Ref<Eigen::MatrixXcd> Aij) {
+  long long A_row_offset = 0, A_col_offset = 0;
+  for (long long i = 0; i < m; ++i) {
+    for (long long ii = 0; ii < 3; ++ii) {
+      for (long long j = 0; j < n; ++j) {
+        //std::cout<<i*3+ii<<", "<<j<<" = "<<rows[i]*3 + ii<<", "<<j<<std::endl;
+        Aij(i*3+ii, j) = mat(rows[i]*3 + ii, cols[j]);
+      }
     }
   }
 }

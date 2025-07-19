@@ -54,3 +54,5 @@ _deps
 
 # input files
 input/
+output/
+build/

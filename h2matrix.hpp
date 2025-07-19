@@ -1,6 +1,7 @@
 #pragma once
 
 #include <matrix_container.hpp>
+#include <hidr.hpp>
 #include <Eigen/Dense>
 
 class MatrixAccessor;
@@ -47,6 +48,7 @@ public:
   
   void construct(const MatrixAccessor& eval, double epi, const Cell cells[], const CSR& Near, const double bodies[], const Hmatrix& wsa, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
   void construct(const Eigen::Ref<const Eigen::MatrixXcd>& mat, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
+  void construct(const Eigen::Ref<const Eigen::MatrixXcd>& mat, double epi, const Cell cells[], const CSR& Near, const HiDR& hidr, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
   void constructBLR(const Eigen::Ref<const Eigen::MatrixXcd>& mat, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm);
 
   void matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm);

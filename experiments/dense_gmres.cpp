@@ -6,7 +6,6 @@
 #include <Eigen/Dense>
 
 int main(int argc, char* argv[]) {
-  std::cout<<"START"<<std::endl;
   MPI_Init(&argc, &argv);
 
   /*deviceHandle_t handle;
@@ -129,24 +128,6 @@ int main(int argc, char* argv[]) {
 
   // Get the U matrix (element/element interactions and sort it according to the tree)
   Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
-  // scale the matrix
-  Eigen::MatrixXcd RN = A.topLeftCorner(n_nodes * 3, n_nodes * 3);
-  Eigen::MatrixXcd RE = A.bottomRightCorner(n_elems * 3, n_elems * 3);
-  std::cout<<"Nodes "<<RN.diagonal().real().minCoeff()<< " " << RN.diagonal().real().maxCoeff()<<std::endl;
-  std::cout<<"Elements "<<RE.diagonal().real().minCoeff()<< " " << RE.diagonal().real().maxCoeff()<<std::endl;
-  //std::cout<<"Nodes "<<RN.diagonal().imag().minCoeff()<< " " << RN.diagonal().imag().maxCoeff()<<std::endl;
-  //std::cout<<"Elements "<<RE.diagonal().imag().minCoeff()<< " " << RE.diagonal().imag().maxCoeff()<<std::endl;
-  Eigen::MatrixXcd S = Eigen::MatrixXcd::Identity(n_mat, n_mat);
-  for (long long i = n_nodes * 3; i < n_mat; ++i)
-    S(i, i) = std::sqrt(std::max(std::abs(RN.diagonal().real().minCoeff()), std::abs(RN.diagonal().real().maxCoeff())) / std::max(std::abs(RE.diagonal().real().minCoeff()), std::abs(RE.diagonal().real().maxCoeff()))); //17;//32;
-  A = S * A * S;
-  Eigen::MatrixXcd RN2 = A.topLeftCorner(n_nodes * 3, n_nodes * 3);
-  Eigen::MatrixXcd RE2 = A.bottomRightCorner(n_elems * 3, n_elems * 3);
-  std::cout<<"Nodes "<<RN2.diagonal().real().minCoeff()<< " " << RN2.diagonal().real().maxCoeff()<<std::endl;
-  std::cout<<"Elements "<<RE2.diagonal().real().minCoeff()<< " " << RE2.diagonal().real().maxCoeff()<<std::endl;
-  //std::cout<<"Nodes "<<RN2.diagonal().imag().minCoeff()<< " " << RN2.diagonal().imag().maxCoeff()<<std::endl;
-  //std::cout<<"Elements "<<RE2.diagonal().imag().minCoeff()<< " " << RE2.diagonal().imag().maxCoeff()<<std::endl;
-
   //Eigen::MatrixXcd U = A.bottomRightCorner(n_elems * 3, n_elems * 3);
   Eigen::MatrixXcd A_sorted(Nbody * 3, Nbody * 3);
   Eigen::Map<Eigen::VectorXcd> B(b.data(), n_mat);
@@ -180,167 +161,29 @@ int main(int argc, char* argv[]) {
       }
     }
   }
-  // for (int i = 0; i < Nbody; ++i) {
-  //     for (int ii = 0; ii < 3; ++ii) {
-  //          B_sorted(i * 3 + ii) = B(idx[i] * 3 + ii);
-  //          X_sorted(i * 3 + ii) = X(idx[i] * 3 + ii);
-  //     }
-  // }
+  for (int i = 0; i < Nbody; ++i) {
+      for (int ii = 0; ii < 3; ++ii) {
+           B_sorted(i * 3 + ii) = B(idx[i] * 3 + ii);
+           X_sorted(i * 3 + ii) = X(idx[i] * 3 + ii);
+      }
+  }
 
-  // Eigen::PartialPivLU<Eigen::MatrixXcd> fac(A);
-  // Eigen::VectorXcd test1 = fac.solve(B);
-  // Eigen::PartialPivLU<Eigen::MatrixXcd> fac2(A_sorted);
-  // Eigen::VectorXcd test2 = fac2.solve(B_sorted);
-  // double err1 = H2MatrixSolver::solveRelErr(n_mat, x.data(), test1.data());
-  // double err2 = H2MatrixSolver::solveRelErr(n_mat, X_sorted.data(), test2.data());
-  // std::cout<<"Error (unsorted): "<<err1<<std::endl;
-  // std::cout<<"Error (sorted): "<<err2<<std::endl;
+  Eigen::PartialPivLU<Eigen::MatrixXcd> fac(A);
+  Eigen::VectorXcd test1 = fac.solve(B);
+  Eigen::PartialPivLU<Eigen::MatrixXcd> fac2(A_sorted);
+  Eigen::VectorXcd test2 = fac2.solve(B_sorted);
+  double err1 = H2MatrixSolver::solveRelErr(n_mat, x.data(), test1.data());
+  double err2 = H2MatrixSolver::solveRelErr(n_mat, X_sorted.data(), test2.data());
+  std::cout<<"Error (unsorted): "<<err1<<std::endl;
+  std::cout<<"Error (sorted): "<<err2<<std::endl;
   //Eigen::FullPivLU<Eigen::MatrixXcd> fac(RX);
   //fac.setThreshold(1e-6);
-
-  //double threshold = 1e-4 * std::max(A.real().maxCoeff(), std::abs(A.real().minCoeff()));
-  //double norm = A.lpNorm<Eigen::Infinity>();
-  //double norm = A.norm();
-  /*double threshold = 1e-2;
-  // Try taking the norm per row
-  //std::cout<<"Norm: "<<norm<<std::endl;
-  std::cout<<"Threshold: "<< threshold <<std::endl;
-  for (int i = 0; i < 48; ++i) {
-    //double norm = A.block(i, 48, 1, n_mat-48).lpNorm<Eigen::Infinity>();
-    double norm = A.block(i, 48, 1, n_mat-48).norm();
-    //double norm = A.row(i).lpNorm<Eigen::Infinity>();
-    std::cout<<"Norm: "<<norm<<std::endl;
-    long long count = 0;
-    for (int j = 48; j < n_mat; ++j)
-      if (std::abs(A(i,j)) >= threshold * norm)
-        count++;
-    std::cout<<"Row "<< i <<": " << count<<", Density: "<< ((double)count)/(n_mat - 48)<<std::endl;
-  }*/
 
 
   // std::cout<<"Solver"<<std::endl;
   // // generate the H2 matrix (with normal basis)
   // H2MatrixSolver matA(A_sorted, epi, rank, leveled_rank, cell, theta, levels);
   // std::cout<<"Construction"<<std::endl;
-
-  // Lets assume we have the first leaf level node with 48 elements
-  // near field dim
-  /*long long M = 48;
-  // far field dim
-  long long N = A_sorted.rows() - M;
-  Eigen::MatrixXcd far = A_sorted.bottomLeftCorner(N, M);
-  std::cout<<"Rows: "<<N/3<<std::endl;
-  long long K = std::min(M, N);
-  Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(K, M);
-  if (K < N) {
-    Eigen::HouseholderQR<Eigen::MatrixXcd> qr(far);
-    RX = qr.matrixQR().topRows(K).triangularView<Eigen::Upper>();
-  }
-  else
-    std::cout<<"N < M"<<std::endl;
-
-  Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(RX);
-  //rrqr.setThreshold(1e-4);
-  rank = 16;//rrqr.rank();
-  std::cout<<"Rank: "<<rank<<std::endl;
-  Eigen::MatrixXcd T(rank, M), Q(M, rank);
-  Eigen::MatrixXcd TQ = rrqr.householderQ(); 
-  Eigen::MatrixXcd test = TQ.leftCols(rank) * (rrqr.matrixR().topRows(rank).template triangularView<Eigen::Upper>());
-  double terror = (RX * rrqr.colsPermutation() - test).norm() / RX.norm();
-  std::cout<<"QR Error: "<<terror<<std::endl;
-  T.topRows(rank) = rrqr.matrixR().topRows(rank);
-  T.topLeftCorner(rank, rank).triangularView<Eigen::Upper>().solveInPlace(T.topRightCorner(rank, M - rank));
-  T.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
-  bool orth = false;
-  if (orth) {
-    RX = (rrqr.colsPermutation() * T.topRows(rank).transpose());
-    Eigen::HouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> qr(RX);
-    Q = qr.householderQ();
-    T.setZero();
-    T.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
-  } else { 
-    Q.setZero();
-    Q.leftCols(rank) = rrqr.colsPermutation() * T.topRows(rank).transpose();
-    T.setZero();
-    T.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
-  }
-  std::cout<<"Q "<<Q.rows()<<" "<<Q.cols()<<std::endl;
-  std::cout<<"T "<<T.rows()<<" "<<T.cols()<<std::endl;
-
-  // create a random vector to estimate the accuracy via matvec
-  std::vector<std::complex<double>> y(rank);
-  std::mt19937_64 rng(42);
-  std::uniform_real_distribution distx(0., 1.);
-  std::generate(y.begin(), y.end(), 
-     [&]() { return std::complex<double>(distx(rng), 0.); });
-  Eigen::Map<Eigen::VectorXcd> Y(y.data(), rank);
-  Eigen::VectorXcd approx_ref = Q * Y;
-
-  long long num_pts =  N / 3;
-  long long node_samples = 144 / 4;
-  long long elem_samples = 316 / 4;
-  long long num_samples = node_samples  + elem_samples;
-  long long N2 = num_samples * 3;
-  std::cout<<"Rows: "<<N2/3<<std::endl;
-
-  std::uniform_int_distribution<long long> dist(0, 143);
-  Eigen::MatrixXcd Sample(N2, M);
-  std::vector<int> selected(num_samples);
-  long long i;
-  for (i = 0; i< node_samples; ++i) {
-    long long idx = dist(rng);
-    while (std::find(selected.begin(), selected.end(), idx) != selected.end())
-      idx = dist(rng);
-    selected.emplace_back(idx);
-    for (long long j = 0; j<3; ++j) {
-      Sample.row(i * 3 + j) = far.row(idx * 3 + j);
-    }
-  }
-  std::uniform_int_distribution<long long> distE(144, num_pts - 1);
-  for (; i< num_samples; ++i) {
-    long long idx = distE(rng);
-    while (std::find(selected.begin(), selected.end(), idx) != selected.end())
-      idx = distE(rng);
-    selected.emplace_back(idx);
-    for (long long j = 0; j<3; ++j) {
-      Sample.row(i * 3 + j) = far.row(idx * 3 + j);
-    }
-  }
-  std::cout<<"Sample Points: "<<std::endl;
-  K = std::min(M, N2);
-  RX = Eigen::MatrixXcd::Zero(K, M);
-  if (K < N2) {
-    Eigen::HouseholderQR<Eigen::MatrixXcd> qr(Sample);
-    RX = qr.matrixQR().topRows(K).triangularView<Eigen::Upper>();
-  }
-  else
-    std::cout<<"N2 < M"<<std::endl;
-
-  Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr2(RX);
-  Eigen::MatrixXcd T2(rank, M), Q2(M, rank);
-  T2.topRows(rank) = rrqr2.matrixR().topRows(rank);
-  T2.topLeftCorner(rank, rank).triangularView<Eigen::Upper>().solveInPlace(T2.topRightCorner(rank, M - rank));
-  T2.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
-  if (orth) {
-    RX = (rrqr2.colsPermutation() * T2.topRows(rank).transpose());
-    Eigen::HouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> qr2(RX);
-    Q2 = qr2.householderQ();
-    T2.setZero();
-    T2.topLeftCorner(rank, rank) = qr2.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
-  } else { 
-    Q2.setZero();
-    Q2.leftCols(rank) = rrqr2.colsPermutation() * T2.topRows(rank).transpose();
-    T2.setZero();
-    T2.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
-  }
-  std::cout<<"Q2 "<<Q2.rows()<<" "<<Q2.cols()<<std::endl;
-  std::cout<<"T2 "<<T2.rows()<<" "<<T2.cols()<<std::endl;
-  Eigen::VectorXcd approx = Q2 * Y;
-  double testerr = std::sqrt((approx_ref - approx).squaredNorm() / approx_ref.squaredNorm());
-  std::cout<<"Error: "<<testerr<<std::endl;*/
-
-
-
   
   // generate random x
   std::vector<std::complex<double>> Xbody(Nbody * 3);
@@ -425,8 +268,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  //H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels);
-  H2MatrixSolver matM(A_sorted, epi, rank, leveled_rank, cell, theta, levels);
+  H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels);
 
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
@@ -442,7 +284,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
-  //matM.factorizeM();
+  matM.factorizeM();
   //matM.factorizeDeviceM(handle);
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -453,26 +295,26 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  //matM.solvePrecondition(&X1[0]);
+  matM.solvePrecondition(&X1[0]);
   //matM.solvePreconditionDevice(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  //double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[matM.local_bodies.first]);
-  //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[matM.local_bodies.first]);
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
     //std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
     //std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     //std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
-    //std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
+    std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matM.solveGMRESDense(1e-12, A_sorted, &X1[0], &X2[0], 10, 50);
+  matM.solveGMRESDense(1e-13, A_sorted, &X1[0], &X2[0], 10, 50);
   //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
   //matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
 
@@ -486,53 +328,47 @@ int main(int argc, char* argv[]) {
     for (long long i = 0; i <= matM.iters; i++)
       std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
 
-  //   /*if (csv != nullptr)
-  //     write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
-  //       h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
-  //       m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
-  //       matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());*/
+    /*if (csv != nullptr)
+      write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
+        h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
+        m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
+        matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());*/
   }
 
-  // //GMRES without preconditioning
-  // std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
-  // matM.solveGMRESDenseNoPrecon(1e-13, A_sorted, &X1[0], &X2[0], 10, 50);
-  // if (mpi_rank == 0) {
-  //   std::cout << "GMRES (no preconditioner) Residual: " << matM.resid[matM.iters] << ", Iters: " << matM.iters << std::endl;
-  //   for (long long i = 0; i <= matM.iters; i++)
-  //     std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
-  //}
+  //GMRES without preconditioning
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  matM.solveGMRESDenseNoPrecon(1e-13, A_sorted, &X1[0], &X2[0], 10, 50);
+  if (mpi_rank == 0) {
+    std::cout << "GMRES (no preconditioner) Residual: " << matM.resid[matM.iters] << ", Iters: " << matM.iters << std::endl;
+    for (long long i = 0; i <= matM.iters; i++)
+      std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
+  }
 
-  // //GMRES with dense preconditioning
-  // Eigen::PartialPivLU<Eigen::MatrixXcd> precon(A_sorted);
-  // std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
-  // matM.solveGMRESDensePrecon(1e-13, precon, A_sorted, &X1[0], &X2[0], 10, 50);
-  // if (mpi_rank == 0) {
-  //   std::cout << "GMRES (dense preconditioner) Residual: " << matM.resid[matM.iters] << ", Iters: " << matM.iters << std::endl;
-  //   for (long long i = 0; i <= matM.iters; i++)
-  //     std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
-  // }
+  //GMRES with dense preconditioning
+  Eigen::PartialPivLU<Eigen::MatrixXcd> precon(A_sorted);
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  matM.solveGMRESDensePrecon(1e-13, precon, A_sorted, &X1[0], &X2[0], 10, 50);
+  if (mpi_rank == 0) {
+    std::cout << "GMRES (dense preconditioner) Residual: " << matM.resid[matM.iters] << ", Iters: " << matM.iters << std::endl;
+    for (long long i = 0; i <= matM.iters; i++)
+      std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
+  }
 
-  // Eigen::MatrixXcd RX = A_sorted.triangularView<Eigen::Lower>();
-  // Eigen::MatrixXcd RX2 = A_sorted.triangularView<Eigen::StrictlyLower>().transpose();
-  // Eigen::MatrixXcd RX3 = RX + RX2;
-  // Eigen::Map<Eigen::VectorXcd> t2(&X1[0], lenX);
-
-  // /*for (long long j = 0; j < Nleaf; ++j) {
-  //   long long offset = cell[Nleaf - 1 + j].Body[0];
-  //   long long num = cell[Nleaf - 1 + j].Body[1] - offset;
-  //   RX3.block(offset, offset, num, num) = A_sorted.block(offset, offset, num, num);
-  // }*/
-  // t2 = RX3 * t2;
-  // std::cout<<"Symm Error:" << H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0])<<std::endl;
-  // Eigen::PartialPivLU<Eigen::MatrixXcd> precon2(RX3);
-  // //GMRES with dense preconditioning and symmetric mtrix
-  // std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
-  // matM.solveGMRESDensePrecon(1e-13, precon2, A_sorted, &X1[0], &X2[0], 10, 50);
-  // if (mpi_rank == 0) {
-  //   std::cout << "GMRES (dense preconditioner) Residual: " << matM.resid[matM.iters] << ", Iters: " << matM.iters << std::endl;
-  //   for (long long i = 0; i <= matM.iters; i++)
-  //     std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
-  // }
+  Eigen::MatrixXcd RX = A_sorted.triangularView<Eigen::Lower>();
+  Eigen::MatrixXcd RX2 = A_sorted.triangularView<Eigen::StrictlyLower>().transpose();
+  Eigen::MatrixXcd RX3 = RX + RX2;
+  Eigen::Map<Eigen::VectorXcd> t2(&X1[0], lenX);
+  t2 = RX3 * t2;
+  std::cout<<"Symm Error:" << H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0])<<std::endl;
+  Eigen::PartialPivLU<Eigen::MatrixXcd> precon2(RX3);
+  //GMRES with dense preconditioning and symmetric mtrix
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  matM.solveGMRESDensePrecon(1e-13, precon2, A_sorted, &X1[0], &X2[0], 10, 50);
+  if (mpi_rank == 0) {
+    std::cout << "GMRES (dense preconditioner) Residual: " << matM.resid[matM.iters] << ", Iters: " << matM.iters << std::endl;
+    for (long long i = 0; i <= matM.iters; i++)
+      std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
+  }
 
   //matA.free_all_comms();
   matM.free_all_comms();

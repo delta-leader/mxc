@@ -5,6 +5,7 @@
 #include <set>
 #include <numeric>
 
+
 MPI_Comm MPI_Comm_split_unique(std::vector<MPI_Comm>& allocedComm, int color, int mpi_rank, MPI_Comm world) {
   MPI_Comm comm = MPI_COMM_NULL;
   MPI_Comm_split(world, color, mpi_rank, &comm);
@@ -62,7 +63,7 @@ ColCommMPI::ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<l
   std::set<long long> cols;
   std::for_each(&ACols[ARows[pbegin]], &ACols[ARows[pend]], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
   std::for_each(&CCols[CRows[pbegin]], &CCols[CRows[pend]], [&](long long col) { cols.insert(col_to_mpi_rank(col)); });
-
+  
   std::vector<long long> NeighborRanks(cols.begin(), cols.end());
   Proc = std::distance(NeighborRanks.begin(), std::find(NeighborRanks.begin(), NeighborRanks.end(), p));
   Boxes.resize(NeighborRanks.size());

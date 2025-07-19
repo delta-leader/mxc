@@ -1,6 +1,8 @@
 
 #include <solver.hpp>
 
+#include <hidr.hpp>
+
 #include <Eigen/Dense>
 #include <algorithm>
 #include <cmath>
@@ -45,7 +47,6 @@ H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, do
   
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
-  CSR HSS_Far('F', cells, cells, 0.);
   int mpi_size = 1;
   MPI_Comm_size(world, &mpi_size);
 
@@ -53,8 +54,9 @@ H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, do
   std::vector<std::pair<long long, long long>> tree(cells.size());
   std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
   
-  for (long long i = 0; i <= levels; i++)
+  for (long long i = 0; i <= levels; i++) {
     comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
+  }
 
   bool fix_rank = (epi == 0.);
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
@@ -62,11 +64,23 @@ H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, do
   //for (long long l = 1; l <= levels; l++)
   //  wsa[l].construct(epi, eval_d, rank_func(l), rank * 2, 2, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), fix_rank ? HSS_Far : Far, bodies, wsa[l - 1]);
 
-  //std::cout<<"Level "<<levels<<std::endl;
-  A[levels].construct(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
+  std::vector<HiDR> hidr(levels + 1);
+  hidr[levels].initialize(comm[levels].oGlobal(), comm[levels].lenLocal(), cells.data());
+  // I don't think I need to do anything for node 0
+  for (long long l = levels - 1; l > 0; l--) {
+    std::cout<<"Level "<<l<<std::endl;
+    hidr[l].bottom_up_sweep(comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), hidr[l + 1]);
+  }
+  for (long long l = 1; l <= levels; l++) {
+    std::cout<<"Level "<<l<<std::endl;
+    hidr[l].top_down_sweep(cells.data(), Far, hidr[l - 1]);
+  }
+  std::cout<<"Levelx "<<levels<<std::endl;
+  A[levels].construct(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, hidr[levels], comm[levels], A[levels], comm[levels]);
+  //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
-    //std::cout<<"Level "<<l<<std::endl;
-    A[l].construct(mat, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1]);
+    std::cout<<"Level "<<l<<std::endl;
+    A[l].construct(mat, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, hidr[l], comm[l], A[l + 1], comm[l + 1]);
   }
 
   long long llen = comm[levels].lenLocal();
@@ -354,6 +368,68 @@ void H2MatrixSolver::solveGMRESDenseNoPrecon(double tol, const Eigen::Ref<const 
   }
 }
 
+void H2MatrixSolver::solveGMRESDensePrecon(double tol, const Eigen::PartialPivLU<Eigen::MatrixXcd>& precon, const Eigen::Ref<const Eigen::MatrixXcd>& mat, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
+  long long N = A[levels].lenX;
+  long long ld = inner_iters + 1;
+
+  Eigen::Map<const Eigen::VectorXcd> B(b, N);
+  Eigen::Map<Eigen::VectorXcd> X(x, N);
+
+  std::complex<double> nsum = B.adjoint() * B;
+  comm[levels].level_sum(&nsum, 1);
+  double normb = std::sqrt(nsum.real());
+  if (normb == 0.)
+    normb = 1.;
+
+  Eigen::VectorXcd R = B;
+  resid.resize(outer_iters + 1);
+  resid[0] = 1.;
+  iters = 0;
+
+  while (iters < outer_iters && tol <= resid[iters]) {
+    //solvePrecondition(R.data());
+    R = precon.solve(R);
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+
+    double beta = std::sqrt(nsum.real());
+    Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(ld, inner_iters);
+    Eigen::MatrixXcd v = Eigen::MatrixXcd::Zero(N, ld);
+    v.col(0) = R * (1. / beta);
+    
+    for (long long i = 0; i < inner_iters; i++) {
+      //R = v.col(i);
+      //matVecMul(R.data());
+      R = mat * v.col(i);
+      R = precon.solve(R);
+      //solvePrecondition(R.data());
+
+      H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
+      comm[levels].level_sum(H.col(i).data(), i + 1);
+      R.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
+
+      nsum = R.adjoint() * R;
+      comm[levels].level_sum(&nsum, 1);
+      H(i + 1, i) = std::sqrt(nsum.real());
+      v.col(i + 1) = R * (1. / H(i + 1, i));
+    }
+
+    Eigen::VectorXcd s = Eigen::VectorXcd::Zero(ld);
+    s(0) = beta;
+    R = H.householderQr().solve(s);
+    X.noalias() += v.leftCols(inner_iters) * R;
+
+    R = -X;
+    //matVecMul(R.data());
+    R = mat * R;
+    R += B;
+
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+    resid[++iters] = std::sqrt(nsum.real()) / normb;
+  }
+}
+
 void H2MatrixSolver::solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms) {
   resid.resize(outer_iters + 1);
   iters = solveDeviceGMRES(handle, levels, A_mv.data(), M.levels, M.desc.data(), tol, X, B, inner_iters, outer_iters, resid.data(), comm[levels], nccl_comms);
@@ -386,6 +462,7 @@ double H2MatrixSolver::solveRelErr(long long lenX, const std::complex<double> X[
     std::complex<double> diff = X[i] - ref[i];
     err[0] = err[0] + (diff.real() * diff.real());
     err[1] = err[1] + (ref[i].real() * ref[i].real());
+    //std::cout<<X[i]<<" - "<<ref[i] << " = " << diff << std::endl;
   }
   MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
   return std::sqrt(err[0] / err[1]);

@@ -164,6 +164,60 @@ void buildBinaryTree(Cell* cells, double* bodies, long long* indices, long long 
   }
 }
 
+void buildBinaryTree(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels, long long start, long long bodies_offset) {
+  cells[start].Body[0] = bodies_offset;
+  cells[start].Body[1] = bodies_offset + nbodies;
+  get_bounds(bodies, nbodies, cells[start].R.data(), cells[start].C.data());
+
+  long long nleaf = (long long)1 << levels;
+  for (long long level = 0; level < levels; ++ level) {
+    //std::cout<<"Level "<<level<<std::endl;
+    for (long long i = 0; i < (1 << level); i++) {
+      //std::cout<<"i "<<i<<std::endl;
+      long long offset = start << level;
+      //std::cout<<"cell "<<offset+i<<std::endl;
+      Cell& ci = cells[offset + i];
+      long long sdim = std::distance(ci.R.begin(), std::max_element(ci.R.begin(), ci.R.end()));
+      long long i_begin = ci.Body[0] - bodies_offset;
+      long long i_end = ci.Body[1] - bodies_offset;
+
+      long long i_num = i_end - i_begin;
+      std::vector<long long> sort_idx(i_num);
+      std::iota(sort_idx.begin(), sort_idx.end(), 0);
+      std::array<double, 3>* bodies3 = reinterpret_cast<std::array<double, 3>*>(&bodies[i_begin * 3]);
+      std::array<double, 3>* bodies3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[i_end * 3]);
+      std::sort(sort_idx.begin(), sort_idx.end(), 
+        [&](size_t i, size_t j) { return bodies3[i][sdim] < bodies3[j][sdim]; });
+
+      std::vector<double> bodies_copy(i_num * 3);
+      std::vector<long long> indices_copy(i_num);
+      std::memcpy(bodies_copy.data(), &bodies[i_begin * 3], sizeof(double) * i_num * 3);
+      std::memcpy(indices_copy.data(), &indices[i_begin], sizeof(long long) * i_num);
+      for (long long i = 0; i < i_num; ++i) {
+        for (long long j = 0; j < 3; ++j)
+          bodies[(i_begin + i) * 3 + j] = bodies_copy[sort_idx[i] * 3 + j];
+        indices[i_begin + i] = indices_copy[sort_idx[i]];
+      }
+      long long len = (offset << 1) + (i << 1);
+      //std::cout<<"Child 0 "<<len<<std::endl;
+      Cell& c0 = cells[len];
+      Cell& c1 = cells[len + 1];
+      ci.Child[0] = len;
+      ci.Child[1] = len + 2;
+
+      long long loc = i_begin + (i_end - i_begin) / 2;
+      c0.Body[0] = i_begin + bodies_offset;
+      c0.Body[1] = loc + bodies_offset;
+      c1.Body[0] = loc + bodies_offset;
+      c1.Body[1] = i_end + bodies_offset;
+
+      get_bounds(&bodies[i_begin * 3], loc - i_begin, c0.R.data(), c0.C.data());
+      get_bounds(&bodies[loc * 3], i_end - loc, c1.R.data(), c1.C.data());
+    }
+  }
+}
+
+
 void buildBinaryTree2(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels) {
   cells[0].Body[0] = 0;
   cells[0].Body[1] = nbodies;
@@ -208,5 +262,60 @@ void buildBinaryTree2(Cell* cells, double* bodies, long long* indices, long long
 
     get_bounds2(&bodies[i_begin * 2], loc - i_begin, c0.R.data(), c0.C.data());
     get_bounds2(&bodies[loc * 2], i_end - loc, c1.R.data(), c1.C.data());
+  }
+}
+
+void buildBinaryTree3(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels, long long start, long long bodies_offset) {
+  cells[start].Body[0] = bodies_offset;
+  cells[start].Body[1] = bodies_offset + nbodies;
+  get_bounds(bodies, nbodies, cells[start].R.data(), cells[start].C.data());
+
+  long long nleaf = (long long)1 << levels;
+  long long offset = 0;
+  for (long long level = 0; level < levels; ++ level) {
+    //std::cout<<"level "<<level<<std::endl;
+    offset = level ? offset * 2 + 2 : start;
+    for (long long i = 0; i < (1 << level); i++) {
+      //std::cout<<"i "<<i<<std::endl;
+      //long long offset = start << level;
+      //std::cout<<"cell "<<offset+i<<std::endl;
+      Cell& ci = cells[offset + i];
+      long long sdim = std::distance(ci.R.begin(), std::max_element(ci.R.begin(), ci.R.end()));
+      long long i_begin = ci.Body[0] - bodies_offset;
+      long long i_end = ci.Body[1] - bodies_offset;
+
+      long long i_num = i_end - i_begin;
+      std::vector<long long> sort_idx(i_num);
+      std::iota(sort_idx.begin(), sort_idx.end(), 0);
+      std::array<double, 3>* bodies3 = reinterpret_cast<std::array<double, 3>*>(&bodies[i_begin * 3]);
+      std::array<double, 3>* bodies3_end = reinterpret_cast<std::array<double, 3>*>(&bodies[i_end * 3]);
+      std::sort(sort_idx.begin(), sort_idx.end(), 
+        [&](size_t i, size_t j) { return bodies3[i][sdim] < bodies3[j][sdim]; });
+
+      std::vector<double> bodies_copy(i_num * 3);
+      std::vector<long long> indices_copy(i_num);
+      std::memcpy(bodies_copy.data(), &bodies[i_begin * 3], sizeof(double) * i_num * 3);
+      std::memcpy(indices_copy.data(), &indices[i_begin], sizeof(long long) * i_num);
+      for (long long i = 0; i < i_num; ++i) {
+        for (long long j = 0; j < 3; ++j)
+          bodies[(i_begin + i) * 3 + j] = bodies_copy[sort_idx[i] * 3 + j];
+        indices[i_begin + i] = indices_copy[sort_idx[i]];
+      }
+      long long len = (offset + i) * 2 + 2;
+      //std::cout<<"Child 0 "<<len<<std::endl;
+      Cell& c0 = cells[len];
+      Cell& c1 = cells[len + 1];
+      ci.Child[0] = len;
+      ci.Child[1] = len + 2;
+
+      long long loc = i_begin + (i_end - i_begin) / 2;
+      c0.Body[0] = i_begin + bodies_offset;
+      c0.Body[1] = loc + bodies_offset;
+      c1.Body[0] = loc + bodies_offset;
+      c1.Body[1] = i_end + bodies_offset;
+
+      get_bounds(&bodies[i_begin * 3], loc - i_begin, c0.R.data(), c0.C.data());
+      get_bounds(&bodies[loc * 3], i_end - loc, c1.R.data(), c1.C.data());
+    }
   }
 }
