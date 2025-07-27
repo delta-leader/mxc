@@ -441,6 +441,10 @@ int main(int argc, char* argv[]) {
   matM.matVecMul(&X1[0]);
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
 
+  if (mpi_rank == 0) {
+    std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
+  }
+
   //initNcclComms(&nccl_comms, matM.allocedComm);
   //matM.init_gpu_handles(nccl_comms);
 

@@ -88,6 +88,13 @@ TODO:
      - performance seems to be somewhat comparable
 
 Sparse SVD approximation
- - Encode Far field as sparse matrix
+ - Encode Far field as sparse matrix - DONE
+   - But I fail to see how this could be an order N algorithm
+   - Interestingly, if I decrease the threshold to 1e-1, it takes one less outer GMRES iteration
  - randomized SVD to create basis
    - compute basis from randomized SVD with the dense far field
+     - implemented, but there are a couple of thins I am unsure about
+       - I replaced the whole ID with the V basis
+         - this means the basis is already orthogonal
+         - but it also means we do not actually sample the matrix anymore, so how do I compute the non-leaf level bases?
+     - changed the implementation to compute a randomized ID instead, and now it works
