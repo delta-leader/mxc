@@ -73,15 +73,16 @@ long long compute_basis(const Eigen::MatrixXcd& mat, double epi, long long s[], 
   if (0 < K) {
     Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(K, N);
 
-    if (K < N) {
-      Eigen::MatrixXcd XF = mat.transpose();
+    if (K < M) {
+      Eigen::MatrixXcd XF = mat;
       Eigen::HouseholderQR<Eigen::MatrixXcd> qr(XF);
       RX = qr.matrixQR().topRows(K).triangularView<Eigen::Upper>();
     } else {
       RX = mat;
     }
-
-    Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(mat);
+    
+    // fixed a bug where we directly used mat here
+    Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(RX);
     rank = std::min(K, (long long)std::floor(epi));
     //rank = std::min(K, (long long)std::floor(epi));
     //std::cout<<"Used rank: "<<rank<<std::endl;
