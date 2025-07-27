@@ -123,6 +123,75 @@ long long compute_basis(const Eigen::MatrixXcd& mat, double epi, long long s[], 
   }
   return rank;
 }
+/*
+long long compute_basis_rsvd(const Eigen::MatrixXcd& mat, long long rank, long long s[], std::complex<double> q[], std::complex<double> r[], long long oversampling, bool orth) {
+  long long M = mat.rows();
+  long long N = mat.cols();
+  long long K = std::min(M, N);
+  long long rank = 0;
+  // we always compress the rows (lower triangular part)
+  if (0 < K) {
+    Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(K, N);
+
+    if (K < N) {
+      Eigen::MatrixXcd XF = mat.transpose();
+      Eigen::HouseholderQR<Eigen::MatrixXcd> qr(XF);
+      RX = qr.matrixQR().topRows(K).triangularView<Eigen::Upper>();
+    } else {
+      RX = mat;
+    }
+
+    MatrixXcd RN = MatrixXcd::Random(RX.cols(), rank + oversampling);
+    MatrixXcd Y = gemm(mat, RN);
+    Eigen::HouseholderQR<Eigen::MatrixXcd> qr(Y);
+    MatrixXcd  QtA = qr.householderQ().transpose() * RX;
+  Dense Ub, S, V;
+  std::tie(Ub, S, V) = svd(QtA);
+  // TODO Resizing Ub (and thus U) before this operation might save some time!
+  Dense U = gemm(Q, Ub);
+
+    Eigen::ColPivHouseholderQR<Eigen::MatrixXcd> rrqr(mat);
+    rank = std::min(K, (long long)std::floor(epi));
+    //rank = std::min(K, (long long)std::floor(epi));
+    //std::cout<<"Used rank: "<<rank<<std::endl;
+    //rrqr.setThreshold(1e-2);
+    //long long drank = rrqr.rank();
+    //std::cout<<"Determined rank: "<<drank<<std::endl;
+    if (epi < 1.) {
+      rrqr.setThreshold(epi);
+      rank = rrqr.rank();
+    }
+    
+    Eigen::Map<Eigen::MatrixXcd> Q(q, N, N), R(r, N, N);
+    if (0 < rank && rank < N) {
+      R.topRows(rank) = rrqr.matrixR().topRows(rank);
+      R.topLeftCorner(rank, rank).triangularView<Eigen::Upper>().solveInPlace(R.topRightCorner(rank, N - rank));
+      R.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
+      
+      Eigen::Map<Eigen::RowVector<long long, Eigen::Dynamic>> indices(s, N);
+      indices = indices * rrqr.colsPermutation();
+
+      if (orth) {
+        Eigen::MatrixXcd  RX = Q.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * R.topRows(rank).transpose());
+        Eigen::HouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> qr(RX);
+        Q = qr.householderQ();
+        R.setZero();
+        R.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
+      }
+      else {
+        Q.setZero();
+        Q.leftCols(rank) = rrqr.colsPermutation() * R.topRows(rank).transpose();
+        R.setZero();
+        R.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
+      }
+    }
+    else {
+      R = Q.triangularView<Eigen::Upper>();
+      Q = Eigen::MatrixXcd::Identity(N, N);
+    }
+  }
+  return rank;
+}*/
 
 inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vector<long long>& ColIndex, long long i, long long j) {
   if (i < 0 || RowIndex.size() <= (1ull + i))

@@ -58,6 +58,36 @@ TODO:
        - fails for fixed epsilon
        - the middle levels are not the same, because they are built from the ranks of the lower levels
      - test with hidr for the leaf levels DONE
- - Add data reduct - random sampling 19/7
+ - Add data reduct - random sampling DONE
+   - add random sampling to
+     - initialization DONE
+     - bottom up sweep DONE
+     - top down sweep DONE
  - Add data reduct - farthest point sampling? other techniques
+   - farthest point sampling (only at the leaf level in the bottom up sweep) seems to perform better than the using the original matrix
+     - check whether you made any errors 
+       - I found one bug, I did not pass the right offsets in the points array 
+         (updated the results below after I fixed it)
+       - with >= 3 points selected on the leaf level, it seems to perform well for the smallest matrix size (only 1 or two points need slightly more iterations each)
+         - so it seems to behave as expected
+     - check the behavior if you add it throught all of the bottom up sweep
+       - we need a slightly larger sample to get good results if we reduce throughout all of the
+         bottom up sweep.
+         - for the smallest matric sizes >= 5 points yielded good results
+     - check the behavior if added to the top down sweep
+       - I am not sure yet that this is error free, the behavior is not exactly as expected
+         - I tried to manually inspect the points, but could not spot anything wrong
+         - However, the construction error outperforms the full matrix, so something should be wrong?
+       - but at least the results seem to be good, even for larger matrix sizes (with constant r1, r2)
+ - Added grid point sampling
+   - basically I'm distributing r points uniformly on the surface of a unit sphere
+   - then the sample set consists of the r point where ri is the closest point to grid point ri
+     - Sometimes a point could be selected multiple times, so I do not consider previously selected points'
+       in the distance calculation
+   - I could try sampling from inside a sphere instead of the surface DONE
+     - performance seems to be somewhat comparable
 
+Sparse SVD approximation
+ - Encode Far field as sparse matrix
+ - randomized SVD to create basis
+   - compute basis from randomized SVD with the dense far field

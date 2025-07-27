@@ -28,6 +28,7 @@ public:
   H2MatrixSolver();
   H2MatrixSolver(const Accessor& eval_d, const MatrixAccessor& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
   H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, std::vector<double>& pts, MPI_Comm world = MPI_COMM_WORLD);
   void init_gpu_handles(const ncclComms nccl_comms);
   void move_data_gpu();
 

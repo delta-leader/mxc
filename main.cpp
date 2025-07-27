@@ -153,6 +153,7 @@ int main(int argc, char* argv[]) {
   Eigen::VectorXcd B_sorted(Nbody * 3);
   Eigen::Map<Eigen::VectorXcd> X(x.data(), n_mat);
   Eigen::VectorXcd X_sorted(Nbody * 3);
+  std::vector<double> all_sorted(Nbody * 3);
 
   /*std::vector<int> kmeans = {19,  3, 26,  4, 26,  2,  3, 24, 17,  7,  6, 19, 28, 26, 30, 20, 11,  9, 28,  0, 28, 30, 23,  3,
     23, 30,  9,  1, 11,  6, 12, 19, 29, 11, 19, 28,  1, 19, 20, 11, 24, 10,  0, 26, 12,  2, 18, 14,
@@ -171,9 +172,12 @@ int main(int argc, char* argv[]) {
      for (long long i = 0; i < n_elems; ++i) {
       idx2[i] = offsets[kmeans[i]]++;
     }*/
+
   for (int i = 0; i < Nbody; ++i) {
     for (int j = 0; j < Nbody; ++j) {
       for (int ii = 0; ii < 3; ++ii) {
+        // shuffle the all vector so that the order of points matches the sorted matrix
+        all_sorted[i * 3 + ii] = all[idx[i] * 3 + ii];
         for (int jj = 0; jj < 3; ++jj) {
            A_sorted(i * 3 + ii, j * 3 + jj) = A(idx[i] * 3 + ii , idx[j] * 3 + jj);
         }
@@ -425,8 +429,9 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
+  H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels, all_sorted);
   //H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels);
-  H2MatrixSolver matM(A_sorted, epi, rank, leveled_rank, cell, theta, levels);
+  //H2MatrixSolver matM(A_sorted, epi, rank, leveled_rank, cell, theta, levels, all_sorted);
 
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
@@ -442,7 +447,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
-  //matM.factorizeM();
+  matM.factorizeM();
   //matM.factorizeDeviceM(handle);
 
   MPI_Barrier(MPI_COMM_WORLD);
@@ -453,21 +458,21 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
 
-  //matM.solvePrecondition(&X1[0]);
+  matM.solvePrecondition(&X1[0]);
   //matM.solvePreconditionDevice(handle, &X1[0]);
 
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  //double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[matM.local_bodies.first]);
-  //std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[matM.local_bodies.first]);
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
     //std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
     //std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     //std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
-    //std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
+    std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
