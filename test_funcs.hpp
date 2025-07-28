@@ -69,35 +69,39 @@ void toPolar(double* cart_coords, double* polar_coords) {
   polar_coords[1] = phi;
 }
 
-void read_mesh_data(long long& n_nodes, std::vector<double>& nodes, long long& n_elems, std::vector<double>& elems, std::vector<double>& elems_polar, const std::string& fname) {
+void read_mesh_data(long long& num_nodes, std::vector<double>& nodes, long long& num_elems, std::vector<double>& elems, const std::string& fname) {
+  // Open the file and skip the first two lines
   std::ifstream file(fname);
   std::string line;
   std::getline(file, line);
   std::getline(file, line);
   
+  // read the number of nodes & the number of elements
   line.erase(line.begin(), std::find_if(line.begin(), line.end(), std::bind1st(std::not_equal_to<char>(), ' ')));
   std::stringstream line_stream(line);
   std::getline(line_stream, line, ' ');
-  n_elems = std::stoi(line);
+  num_elems = std::stoi(line);
   std::getline(file, line);
   line.erase(line.begin(), std::find_if(line.begin(), line.end(), std::bind1st(std::not_equal_to<char>(), ' ')));
   line_stream = std::stringstream(line);
   std::getline(line_stream, line, ' ');
-  n_nodes = std::stoi(line);
-  std::cout<<"File contains "<<n_nodes<<" nodes and " << n_elems <<" elements"<<std::endl;
+  num_nodes = std::stoi(line);
+  std::cout<<"File contains "<<num_nodes<<" nodes and " << num_elems <<" elements"<<std::endl;
 
+  // Read the coordinates of the nodes
   std::getline(file, line);
   nodes.resize(n_nodes * 3);
   for (long long i = 0; i < n_nodes; ++i) {
     file >> nodes[i * 3] >> nodes[i * 3 + 1] >> nodes[i * 3 + 2];
   }
 
+  // read the elements (defined by their nodes)
   std::getline(file, line);
   std::getline(file, line);
   elems.resize(n_elems * 3);
-  elems_polar.resize(n_elems * 2);
   for (long long i = 0; i < n_elems; ++i) {
     double sum[3];
+    // calculate the centroid for each element
     for (int j = 0; j < 3; ++j) {
       sum[j] = 0;
     }
@@ -112,9 +116,59 @@ void read_mesh_data(long long& n_nodes, std::vector<double>& nodes, long long& n
     //std::cout<<"[";
     for (int j = 0; j < 3; ++j) {
       elems[i * 3 + j] = sum[j] / 3;
-      //std::cout<<elems[i * 3 + j];
-      //if (j != 2)
-      //  std::cout<<", ";
+    }
+  }
+}
+
+// I don't think this is fully implemented, why would we only convert the elements to polar coordinates?
+void read_mesh_data_polar(long long& num_nodes, std::vector<double>& nodes, long long& num_elems, std::vector<double>& elems, std::vector<double>& elems_polar, const std::string& fname) {
+  // Open the file and skip the first two lines
+  std::ifstream file(fname);
+  std::string line;
+  std::getline(file, line);
+  std::getline(file, line);
+  
+  // read the number of nodes & the number of elements
+  line.erase(line.begin(), std::find_if(line.begin(), line.end(), std::bind1st(std::not_equal_to<char>(), ' ')));
+  std::stringstream line_stream(line);
+  std::getline(line_stream, line, ' ');
+  num_elems = std::stoi(line);
+  std::getline(file, line);
+  line.erase(line.begin(), std::find_if(line.begin(), line.end(), std::bind1st(std::not_equal_to<char>(), ' ')));
+  line_stream = std::stringstream(line);
+  std::getline(line_stream, line, ' ');
+  num_nodes = std::stoi(line);
+  std::cout<<"File contains "<<num_nodes<<" nodes and " << num_elems <<" elements"<<std::endl;
+
+  // Read the coordinates of the nodes
+  std::getline(file, line);
+  nodes.resize(n_nodes * 3);
+  for (long long i = 0; i < n_nodes; ++i) {
+    file >> nodes[i * 3] >> nodes[i * 3 + 1] >> nodes[i * 3 + 2];
+  }
+
+  // read the elements (defined by their nodes)
+  std::getline(file, line);
+  std::getline(file, line);
+  elems.resize(n_elems * 3);
+  elems_polar.resize(n_elems * 2);
+  for (long long i = 0; i < n_elems; ++i) {
+    double sum[3];
+    // calculate the centroid for each element
+    for (int j = 0; j < 3; ++j) {
+      sum[j] = 0;
+    }
+    for (int j = 0; j < 3; ++j) {
+      long long idx;
+      file >> idx;
+      idx--;
+      for (int k = 0; k < 3; ++k) {
+        sum[k] += nodes[idx * 3 + k];
+      }
+    }
+    //std::cout<<"[";
+    for (int j = 0; j < 3; ++j) {
+      elems[i * 3 + j] = sum[j] / 3;
     }
     //std::cout<<"],"<<std::endl;
     //toPolar(&elems[i*3], &elems_polar[i*2]);

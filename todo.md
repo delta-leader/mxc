@@ -98,3 +98,34 @@ Sparse SVD approximation
          - this means the basis is already orthogonal
          - but it also means we do not actually sample the matrix anymore, so how do I compute the non-leaf level bases?
      - changed the implementation to compute a randomized ID instead, and now it works
+
+Matrix creation from coordinates
+ - Look at Matsumoto-sensei's code for creating the matrix entries from the points
+ - Integrate it into the code (similar to how the kernel function was previously integrated)
+ - how does it work with the scaling factor?
+   - you could get the diagonal values from Matsumoto-senseis code and use them for scaling (complex values, use abs() and then sqrt())
+ - try to run it on MPI
+ - I see two options to try to tackle the matrix creation:
+   - from coordinates as specified above
+     - needs to somehow do the scaling during creation 
+   - saved to a file (might become large)
+     - can save scaled version
+
+TODO
+ - update the mesh reading functions - DONE
+ - use Matsumoto-sensei's code to create the matrix and the right hand side
+   - compare them to the data from file
+
+
+Experiments
+ - For now focus on construction
+ - Create 2 matrices, one for factorization on for matvec (target 1e-10 to 1e-12)
+ - iterate to the same residual size, independent of the matrix size
+   - for a finer mesh GMRES iterations increase because the matrix becomes more ill-conditioned
+   - it would be ideal if we can maintain a constant number of iterations for finer meshes
+
+
+ Matrix valued ACA?
+   - might converge too slowly -> ng
+
+ Clearify further goals

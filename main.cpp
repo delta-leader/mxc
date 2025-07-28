@@ -31,10 +31,10 @@ int main(int argc, char* argv[]) {
   long long n_nodes, n_elems;
   std::vector<double> nodes;
   std::vector<double> elems;
-  std::vector<double> elems_polar;
+  //std::vector<double> elems_polar;
   // Reading the mes data (i.e. nodes and elems)
   // For the elements we calculate the centroid and store it in elems
-  read_mesh_data(n_nodes, nodes, n_elems, elems, elems_polar, "../input/mesh_sphere_" + MAT + "nodes.inp");
+  read_mesh_data(n_nodes, nodes, n_elems, elems "../input/mesh_sphere_" + MAT + "nodes.inp");
   // check that the sizes match
   std::cout<<nodes.size()/3<<" " <<elems.size()/3<<std::endl;
 
