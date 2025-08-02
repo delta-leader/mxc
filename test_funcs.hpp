@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <iostream>
 #include <fstream>
+#include <sstream>
+
+#include <include/elast3d.hpp>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -69,6 +72,36 @@ void toPolar(double* cart_coords, double* polar_coords) {
   polar_coords[1] = phi;
 }
 
+void read_mesh_specs(long long& num_nodes, long long& num_elems, const std::string& fname) {
+  std::ifstream file(fname);
+  std::string line;
+  std::getline(file, line);
+  std::getline(file, line);
+
+  std::istringstream iss(line);
+  iss >> num_elems; 
+  std::getline(file, line);
+  iss = std::istringstream(line);
+  iss >> num_nodes;
+}
+
+void read_mesh_fortran(long long& num_nodes, std::vector<struct elastWave3d::nodal_point>& nodes, long long& num_elems, std::vector<struct elastWave3d::element>& elems) {
+  int numNodeBasis = num_nodes;
+  int numElemBasis = num_elems;
+  elastWave3d::input_non_global(nodes.data(), numNodeBasis, elems.data(), numElemBasis);
+  // If there are duplicate nodes or element, shrink the vecors
+  if (numNodeBasis < nodes.size()){
+    std::cout << "shrink nodes" << std::endl;
+    nodes.resize(numNodeBasis);
+  }
+  if (numElemBasis < elems.size()){
+    std::cout << "shrink elems" << std::endl;
+    elems.resize(numElemBasis);
+  }
+  num_nodes = numNodeBasis;
+  num_elems = numElemBasis;
+} 
+
 void read_mesh_data(long long& num_nodes, std::vector<double>& nodes, long long& num_elems, std::vector<double>& elems, const std::string& fname) {
   // Open the file and skip the first two lines
   std::ifstream file(fname);
@@ -90,16 +123,16 @@ void read_mesh_data(long long& num_nodes, std::vector<double>& nodes, long long&
 
   // Read the coordinates of the nodes
   std::getline(file, line);
-  nodes.resize(n_nodes * 3);
-  for (long long i = 0; i < n_nodes; ++i) {
+  nodes.resize(num_nodes * 3);
+  for (long long i = 0; i < num_nodes; ++i) {
     file >> nodes[i * 3] >> nodes[i * 3 + 1] >> nodes[i * 3 + 2];
   }
 
   // read the elements (defined by their nodes)
   std::getline(file, line);
   std::getline(file, line);
-  elems.resize(n_elems * 3);
-  for (long long i = 0; i < n_elems; ++i) {
+  elems.resize(num_elems * 3);
+  for (long long i = 0; i < num_elems; ++i) {
     double sum[3];
     // calculate the centroid for each element
     for (int j = 0; j < 3; ++j) {
@@ -142,17 +175,17 @@ void read_mesh_data_polar(long long& num_nodes, std::vector<double>& nodes, long
 
   // Read the coordinates of the nodes
   std::getline(file, line);
-  nodes.resize(n_nodes * 3);
-  for (long long i = 0; i < n_nodes; ++i) {
+  nodes.resize(num_nodes * 3);
+  for (long long i = 0; i < num_nodes; ++i) {
     file >> nodes[i * 3] >> nodes[i * 3 + 1] >> nodes[i * 3 + 2];
   }
 
   // read the elements (defined by their nodes)
   std::getline(file, line);
   std::getline(file, line);
-  elems.resize(n_elems * 3);
-  elems_polar.resize(n_elems * 2);
-  for (long long i = 0; i < n_elems; ++i) {
+  elems.resize(num_elems * 3);
+  elems_polar.resize(num_elems * 2);
+  for (long long i = 0; i < num_elems; ++i) {
     double sum[3];
     // calculate the centroid for each element
     for (int j = 0; j < 3; ++j) {

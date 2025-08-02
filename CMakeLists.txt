@@ -2,8 +2,9 @@
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+#enable_language(Fortran)
 
-project ("shimo" LANGUAGES CXX CUDA)
+project ("shimo" LANGUAGES CXX CUDA Fortran)
 
 set(BLA_VENDOR OpenBLAS)
 
@@ -17,8 +18,12 @@ find_package(CUDAToolkit REQUIRED)
 file(GLOB sources "*.cpp" "*.cu")
 file(GLOB headers "*.hpp" "*.cuh")
 
+add_subdirectory(
+  BEM3D_transmission_each_component
+)
+
 add_executable(main.app ${sources} ${headers})
-target_link_libraries(main.app BLAS::BLAS LAPACK::LAPACK lapacke OpenMP::OpenMP_CXX MPI::MPI_CXX Eigen3::Eigen CUDA::cudart CUDA::cublas CUDA::cusparse nccl)
+target_link_libraries(main.app BLAS::BLAS LAPACK::LAPACK lapacke OpenMP::OpenMP_CXX MPI::MPI_CXX Eigen3::Eigen CUDA::cudart CUDA::cublas CUDA::cusparse nccl elastWave3d)
 
 target_compile_definitions(main.app PRIVATE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
 target_include_directories(main.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

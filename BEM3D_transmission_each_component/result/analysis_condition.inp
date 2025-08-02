@@ -1,0 +1,13 @@
+!--- input file for 3D frequency-domain BEM ---
+2                   !id_bie (0:displacement BIE, 1:PMCHWT BIE 2:Burton-Miller BIE)
+!----------------------------
+0                                     !id_inc (0:P-wave, 1:S-wave)
+0.0                                   !theta_in (incident angle [degree])
+1.73205080756888d0   1.d0   1.d0      !cl, ct, rho for domain 1 (exterior domain)
+3.d0                 1.5d0   2.d0      !cl, ct, rho for domain 2 (interior domain)
+!--- infield data ---
+!--- number of infield points ---
+3
+1     -2.0    0.0     0.0
+2     -3.5    0.0     0.0
+3     -5.0    0.0     0.0

@@ -114,6 +114,13 @@ Matrix creation from coordinates
 TODO
  - update the mesh reading functions - DONE
  - use Matsumoto-sensei's code to create the matrix and the right hand side
+   - I need to read the nodals and elements in their original Fortran format because that's what the matrix creation expects as input
+   - but then I don't have the coordinates available for sorting in C++
+     - I guess the nodel_point struct has some of the information I am lookin for?
+       - the xc field stores to coordinates of the nodes
+       - I believe the xc field of the elements also stores the center of the element
+    - I wrote functions to read the Nodes and elements from the fortran code, but the fortran is currently
+      not built when compiling the project I need to add the compilation
    - compare them to the data from file
 
 

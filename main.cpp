@@ -1,12 +1,12 @@
 
 #include <solver.hpp>
 #include <test_funcs.hpp>
+#include <include/elast3d.hpp>
 #include <string>
 
 #include <Eigen/Dense>
 
 int main(int argc, char* argv[]) {
-  std::cout<<"START"<<std::endl;
   MPI_Init(&argc, &argv);
 
   /*deviceHandle_t handle;
@@ -34,7 +34,24 @@ int main(int argc, char* argv[]) {
   //std::vector<double> elems_polar;
   // Reading the mes data (i.e. nodes and elems)
   // For the elements we calculate the centroid and store it in elems
-  read_mesh_data(n_nodes, nodes, n_elems, elems "../input/mesh_sphere_" + MAT + "nodes.inp");
+  read_mesh_data(n_nodes, nodes, n_elems, elems, "../input/mesh_sphere_" + MAT + "nodes.inp");
+  long long num_nodes, num_elems;
+  read_mesh_specs(num_nodes, num_elems, "../input/mesh_sphere_" + MAT + "nodes.inp");
+  std::cout<<"New "<<num_nodes<<" "<<num_elems<<std::endl;
+  std::vector<struct elastWave3d::nodal_point> nodes2(num_nodes);
+  std::vector<struct elastWave3d::element> elems2(num_elems);
+  read_mesh_fortran(num_nodes, nodes2, num_elems, elems2);
+  // Mesh check
+  for (int i = 0; i < 5; ++i)
+    std::cout<<nodes2[i].xc[0]<<", "<<nodes2[i].xc[1]<<", "<<nodes2[i].xc[2]<<std::endl;
+  std::cout<<std::endl;
+  for (int i = 0; i < 5; ++i){
+    for (int d=0 ; d < 3; ++d)
+      std::cout<<nodes[i*3+d]<<", ";
+    std::cout<<std::endl;
+  }
+
+
   // check that the sizes match
   std::cout<<nodes.size()/3<<" " <<elems.size()/3<<std::endl;
 
