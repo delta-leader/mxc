@@ -207,9 +207,10 @@ int main(int argc, char* argv[]) {
   Eigen::MatrixXcd S = Eigen::MatrixXcd::Identity(n_mat, n_mat);
   std::cout<<"MAX Nodes "<<std::max(std::abs(RN.diagonal().real().minCoeff()), std::abs(RN.diagonal().real().maxCoeff()))<<std::endl;
   std::cout<<"MAX Elems "<<std::max(std::abs(RE.diagonal().real().minCoeff()), std::abs(RE.diagonal().real().maxCoeff()))<<std::endl;
+  std::cout<<"Scale "<<std::sqrt(std::max(std::abs(RN.diagonal().real().minCoeff()), std::abs(RN.diagonal().real().maxCoeff())) / std::max(std::abs(RE.diagonal().real().minCoeff()), std::abs(RE.diagonal().real().maxCoeff())));
   for (long long i = n_nodes * 3; i < n_mat; ++i)
     S(i, i) = std::sqrt(std::max(std::abs(RN.diagonal().real().minCoeff()), std::abs(RN.diagonal().real().maxCoeff())) / std::max(std::abs(RE.diagonal().real().minCoeff()), std::abs(RE.diagonal().real().maxCoeff()))); //17;//32;
-  //A = S * A * S;
+  A = S * A * S;
   Eigen::MatrixXcd RN2 = A.topLeftCorner(n_nodes * 3, n_nodes * 3);
   Eigen::MatrixXcd RE2 = A.bottomRightCorner(n_elems * 3, n_elems * 3);
   std::cout<<"Nodes "<<RN2.diagonal().real().minCoeff()<< " " << RN2.diagonal().real().maxCoeff()<<std::endl;
@@ -271,9 +272,10 @@ int main(int argc, char* argv[]) {
   MatrixGenerator matgen;
   Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
   double scale = std::sqrt(matgen.get_max_nodes(nodes2.data(), num_nodes, elems2.data(), num_elems) / matgen.get_max_elems(nodes2.data(), num_nodes, elems2.data(), num_elems));
-  matgen.gen_matrix_sorted(nodes2.data(), num_nodes, elems2.data(), num_elems, nodes2.data(), num_nodes, elems2.data(), num_elems, nodes_indices, elems_indices, A_gen.data());
+  matgen.gen_matrix_sorted(nodes2.data(), num_nodes, elems2.data(), num_elems, nodes2.data(), num_nodes, elems2.data(), num_elems, nodes_indices, elems_indices, scale, A_gen.data());
   std::cout<<"MAX "<<matgen.get_max_nodes(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
   std::cout<<"MAX Elems "<<matgen.get_max_elems(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
+  std::cout<<"Scale "<<scale<<std::endl;
 
   //std::vector<std::complex<double>> test_mat(n_mat * n_mat);
   //read_data2(test_mat.data(), "../input/checkMatrix.dat", n_mat * n_mat);

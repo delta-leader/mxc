@@ -233,7 +233,7 @@ void MatrixGenerator::gen_matrix(const elastWave3d::nodal_point* xnodes, long lo
   }
 }
 
-void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems, const elastWave3d::nodal_point* ynodes, long long num_ynodes, const elastWave3d::element* yelems, long long num_yelems, std::vector<long long>& nodes_indices, std::vector<long long>& elems_indices, std::complex<double> cmat[]) const {
+void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems, const elastWave3d::nodal_point* ynodes, long long num_ynodes, const elastWave3d::element* yelems, long long num_yelems, std::vector<long long>& nodes_indices, std::vector<long long>& elems_indices, const double scale, std::complex<double> cmat[]) const {
   long long nmat = (num_xnodes + num_xelems) * 3;
   // W0 + W1
   long long rowShift = num_xnodes;
@@ -289,6 +289,7 @@ void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, 
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + (j + 3*yindex + 3*num_xnodes) * nmat] = -mat3x3.at(i + 3*j) - mat3x3_2nd.at(i + 3*j);
+          cmat[i + 3*xindex + (j + 3*yindex + 3*num_xnodes) * nmat] *= scale;
           //cmat[xindex + rowShift*i + (yindex + colShift*j + 3*num_xnodes)*nmat] = -mat3x3.at(i + 3*j) - mat3x3_2nd.at(i + 3*j);
         }
       }
@@ -313,6 +314,7 @@ void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, 
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + 3*num_xnodes + (j + 3*yindex) * nmat] = mat3x3.at(i + 3*j) + mat3x3_2nd.at(i + 3*j);
+          cmat[i + 3*xindex + 3*num_xnodes + (j + 3*yindex) * nmat] *= scale;
           //cmat[xindex + rowShift*i + 3*num_xnodes + (yindex + colShift*j) * nmat] = mat3x3.at(i + 3*j) + mat3x3_2nd.at(i + 3*j);
         }
       }
@@ -337,6 +339,7 @@ void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, 
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + 3*num_xnodes + (j + 3*yindex + 3*num_ynodes) * nmat] = -mat3x3.at(i + 3*j) - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
+          cmat[i + 3*xindex + 3*num_xnodes + (j + 3*yindex + 3*num_ynodes) * nmat] *= scale * scale;
           //cmat[xindex + rowShift*i + 3*num_xnodes + (yindex + colShift*j + 3*num_ynodes) * nmat]= -mat3x3.at(i + 3*j) - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
         }
       }

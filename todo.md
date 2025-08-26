@@ -164,6 +164,10 @@ TODO
                - Next, how to handle the scaling?  
                  - Wrote some functions to get the max diagonal value of both elements and nodes
                    -> tested and seems to work
+                 - I integrated the scaling into the matrix construction and it seems to work,
+                   the difference is < 1e-16
+                - So, the way to do the scaling is to solve the system SAS y = Sb and then recover x = Sy
+                - Next steps: reordering and scaling of the right hand side
                - it seems the matrix construction is currently not using OpenMP
      - pass the new cell array in addition to the old code and compare the far matrices that are created
        - for the leaf level
