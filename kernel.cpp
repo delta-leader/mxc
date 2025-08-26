@@ -233,7 +233,7 @@ void MatrixGenerator::gen_matrix(const elastWave3d::nodal_point* xnodes, long lo
   }
 }
 
-void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems, const elastWave3d::nodal_point* ynodes, long long num_ynodes, const elastWave3d::element* yelems, long long num_yelems, std::vector<long long>& indices, std::complex<double> cmat[]) const {
+void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems, const elastWave3d::nodal_point* ynodes, long long num_ynodes, const elastWave3d::element* yelems, long long num_yelems, std::vector<long long>& nodes_indices, std::vector<long long>& elems_indices, std::complex<double> cmat[]) const {
   long long nmat = (num_xnodes + num_xelems) * 3;
   // W0 + W1
   long long rowShift = num_xnodes;
@@ -257,11 +257,11 @@ void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, 
       //for (size_t i = 0; i<mat3x3.size(); ++i)
       //  std::cout<<mat3x3[i]<<", ";
       //std::cout<<std::endl;
-      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, indices[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, nodes_indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, nodes_indices[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
       // W1
       const int out_in_2nd = 1;
       std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, indices[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, nodes_indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, nodes_indices[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + (j + 3*yindex) * nmat] = mat3x3.at(i + 3*j) + (mu1/mu0)*mat3x3_2nd.at(i + 3*j);
@@ -281,11 +281,11 @@ void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, 
       const int slp_or_dlp = 3;
       const int linear_or_const = 0;
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, indices[num_ynodes + yindex] - num_ynodes + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, nodes_indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, elems_indices[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
       // aT1
       const int out_in_2nd = 1;
       std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, indices[num_ynodes + yindex] - num_ynodes + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, nodes_indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, elems_indices[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + (j + 3*yindex + 3*num_xnodes) * nmat] = -mat3x3.at(i + 3*j) - mat3x3_2nd.at(i + 3*j);
@@ -305,11 +305,11 @@ void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, 
       const int slp_or_dlp = 2;
       const int linear_or_const = 1;
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, indices[num_xnodes + xindex] - num_xnodes + 1, ynodes, num_ynodes, yelems, num_yelems, indices[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, elems_indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, nodes_indices[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
       // T1
       const int out_in_2nd = 1;
       std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, indices[num_xnodes + xindex] - num_xnodes + 1, ynodes, num_ynodes, yelems, num_yelems, indices[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, elems_indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, nodes_indices[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + 3*num_xnodes + (j + 3*yindex) * nmat] = mat3x3.at(i + 3*j) + mat3x3_2nd.at(i + 3*j);
@@ -329,11 +329,11 @@ void MatrixGenerator::gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, 
       const int slp_or_dlp = 1;
       const int linear_or_const = 1;
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, indices[num_xnodes + xindex] - num_xnodes + 1, ynodes, num_ynodes, yelems, num_yelems, indices[num_ynodes + yindex] - num_ynodes + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, elems_indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, elems_indices[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
       // U1
       const int out_in_2nd = 1;
       std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, indices[num_xnodes + xindex] - num_xnodes + 1, ynodes, num_ynodes, yelems, num_yelems, indices[num_ynodes + yindex] - num_ynodes + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, elems_indices[xindex] + 1, ynodes, num_ynodes, yelems, num_yelems, elems_indices[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + 3*num_xnodes + (j + 3*yindex + 3*num_ynodes) * nmat] = -mat3x3.at(i + 3*j) - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
@@ -380,4 +380,62 @@ void MatrixGenerator::gen_rhs(const elastWave3d::nodal_point* nodes, long long n
       }
     }
   }
+}
+
+double MatrixGenerator::get_max_elems(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems) const {
+  std::vector<std::complex<double>> mat3x3(9, 0.0);
+  std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
+  double max = 0;
+  #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd)
+  for(int xindex = 0; xindex < num_xelems; xindex++){
+      //std::cout<<"row "<<xindex <<", col "<<yindex<<std::endl;
+      
+      // U0
+      const int out_in = 0;
+      const int slp_or_dlp = 1;
+      const int linear_or_const = 1;
+      std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, xindex + 1, xnodes, num_xnodes, xelems, num_xelems, xindex + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      // U1
+      const int out_in_2nd = 1;
+      std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, xindex + 1, xnodes, num_xnodes, xelems, num_xelems, xindex + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+      for(int j = 0; j < 3; j++){
+        std::complex<double> value = -mat3x3.at(j + 3*j) - (mu0/mu1) * mat3x3_2nd.at(j + 3*j);
+        if (std::abs(value.real()) > max)
+          max = std::abs(value.real());
+      }
+  }
+  return max;
+}
+
+double MatrixGenerator::get_max_nodes(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems) const {
+  //long long nmat = (num_xnodes + num_xelems) * 3;
+  // W0 + W1
+  //long long rowShift = num_xnodes;
+  //long long colShift = num_ynodes;
+  std::vector<std::complex<double>> mat3x3(9, 0.0);
+  std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
+  double max = 0;
+  #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd)
+  for(int xindex = 0; xindex < num_xnodes; xindex++){
+      //std::cout<<"row "<<xindex <<", col "<<yindex<<std::endl;
+      
+      // W0
+      const int out_in = 0;
+      const int slp_or_dlp = 4;
+      const int linear_or_const = 0;
+      std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, xindex + 1, xnodes, num_xnodes, xelems, num_xelems, xindex + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      // W1
+      const int out_in_2nd = 1;
+      std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
+      elastWave3d::mkmat_entrywise_3d_elast(xnodes, num_xnodes, xelems, num_xelems, xindex + 1, xnodes, num_xnodes, xelems, num_xelems, xindex + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+      for(int j = 0; j < 3; j++){
+        std::complex<double> value = mat3x3.at(j + 3*j) + (mu1/mu0) * mat3x3_2nd.at(j + 3*j);
+          if (std::abs(value.real()) > max)
+            max = std::abs(value.real());
+      }
+  }
+  return max;
 }

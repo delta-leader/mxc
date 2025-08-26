@@ -62,6 +62,10 @@ int main(int argc, char* argv[]) {
   std::iota(idx.begin(), idx.end(), 0);
   std::vector<double> all(nodes);
   all.insert(all.end(), elems.begin(), elems.end());
+  std::vector<long long> nodes_indices(n_nodes);
+  std::iota(nodes_indices.begin(), nodes_indices.end(), 0);
+  std::vector<long long> elems_indices(n_elems);
+  std::iota(elems_indices.begin(), elems_indices.end(), 0);
 
   long long levels, Nleaf, ncells;
   std::vector<Cell> cell;
@@ -103,8 +107,10 @@ int main(int argc, char* argv[]) {
         Nleaf = Nleaf_nodes + Nleaf_elems;
         ncells = ncells_elems + ncells_nodes + 1;
         cell.resize(ncells);
-        buildBinaryTree3(&cell[0], &nodes[0], idx.data(), n_nodes, levels_nodes, 1, 0);
-        buildBinaryTree3(&cell[0], &elems[0], &idx[n_nodes], n_elems, levels_elems, 0, n_nodes);
+        //buildBinaryTree3(&cell[0], &nodes[0], idx.data(), n_nodes, levels_nodes, 1, 0);
+        //buildBinaryTree3(&cell[0], &elems[0], &idx[n_nodes], n_elems, levels_elems, 0, n_nodes);
+        buildBinaryTree3(&cell[0], &nodes[0], nodes_indices.data(), n_nodes, levels_nodes, 1, 0);
+        buildBinaryTree3(&cell[0], &elems[0], elems_indices.data(), n_elems, levels_elems, 0, n_nodes);
         /* root has three children */
         cell[0].Child[0] = 1;
         cell[0].Child[1] = 4;
@@ -115,6 +121,13 @@ int main(int argc, char* argv[]) {
         return -1;
       }
     }
+  }
+  std::vector<long long> all_indices(n_nodes + n_elems);
+  for (size_t i = 0; i < nodes_indices.size(); ++i) {
+    all_indices[i] = nodes_indices[i];
+  }
+  for (size_t i = 0; i < elems_indices.size(); ++i) {
+    all_indices[n_nodes + i] = elems_indices[i] + n_nodes;
   }
 
   // NOTE we don't reorder the nodes/elements anymore, we just use the indices
@@ -182,8 +195,8 @@ int main(int argc, char* argv[]) {
   read_data2(mat.data(), "../input/checkMatrix.dat", n_mat * n_mat);
   Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
 
-  /*// Get the U matrix (element/element interactions and sort it according to the tree)
-  Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
+  // Get the U matrix (element/element interactions and sort it according to the tree)
+  //Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
   // scale the matrix
   Eigen::MatrixXcd RN = A.topLeftCorner(n_nodes * 3, n_nodes * 3);
   Eigen::MatrixXcd RE = A.bottomRightCorner(n_elems * 3, n_elems * 3);
@@ -192,6 +205,8 @@ int main(int argc, char* argv[]) {
   //std::cout<<"Nodes "<<RN.diagonal().imag().minCoeff()<< " " << RN.diagonal().imag().maxCoeff()<<std::endl;
   //std::cout<<"Elements "<<RE.diagonal().imag().minCoeff()<< " " << RE.diagonal().imag().maxCoeff()<<std::endl;
   Eigen::MatrixXcd S = Eigen::MatrixXcd::Identity(n_mat, n_mat);
+  std::cout<<"MAX Nodes "<<std::max(std::abs(RN.diagonal().real().minCoeff()), std::abs(RN.diagonal().real().maxCoeff()))<<std::endl;
+  std::cout<<"MAX Elems "<<std::max(std::abs(RE.diagonal().real().minCoeff()), std::abs(RE.diagonal().real().maxCoeff()))<<std::endl;
   for (long long i = n_nodes * 3; i < n_mat; ++i)
     S(i, i) = std::sqrt(std::max(std::abs(RN.diagonal().real().minCoeff()), std::abs(RN.diagonal().real().maxCoeff())) / std::max(std::abs(RE.diagonal().real().minCoeff()), std::abs(RE.diagonal().real().maxCoeff()))); //17;//32;
   //A = S * A * S;
@@ -201,7 +216,7 @@ int main(int argc, char* argv[]) {
   std::cout<<"Elements "<<RE2.diagonal().real().minCoeff()<< " " << RE2.diagonal().real().maxCoeff()<<std::endl;
   //std::cout<<"Nodes "<<RN2.diagonal().imag().minCoeff()<< " " << RN2.diagonal().imag().maxCoeff()<<std::endl;
   //std::cout<<"Elements "<<RE2.diagonal().imag().minCoeff()<< " " << RE2.diagonal().imag().maxCoeff()<<std::endl;
-  */
+  
   //Eigen::MatrixXcd U = A.bottomRightCorner(n_elems * 3, n_elems * 3);
   Eigen::MatrixXcd A_sorted(Nbody * 3, Nbody * 3);
   //Eigen::Map<Eigen::VectorXcd> B(b.data(), n_mat);
@@ -232,10 +247,12 @@ int main(int argc, char* argv[]) {
     for (int j = 0; j < Nbody; ++j) {
       for (int ii = 0; ii < 3; ++ii) {
         // shuffle the all vector so that the order of points matches the sorted matrix
-        all_sorted[i * 3 + ii] = all[idx[i] * 3 + ii];
+        //all_sorted[i * 3 + ii] = all[idx[i] * 3 + ii];
+        all_sorted[i * 3 + ii] = all[all_indices[i] * 3 + ii];
         //B_sorted(i * 3 + ii) = B(idx[i] * 3 + ii);
         for (int jj = 0; jj < 3; ++jj) {
-           A_sorted(i * 3 + ii, j * 3 + jj) = A(idx[i] * 3 + ii , idx[j] * 3 + jj);
+           //A_sorted(i * 3 + ii, j * 3 + jj) = A(idx[i] * 3 + ii , idx[j] * 3 + jj);
+           A_sorted(i * 3 + ii, j * 3 + jj) = A(all_indices[i] * 3 + ii , all_indices[j] * 3 + jj);
         }
       }
     }
@@ -253,8 +270,11 @@ int main(int argc, char* argv[]) {
   //std::cout<<std::endl;
   MatrixGenerator matgen;
   Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
-  matgen.gen_matrix_sorted(nodes2.data(), num_nodes, elems2.data(), num_elems, nodes2.data(), num_nodes, elems2.data(), num_elems, idx, A_gen.data());
-  
+  double scale = std::sqrt(matgen.get_max_nodes(nodes2.data(), num_nodes, elems2.data(), num_elems) / matgen.get_max_elems(nodes2.data(), num_nodes, elems2.data(), num_elems));
+  matgen.gen_matrix_sorted(nodes2.data(), num_nodes, elems2.data(), num_elems, nodes2.data(), num_nodes, elems2.data(), num_elems, nodes_indices, elems_indices, A_gen.data());
+  std::cout<<"MAX "<<matgen.get_max_nodes(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
+  std::cout<<"MAX Elems "<<matgen.get_max_elems(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
+
   //std::vector<std::complex<double>> test_mat(n_mat * n_mat);
   //read_data2(test_mat.data(), "../input/checkMatrix.dat", n_mat * n_mat);
   //Eigen::Map<Eigen::MatrixXcd> T(test_mat.data(), n_mat,  n_mat);

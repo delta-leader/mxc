@@ -160,6 +160,10 @@ TODO
                    - comparing to Matsumoto sensei's code, the results are identical, 
                      so unshuffled results are fine
                - I can generate the sorted matrix, however, it would be better to pass two index arrays, one for the nodes and one for the elements
+                 -> DONE
+               - Next, how to handle the scaling?  
+                 - Wrote some functions to get the max diagonal value of both elements and nodes
+                   -> tested and seems to work
                - it seems the matrix construction is currently not using OpenMP
      - pass the new cell array in addition to the old code and compare the far matrices that are created
        - for the leaf level
