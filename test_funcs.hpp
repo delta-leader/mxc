@@ -85,10 +85,10 @@ void read_mesh_specs(long long& num_nodes, long long& num_elems, const std::stri
   iss >> num_nodes;
 }
 
-void read_mesh_fortran(long long& num_nodes, std::vector<struct elastWave3d::nodal_point>& nodes, long long& num_elems, std::vector<struct elastWave3d::element>& elems) {
+void read_mesh_fortran(long long& num_nodes, std::vector<struct elastWave3d::nodal_point>& nodes, long long& num_elems, std::vector<struct elastWave3d::element>& elems, int mat_num) {
   int numNodeBasis = num_nodes;
   int numElemBasis = num_elems;
-  elastWave3d::input_non_global(nodes.data(), numNodeBasis, elems.data(), numElemBasis);
+  elastWave3d::input_non_global(nodes.data(), numNodeBasis, elems.data(), numElemBasis, mat_num);
   // If there are duplicate nodes or element, shrink the vecors
   if (numNodeBasis < nodes.size()){
     std::cout << "shrink nodes" << std::endl;
@@ -222,6 +222,20 @@ void read_data(std::complex<double>* values, const std::string& fname, const lon
   double real, img;
   for (long long i = 0; i < n; ++i) {
     std::getline(file, line);
+    std::getline(file, line, '(');
+    std::getline(file, line, ',');
+    real = std::stod(line);
+    std::getline(file, line, ')');
+    img = std::stod(line);
+    values[i] = std::complex<double>(real, img);
+  }
+}
+
+void read_data2(std::complex<double>* values, const std::string& fname, const long long n) {
+  std::ifstream file(fname);
+  std::string line;
+  double real, img;
+  for (long long i = 0; i < n; ++i) {
     std::getline(file, line, '(');
     std::getline(file, line, ',');
     real = std::stod(line);

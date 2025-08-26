@@ -2,7 +2,7 @@ module input_non_global_mod
   implicit none
 contains
   !--------------------------------------------
-  subroutine input_non_global(nodals, nnode, elems, nel) bind(c)
+  subroutine input_non_global(nodals, nnode, elems, nel, mat_num) bind(c)
     use iso_c_binding
     use struct_type_fixed_len_node_mod
     use BEM3d_small_mod
@@ -14,9 +14,16 @@ contains
     integer(c_int), intent(inout) :: nnode
     type(element), intent(inout) :: elems(nel)
     integer(c_int), intent(inout) :: nel
+    integer(c_int), intent(in) :: mat_num
 
     integer::i,j,k
     real(kind(0d0)),dimension(3)::alpha, beta, outpro
+
+    character(len=10) :: mat_num_char     ! use your maximum expected len
+    character(len=50) :: filename
+    write(mat_num_char , '(I10)') mat_num        ! convert integer to char
+    write(filename, '("../input/mesh_sphere_", A, "nodes.inp")') trim(adjustl(mat_num_char))
+    !write(*,*) filename
 
     write(*,*) 'inputNonGlobal, !dbg'
 
@@ -24,7 +31,8 @@ contains
     !---------------------------------------------
     !   open(unit=10,file='mesh_sphere486.inp')
     !   open(unit=10,file='mesh_box970.inp')
-    open(unit=10,file='../input/mesh_sphere_160nodes.inp')
+    !open(unit=10,file='../input/mesh_sphere_160nodes.inp')
+    open(unit=10,file=filename)
     !---------------------------------------------
     read(10,*)
     read(10,*) nel

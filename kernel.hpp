@@ -4,6 +4,20 @@
 #include <cmath>
 
 #include <Eigen/Dense>
+#include <include/elast3d.hpp>
+
+class MatrixGenerator {
+private:
+  double omega;
+  const std::complex<double> alpha;
+  const double mu0;
+  const double mu1;
+public:
+  MatrixGenerator(double omega=1.0);
+  void gen_matrix(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems, const elastWave3d::nodal_point* ynodes, long long num_ynodes, const elastWave3d::element* yelems, long long num_yelems, std::complex<double> cmat[]) const;
+  void gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems, const elastWave3d::nodal_point* ynodes, long long num_ynodes, const elastWave3d::element* yelems, long long num_yelems, std::vector<long long>& indices, std::complex<double> cmat[]) const;
+  void gen_rhs(const elastWave3d::nodal_point* nodes, long long num_nodes, const elastWave3d::element* elems, long long num_elems, std::complex<double> rhs[], bool equation_type=true) const;
+};
 
 class Accessor {
 public:

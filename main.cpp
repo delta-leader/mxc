@@ -2,9 +2,12 @@
 #include <solver.hpp>
 #include <test_funcs.hpp>
 #include <include/elast3d.hpp>
+#include <kernel.hpp>
 #include <string>
 
 #include <Eigen/Dense>
+
+#include <fstream>
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
@@ -40,17 +43,16 @@ int main(int argc, char* argv[]) {
   std::cout<<"New "<<num_nodes<<" "<<num_elems<<std::endl;
   std::vector<struct elastWave3d::nodal_point> nodes2(num_nodes);
   std::vector<struct elastWave3d::element> elems2(num_elems);
-  read_mesh_fortran(num_nodes, nodes2, num_elems, elems2);
+  read_mesh_fortran(num_nodes, nodes2, num_elems, elems2, stoi(MAT));
   // Mesh check
-  for (int i = 0; i < 5; ++i)
-    std::cout<<nodes2[i].xc[0]<<", "<<nodes2[i].xc[1]<<", "<<nodes2[i].xc[2]<<std::endl;
-  std::cout<<std::endl;
-  for (int i = 0; i < 5; ++i){
-    for (int d=0 ; d < 3; ++d)
-      std::cout<<nodes[i*3+d]<<", ";
-    std::cout<<std::endl;
-  }
-
+  //for (int i = 0; i < 5; ++i)
+  //  std::cout<<nodes2[i].xc[0]<<", "<<nodes2[i].xc[1]<<", "<<nodes2[i].xc[2]<<std::endl;
+  //std::cout<<std::endl;
+  //for (int i = 0; i < 5; ++i){
+  //  for (int d=0 ; d < 3; ++d)
+  //    std::cout<<nodes[i*3+d]<<", ";
+  //  std::cout<<std::endl;
+  //}
 
   // check that the sizes match
   std::cout<<nodes.size()/3<<" " <<elems.size()/3<<std::endl;
@@ -114,12 +116,43 @@ int main(int argc, char* argv[]) {
       }
     }
   }
+
+  // NOTE we don't reorder the nodes/elements anymore, we just use the indices
+  /*std::cout<<"Node indices"<<std::endl;
+  for (int i = 0; i < n_nodes; ++i)
+    std::cout<<idx[i]<<", ";
+  std::cout<<std::endl;
+  std::vector<long long> idx_new(n_nodes + n_elems);
+  std::iota(idx_new.begin(), idx_new.end(), 0);
+  //std::cout<<"New Tree "<<ncells<<std::endl;
+  std::vector<Cell> cell2(ncells);
+  long long levels_nodes = (long long) std::ceil(std::log2((double)n_nodes / leaf_size));
+  buildBinaryTreeNodes(cell2.data(), nodes2.data(), idx_new.data(), num_nodes, levels_nodes, 1);
+  buildBinaryTreeElems(cell2.data(), elems2.data(), num_elems, levels, 0);
+  // fuse the tree (root has 3 children)
+  cell[0].Child[0] = 1;
+  cell[0].Child[1] = 4;
+  cell[0].Body[0] = 0;
+  cell[0].Body[1] = n_nodes + n_elems;
+  // root is the only cell that has nodes AND elements
+  cell[0].nodes = true;
+  //for (int i = 0; i < num_elems; ++i)
+  //  std::cout<<elems2[i].xc[0]<<", ";
+  //std::cout<<std::endl;
+  std::cout<<"New Node indices"<<std::endl;
+  std::vector<long long> idx_new2(num_nodes);
+  for (int i = 0; i < num_nodes; ++i) {
+    std::cout<<idx_new[i]<<", ";
+    idx_new2[idx_new[i]] = i + 1;
+  }
+  std::cout<<std::endl;
+  for (int i = 0; i < num_elems; ++i) {
+    for (int j = 0; j < 3; ++j) 
+    elems2[i].ind[j] = idx_new2[elems2[i].ind[j]];
+  }*/
+
   
   std::cout<<"Elements = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
-  //buildBinaryTree2(&cell[0], &elems_polar[0], idx.data(), Nbody, levels); 
-  //for (long long i = 0; i < ncells; ++i) {
-  //  std::cout<<"Cell "<<i<<": "<<cell[i].Body[1] - cell[i].Body[0]<<", "<<cell[i].Body[0]<<" - "<<cell[i].Body[1]<<std::endl;
-  //}
 
   /* kmeans */
   /*std::vector<int> counts = {13, 8, 9, 7, 9, 7, 17, 10, 10, 12, 9, 11, 9, 10, 11, 11, 9, 8, 10, 10, 10, 7, 9, 11, 9, 9, 10, 11, 8, 13, 11, 8};
@@ -135,16 +168,21 @@ int main(int argc, char* argv[]) {
      offsets[i] = offsets[i - 1] + counts[i - 1];
   }*/
   
+  // NOTE: don't use these files anymore as they refer to (older) code
   // read the rhs, reference solution and matrix from the file
   long long n_mat = (n_nodes + n_elems) * 3;
-  std::vector<std::complex<double>> b(n_mat);
-  read_data(b.data(), "../input/rhs_sphere_" + MAT + ".dat", n_mat);
-  std::vector<std::complex<double>> x(n_mat);
-  read_data(x.data(), "../input/x_sphere_" + MAT + ".dat", n_mat);
+  //std::vector<std::complex<double>> b(n_mat);
+  //read_data(b.data(), "../input/rhs_sphere_" + MAT + ".dat", n_mat);
+  //std::vector<std::complex<double>> x(n_mat);
+  //read_data(x.data(), "../input/x_sphere_" + MAT + ".dat", n_mat);
+  //std::vector<std::complex<double>> mat(n_mat * n_mat);
+  //read_data(mat.data(), "../input/mat_sphere_" + MAT + ".dat", n_mat * n_mat);
+  // read the matrix from Matsumoto sensei's code instead
   std::vector<std::complex<double>> mat(n_mat * n_mat);
-  read_data(mat.data(), "../input/mat_sphere_" + MAT + ".dat", n_mat * n_mat);
+  read_data2(mat.data(), "../input/checkMatrix.dat", n_mat * n_mat);
+  Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
 
-  // Get the U matrix (element/element interactions and sort it according to the tree)
+  /*// Get the U matrix (element/element interactions and sort it according to the tree)
   Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
   // scale the matrix
   Eigen::MatrixXcd RN = A.topLeftCorner(n_nodes * 3, n_nodes * 3);
@@ -156,20 +194,20 @@ int main(int argc, char* argv[]) {
   Eigen::MatrixXcd S = Eigen::MatrixXcd::Identity(n_mat, n_mat);
   for (long long i = n_nodes * 3; i < n_mat; ++i)
     S(i, i) = std::sqrt(std::max(std::abs(RN.diagonal().real().minCoeff()), std::abs(RN.diagonal().real().maxCoeff())) / std::max(std::abs(RE.diagonal().real().minCoeff()), std::abs(RE.diagonal().real().maxCoeff()))); //17;//32;
-  A = S * A * S;
+  //A = S * A * S;
   Eigen::MatrixXcd RN2 = A.topLeftCorner(n_nodes * 3, n_nodes * 3);
   Eigen::MatrixXcd RE2 = A.bottomRightCorner(n_elems * 3, n_elems * 3);
   std::cout<<"Nodes "<<RN2.diagonal().real().minCoeff()<< " " << RN2.diagonal().real().maxCoeff()<<std::endl;
   std::cout<<"Elements "<<RE2.diagonal().real().minCoeff()<< " " << RE2.diagonal().real().maxCoeff()<<std::endl;
   //std::cout<<"Nodes "<<RN2.diagonal().imag().minCoeff()<< " " << RN2.diagonal().imag().maxCoeff()<<std::endl;
   //std::cout<<"Elements "<<RE2.diagonal().imag().minCoeff()<< " " << RE2.diagonal().imag().maxCoeff()<<std::endl;
-
+  */
   //Eigen::MatrixXcd U = A.bottomRightCorner(n_elems * 3, n_elems * 3);
   Eigen::MatrixXcd A_sorted(Nbody * 3, Nbody * 3);
-  Eigen::Map<Eigen::VectorXcd> B(b.data(), n_mat);
-  Eigen::VectorXcd B_sorted(Nbody * 3);
-  Eigen::Map<Eigen::VectorXcd> X(x.data(), n_mat);
-  Eigen::VectorXcd X_sorted(Nbody * 3);
+  //Eigen::Map<Eigen::VectorXcd> B(b.data(), n_mat);
+  //Eigen::VectorXcd B_sorted(Nbody * 3);
+  //Eigen::Map<Eigen::VectorXcd> X(x.data(), n_mat);
+  //Eigen::VectorXcd X_sorted(Nbody * 3);
   std::vector<double> all_sorted(Nbody * 3);
 
   /*std::vector<int> kmeans = {19,  3, 26,  4, 26,  2,  3, 24, 17,  7,  6, 19, 28, 26, 30, 20, 11,  9, 28,  0, 28, 30, 23,  3,
@@ -195,12 +233,50 @@ int main(int argc, char* argv[]) {
       for (int ii = 0; ii < 3; ++ii) {
         // shuffle the all vector so that the order of points matches the sorted matrix
         all_sorted[i * 3 + ii] = all[idx[i] * 3 + ii];
+        //B_sorted(i * 3 + ii) = B(idx[i] * 3 + ii);
         for (int jj = 0; jj < 3; ++jj) {
            A_sorted(i * 3 + ii, j * 3 + jj) = A(idx[i] * 3 + ii , idx[j] * 3 + jj);
         }
       }
     }
   }
+  //MatrixGenerator matgen2(1);
+  //Eigen::VectorXcd v(Nbody * 3);
+  //matgen2.gen_rhs(nodes2.data(), num_nodes, elems2.data(), num_elems, v.data());
+  //Eigen::MatrixXcd diff2 = v - B;
+  //std::cout<<"Diff "<<diff2.norm()/B.norm()<<std::endl;
+  //for (int i = 0; i < 10; ++i) {
+  //  for (int j = 0; j < 3; ++j) {
+  //    std::cout<<v(i*3+j) <<" vs "<<idx[i]*3 + j<<" "<<B(idx[i]*3 + j) <<" "<<B(i*3 + j)<<std::endl;
+  //  }
+  //}
+  //std::cout<<std::endl;
+  MatrixGenerator matgen;
+  Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
+  matgen.gen_matrix_sorted(nodes2.data(), num_nodes, elems2.data(), num_elems, nodes2.data(), num_nodes, elems2.data(), num_elems, idx, A_gen.data());
+  
+  //std::vector<std::complex<double>> test_mat(n_mat * n_mat);
+  //read_data2(test_mat.data(), "../input/checkMatrix.dat", n_mat * n_mat);
+  //Eigen::Map<Eigen::MatrixXcd> T(test_mat.data(), n_mat,  n_mat);
+  Eigen::MatrixXcd diff = A_sorted - A_gen;
+  std::cout<<"Diff "<<diff.norm()/A_sorted.norm()<<std::endl;
+  //for (int i = 0; i < 10; ++i) {
+  //  for (int j = 0; j < 10; ++j) {
+  //    std::cout<<A(i+5, j+5)<<", ";
+  //  }
+  //  std::cout<<std::endl;
+  //}
+  //std::cout<<std::endl;
+  //for (int i = 0; i < 10; ++i) {
+  //  for (int j = 0; j < 10; ++j) {
+  //    std::cout<<A_gen(i+5, j+5)<<", ";
+  //  }
+  //  std::cout<<std::endl;
+  //}
+  //std::cout<<std::endl;
+
+
+
   // for (int i = 0; i < Nbody; ++i) {
   //     for (int ii = 0; ii < 3; ++ii) {
   //          B_sorted(i * 3 + ii) = B(idx[i] * 3 + ii);

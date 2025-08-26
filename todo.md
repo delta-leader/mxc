@@ -120,8 +120,59 @@ TODO
        - the xc field stores to coordinates of the nodes
        - I believe the xc field of the elements also stores the center of the element
     - I wrote functions to read the Nodes and elements from the fortran code, but the fortran is currently
-      not built when compiling the project I need to add the compilation
+      not built when compiling the project I need to add the compilation -> FIXED
    - compare them to the data from file
+     - Verfied that the xc field stores the coordinates for the nodes
+     - verified that the xc field stores the coordinates of the center for the elements
+   - tree creation
+     - we can freely re-order the nodes and elements inside their respective vectors
+     - write this tree creation (only fused trees make sense) method and compare
+       the order to the index shuffle you already have
+       - works for the nodes tree
+       - works for the element tree
+     - added a boolean value that indicates if a cell stores nodes or elements
+   - H2 creation
+     - CSR should be fine as it does not access the Bodies information
+     - we copy the local bodies into S [which I could do as long as I know the offset]
+     - we generate the marrices from the bodies
+     - we don't access the bodies anywhere else in the original code
+     - first we compare the created dense matrix and right-hand side
+       - note that the stored matrices/rhs use the setting omega=1
+       - Matsumoto sensei's code groups the x,y and z elements together instead
+         - would that be advantageous for any reason?
+         - actually, he has both versions
+       - RHS works (without shuffling), Diff is 1.03617e-15
+         - the sorting seems to be messed up - is it different between the two versions?
+           - what could be different?
+             - check level by level, i.e. modify Nleaf
+             - I verified the sorting of the nodes by checking the indices and it is the same
+             - I think the problem is that the nodes reference the elems by their indices (and vice versa),
+               however, those indices change by re-ordering
+               - if we just reorder the nodes, it should be fine though no?
+               - try to genterate the matrix when switching just two nodes
+               - The matrix does not seem to work (without shuffling)?
+                 - the freaking problem was that I used the wrong omega (2 instead of 1)
+                   - however, even with the right omega, the error seems kind of large (1e-11)
+                   - there is still something wrong, maybe it is the column vs row major?
+                     - that doesn't seem to be the problem, maybe I just need more accuracy?
+                     - I should compare to matsumoto-sensei's code directly
+                       - it seems the differences are due to this, when comparing to Matsumoto-sensei's code they are identical
+                   - comparing to Matsumoto sensei's code, the results are identical, 
+                     so unshuffled results are fine
+               - I can generate the sorted matrix, however, it would be better to pass two index arrays, one for the nodes and one for the elements
+               - it seems the matrix construction is currently not using OpenMP
+     - pass the new cell array in addition to the old code and compare the far matrices that are created
+       - for the leaf level
+         - we construct the far field matrices from alist of xnodes, xelems and ynodes , yelems
+
+Paper:
+ - PMCW calderon preconditionioning does not work
+ - piecewise linear basis for both displacement and traction works, but mixed basis strategy the calderon preconditioner 
+ - dense linear solver -> natural but not sure if it is used broadely or not
+ - show that no preconditioner needs many more iterations.
+ - save the updated formulation for next time
+ - make an overleaf project and share 
+
 
 
 Experiments
@@ -136,3 +187,15 @@ Experiments
    - might converge too slowly -> ng
 
  Clearify further goals
+
+ Next meeting:
+ - test the HiDR approach with the previous kernel matrices (Helmholtz) to confirm that we
+   can achieve good accuracy even with constant sample points - test high accuracy settings
+   - compare to sparse - for Frobenius norm constant threshold should be okay
+     -> switch to Infinity norm
+
+Ideas for our contribution
+  - first hierarchical preconditioner for this problem
+  - compare to other common preconditioners for this problem
+    - without preconditioner - analytical preconditioner cannot be applied because the linear/constant bases are mixed (HPC preconditioner would already be novel)
+  - submit to Computer Physics Communication
