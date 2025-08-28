@@ -194,6 +194,9 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> mat(n_mat * n_mat);
   read_data2(mat.data(), "../input/checkMatrix.dat", n_mat * n_mat);
   Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
+  std::vector<std::complex<double>> b(n_mat);
+  read_data2(b.data(), "../input/checkRHS.dat", n_mat);
+  Eigen::Map<Eigen::VectorXcd> rhs(b.data(), n_mat);
 
   // Get the U matrix (element/element interactions and sort it according to the tree)
   //Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
@@ -211,6 +214,7 @@ int main(int argc, char* argv[]) {
   for (long long i = n_nodes * 3; i < n_mat; ++i)
     S(i, i) = std::sqrt(std::max(std::abs(RN.diagonal().real().minCoeff()), std::abs(RN.diagonal().real().maxCoeff())) / std::max(std::abs(RE.diagonal().real().minCoeff()), std::abs(RE.diagonal().real().maxCoeff()))); //17;//32;
   A = S * A * S;
+  rhs = S * rhs;
   Eigen::MatrixXcd RN2 = A.topLeftCorner(n_nodes * 3, n_nodes * 3);
   Eigen::MatrixXcd RE2 = A.bottomRightCorner(n_elems * 3, n_elems * 3);
   std::cout<<"Nodes "<<RN2.diagonal().real().minCoeff()<< " " << RN2.diagonal().real().maxCoeff()<<std::endl;
@@ -220,6 +224,7 @@ int main(int argc, char* argv[]) {
   
   //Eigen::MatrixXcd U = A.bottomRightCorner(n_elems * 3, n_elems * 3);
   Eigen::MatrixXcd A_sorted(Nbody * 3, Nbody * 3);
+  Eigen::VectorXcd rhs_sorted(Nbody * 3);
   //Eigen::Map<Eigen::VectorXcd> B(b.data(), n_mat);
   //Eigen::VectorXcd B_sorted(Nbody * 3);
   //Eigen::Map<Eigen::VectorXcd> X(x.data(), n_mat);
@@ -250,7 +255,7 @@ int main(int argc, char* argv[]) {
         // shuffle the all vector so that the order of points matches the sorted matrix
         //all_sorted[i * 3 + ii] = all[idx[i] * 3 + ii];
         all_sorted[i * 3 + ii] = all[all_indices[i] * 3 + ii];
-        //B_sorted(i * 3 + ii) = B(idx[i] * 3 + ii);
+        rhs_sorted(i * 3 + ii) = rhs(all_indices[i] * 3 + ii);
         for (int jj = 0; jj < 3; ++jj) {
            //A_sorted(i * 3 + ii, j * 3 + jj) = A(idx[i] * 3 + ii , idx[j] * 3 + jj);
            A_sorted(i * 3 + ii, j * 3 + jj) = A(all_indices[i] * 3 + ii , all_indices[j] * 3 + jj);
@@ -271,8 +276,10 @@ int main(int argc, char* argv[]) {
   //std::cout<<std::endl;
   MatrixGenerator matgen;
   Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
+  Eigen::VectorXcd rhs_gen(Nbody * 3);
   double scale = std::sqrt(matgen.get_max_nodes(nodes2.data(), num_nodes, elems2.data(), num_elems) / matgen.get_max_elems(nodes2.data(), num_nodes, elems2.data(), num_elems));
   matgen.gen_matrix_sorted(nodes2.data(), num_nodes, elems2.data(), num_elems, nodes2.data(), num_nodes, elems2.data(), num_elems, nodes_indices, elems_indices, scale, A_gen.data());
+  matgen.gen_rhs_sorted(nodes2.data(), num_nodes, elems2.data(), num_elems, nodes_indices, elems_indices, scale, rhs_gen.data());
   std::cout<<"MAX "<<matgen.get_max_nodes(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
   std::cout<<"MAX Elems "<<matgen.get_max_elems(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
   std::cout<<"Scale "<<scale<<std::endl;
@@ -282,6 +289,8 @@ int main(int argc, char* argv[]) {
   //Eigen::Map<Eigen::MatrixXcd> T(test_mat.data(), n_mat,  n_mat);
   Eigen::MatrixXcd diff = A_sorted - A_gen;
   std::cout<<"Diff "<<diff.norm()/A_sorted.norm()<<std::endl;
+  Eigen::VectorXcd diff_rhs = rhs_sorted - rhs_gen;
+  std::cout<<"Diff RHS "<<diff_rhs.norm()/rhs_sorted.norm()<<std::endl;
   //for (int i = 0; i < 10; ++i) {
   //  for (int j = 0; j < 10; ++j) {
   //    std::cout<<A(i+5, j+5)<<", ";

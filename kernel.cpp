@@ -385,6 +385,44 @@ void MatrixGenerator::gen_rhs(const elastWave3d::nodal_point* nodes, long long n
   }
 }
 
+void MatrixGenerator::gen_rhs_sorted(const elastWave3d::nodal_point* nodes, long long num_nodes, const elastWave3d::element* elems, long long num_elems, std::vector<long long>& nodes_indices, std::vector<long long>& elems_indices, const double scale, std::complex<double> rhs[], bool equation_type) const {
+  if (equation_type){
+    // PMCHWT
+    // const size_t nodeShift = num_nodes;
+    for(int i = 0; i < num_nodes; i++){
+      std::complex<double> uout[3];
+      elastWave3d::inc_trac(nodes, num_nodes, nodes_indices[i] + 1, elems, num_elems, omega, uout); // i + 1 is fortran index
+      for(int j = 0; j < 3; j++){
+        rhs[j + 3 * i] = uout[j];
+        //rhs[i + nodeShift*j] = uout[j];
+      }
+    }
+    //const size_t elemShift = num_elems;
+    for(int i = 0; i < num_elems; i++){
+      std::complex<double> uout[3];
+      elastWave3d::inc_disp_const_x(nodes, num_nodes, elems[elems_indices[i]], omega, uout);
+      for(int j = 0; j < 3; j++){
+        rhs[j + 3 * i + 3 * num_nodes] = uout[j] * scale;
+        //rhs[i + elemShift*j + 3*num_nodes] = uout[j];
+      }
+    }
+  }
+  else{
+    // Burton-Miller
+    //const size_t nodeShift = num_nodes;
+    for(int i = 0; i < num_nodes; i++){
+      std::complex<double> uout[3];
+      std::complex<double> tout[3];
+      elastWave3d::inc_disp(nodes, num_nodes, i + 1, elems, num_elems, omega, uout); // i + 1 is fortran index
+      elastWave3d::inc_trac(nodes, num_nodes, i + 1, elems, num_elems, omega, tout); // i + 1 is fortran index
+      for(int j = 0; j < 3; j++){
+        rhs[j + 3 * i] = uout[j] + alpha*tout[j];
+        //rhs[j + nodeShift*i] = uout[j] + alpha*tout[j];
+      }
+    }
+  }
+}
+
 double MatrixGenerator::get_max_elems(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems) const {
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
