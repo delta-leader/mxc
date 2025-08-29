@@ -170,6 +170,8 @@ TODO
                 - Next steps: reordering and scaling of the right hand side DONE
                 - Next steps: clean up the code and start experiments
                   - the matrix solver currently takes the all_sorted index array, what is this used for?
+                    -> I think we only needed that for HiDR, so I removed it
+                  - cleaned up most of the print outs, what is left is to make the selection of the matrix a cmd line argument DONE
 
                - it seems the matrix construction is currently not using OpenMP
      - pass the new cell array in addition to the old code and compare the far matrices that are created

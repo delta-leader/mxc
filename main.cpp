@@ -17,20 +17,18 @@ int main(int argc, char* argv[]) {
   cudaSetDevice();
   initGpuEnvs(&handle);*/
 
-  long long Nbody = argc > 1 ? std::atoll(argv[1]) : 2048;
+  long long M = argc > 1 ? std::atoll(argv[1]) : 160;
   double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
-  long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 256;
-  long long rank = argc > 4 ? std::atoll(argv[4]) : 50;
+  long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 32;
+  long long rank = argc > 4 ? std::atoll(argv[4]) : 32;
   long long leveled_rank =  argc > 5 ? std::atoll(argv[5]) : 0;
   double epi = argc > 6 ? std::atof(argv[6]) : 1e-10;
   std::string tree_mode = argc > 7 ? std::string(argv[7]) : "default";
+  double omega = argc > 8 ? std::atof(argv[8]) : 1;
   //std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
   //const char* csv = argc > 8 ? argv[8] : nullptr;
 
-  // leaf size is expressed in terms of #elems, since we don't want to split an elment
-  leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
-
-  const std::string MAT = "160";
+  const std::string MAT = std::to_string(M);
   long long n_nodes, n_elems;
   std::vector<double> nodes;
   std::vector<double> elems;
@@ -40,6 +38,9 @@ int main(int argc, char* argv[]) {
   read_mesh_data(n_nodes, nodes, n_elems, elems, "../input/mesh_sphere_" + MAT + "nodes.inp");
   long long num_nodes, num_elems;
   read_mesh_specs(num_nodes, num_elems, "../input/mesh_sphere_" + MAT + "nodes.inp");
+  long long Nbody = num_nodes + num_elems;
+  // leaf size is expressed in terms of #elems, since we don't want to split an elment
+  leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   std::cout<<"Nodes/Elements: "<<num_nodes<<" "<<num_elems<<std::endl;
   std::vector<struct elastWave3d::nodal_point> nodes2(num_nodes);
   std::vector<struct elastWave3d::element> elems2(num_elems);
@@ -122,13 +123,13 @@ int main(int argc, char* argv[]) {
       }
     }
   }
-  std::vector<long long> all_indices(n_nodes + n_elems);
-  for (size_t i = 0; i < nodes_indices.size(); ++i) {
-    all_indices[i] = nodes_indices[i];
-  }
-  for (size_t i = 0; i < elems_indices.size(); ++i) {
-    all_indices[n_nodes + i] = elems_indices[i] + n_nodes;
-  }
+  //std::vector<long long> all_indices(n_nodes + n_elems);
+  //for (size_t i = 0; i < nodes_indices.size(); ++i) {
+  //  all_indices[i] = nodes_indices[i];
+  //}
+  //for (size_t i = 0; i < elems_indices.size(); ++i) {
+  //  all_indices[n_nodes + i] = elems_indices[i] + n_nodes;
+  //}
 
   
   std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
@@ -142,7 +143,6 @@ int main(int argc, char* argv[]) {
   //read_data2(b.data(), "../input/checkRHS.dat", n_mat);
   //Eigen::Map<Eigen::VectorXcd> rhs(b.data(), n_mat);
  
-  double omega = 1;
   MatrixGenerator matgen(omega);
   Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
   Eigen::VectorXcd rhs_gen(Nbody * 3);
@@ -234,18 +234,18 @@ int main(int argc, char* argv[]) {
   //std::cout<<"is invertible "<<fac.isInvertible()<<" "<<fac.rank()<<std::endl;
   //std::cout<<"SINGULAR "<<(std::abs(fac.determinant()) <= std::numeric_limits<double>::min()) <<" "<<std::abs(fac.determinant())<<" "<<std::numeric_limits<double>::min()<<std::endl;
   
-  std::vector<double> all_sorted(Nbody * 3);
+  //std::vector<double> all_sorted(Nbody * 3);
   // We construct the matrix from a dense, so we need the sorted nodes elements
-  for (int i = 0; i < Nbody; ++i) {
-    for (int ii = 0; ii < 3; ++ii) {
+  //for (int i = 0; i < Nbody; ++i) {
+  //  for (int ii = 0; ii < 3; ++ii) {
       // shuffle the all vector so that the order of points matches the sorted matrix
-      all_sorted[i * 3 + ii] = all[all_indices[i] * 3 + ii];
-    }
-  }
+   //   all_sorted[i * 3 + ii] = all[all_indices[i] * 3 + ii];
+   // }
+  //}
 
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  H2MatrixSolver matM(A_gen, 0, rank, leveled_rank, cell, theta, levels, all_sorted);
+  H2MatrixSolver matM(A_gen, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, epi, rank, leveled_rank, cell, theta, levels, all_sorted);
 
@@ -297,7 +297,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matM.solveGMRESDense(1e-12, A_gen, &X1[0], &rhs_gen[0], 10, 50);
+  matM.solveGMRESDense(epi, A_gen, &X1[0], &rhs_gen[0], 10, 50);
   //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
   //matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
 

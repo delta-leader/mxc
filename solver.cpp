@@ -64,23 +64,23 @@ H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, do
   //for (long long l = 1; l <= levels; l++)
   //  wsa[l].construct(epi, eval_d, rank_func(l), rank * 2, 2, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), fix_rank ? HSS_Far : Far, bodies, wsa[l - 1]);
 
-  std::vector<HiDR> hidr(levels + 1);
-  hidr[levels].initialize(0, comm[levels].oGlobal(), comm[levels].lenLocal(), cells.data());
+  //std::vector<HiDR> hidr(levels + 1);
+  //hidr[levels].initialize(0, comm[levels].oGlobal(), comm[levels].lenLocal(), cells.data());
   // I don't think I need to do anything for node 0
-  for (long long l = levels - 1; l > 0; l--) {
-    std::cout<<"Level "<<l<<std::endl;
-    hidr[l].bottom_up_sweep(0, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), hidr[l + 1]);
-  }
-  for (long long l = 1; l <= levels; l++) {
-    std::cout<<"Level "<<l<<std::endl;
-    hidr[l].top_down_sweep(0, cells.data(), Far, hidr[l - 1]);
-  }
-  std::cout<<"Levelx "<<levels<<std::endl;
-  A[levels].construct(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, hidr[levels], comm[levels], A[levels], comm[levels]);
+  //for (long long l = levels - 1; l > 0; l--) {
+    //std::cout<<"Level "<<l<<std::endl;
+    //hidr[l].bottom_up_sweep(0, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), hidr[l + 1]);
+  //}
+  //for (long long l = 1; l <= levels; l++) {
+  //  std::cout<<"Level "<<l<<std::endl;
+  //  hidr[l].top_down_sweep(0, cells.data(), Far, hidr[l - 1]);
+  //}
+  //std::cout<<"Levelx "<<levels<<std::endl;
+  A[levels].construct(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
-    std::cout<<"Level "<<l<<std::endl;
-    A[l].construct(mat, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, hidr[l], comm[l], A[l + 1], comm[l + 1]);
+    //std::cout<<"Level "<<l<<std::endl;
+    A[l].construct(mat, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1]);
   }
 
   long long llen = comm[levels].lenLocal();

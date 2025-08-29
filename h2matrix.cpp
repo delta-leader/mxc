@@ -465,7 +465,7 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
 
     // loop over all nodes
     for (long long i = 0; i < nodes; i++) {
-      std::cout<<"Node "<<i<<std::endl;
+      //std::cout<<"Node "<<i<<std::endl;
       // number of rows in that cell
       long long M = Dims[i + ibegin];
       //std::cout<<"Rows "<<M<<std::endl;
@@ -536,7 +536,7 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
           far.topRows(top) = mat.block(0, top, top, M);
           far.bottomRows(mat.rows() - bottom) = mat.block(bottom, top, mat.rows() - bottom, M);
           long long rank = compute_basis(far, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-          std::cout<<"Rank "<<rank<<std::endl;
+          //std::cout<<"Rank "<<rank<<std::endl;
           /*for (int c = 0; c < far.cols(); ++c) {
             double col_norm = far.col(c).norm();
             long long count = 0;
@@ -574,7 +574,7 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
             //std::cout<<"Current Near "<<current_near<<std::endl;
             far.bottomRows(add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
             long long rank = compute_basis(far, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-            std::cout<<"Rank "<<rank<<std::endl;
+            //std::cout<<"Rank "<<rank<<std::endl;
             /*for (int c = 0; c < far.cols(); ++c) {
               double col_norm = far.col(c).norm();
               long long count = 0;
