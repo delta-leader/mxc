@@ -172,6 +172,10 @@ TODO
                   - the matrix solver currently takes the all_sorted index array, what is this used for?
                     -> I think we only needed that for HiDR, so I removed it
                   - cleaned up most of the print outs, what is left is to make the selection of the matrix a cmd line argument DONE
+                  - Started doing experiments, my idea is to test the different matrix sizes for omegas from 1-50
+                    - 160
+                    - 634
+                    - 2530
 
                - it seems the matrix construction is currently not using OpenMP
      - pass the new cell array in addition to the old code and compare the far matrices that are created
