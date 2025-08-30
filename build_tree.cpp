@@ -64,6 +64,30 @@ void get_bounds(const elastWave3d::element* elems, long long num_elems, double R
   std::transform(Xmin, &Xmin[3], Xmax, R, [](double min, double max) { return (min == max && min == 0.) ? 0. : ((max - min) * 0.5 + 1.e-8); });
 }
 
+void get_bounds(const elastWave3d::nodal_point* nodes, long long* indices, long long num_nodes, double R[], double C[]) {
+  double Xmin[3], Xmax[3];
+  for (int i = 0; i < 3; i++) {
+    auto minmax = std::minmax_element(&indices[0], &indices[num_nodes], 
+      [=](const long long x, const long long y) { return nodes[x].xc[i] < nodes[y].xc[i]; });
+    Xmin[i] = nodes[*minmax.first].xc[i];
+    Xmax[i] = nodes[*minmax.second].xc[i];
+  }
+  std::transform(Xmin, &Xmin[3], Xmax, C, [](double min, double max) { return (min + max) * 0.5; });
+  std::transform(Xmin, &Xmin[3], Xmax, R, [](double min, double max) { return (min == max && min == 0.) ? 0. : ((max - min) * 0.5 + 1.e-8); });
+}
+
+void get_bounds(const elastWave3d::element* elems, long long * indices, long long num_elems, double R[], double C[]) {
+  double Xmin[3], Xmax[3];
+  for (int i = 0; i < 3; i++) {
+    auto minmax = std::minmax_element(&indices[0], &indices[num_elems], 
+      [=](const long long x, const long long y) { return elems[x].xc[i] < elems[y].xc[i]; });
+    Xmin[i] = elems[*minmax.first].xc[i];
+    Xmax[i] = elems[*minmax.second].xc[i];
+  }
+  std::transform(Xmin, &Xmin[3], Xmax, C, [](double min, double max) { return (min + max) * 0.5; });
+  std::transform(Xmin, &Xmin[3], Xmax, R, [](double min, double max) { return (min == max && min == 0.) ? 0. : ((max - min) * 0.5 + 1.e-8); });
+}
+
 
 void getList(char NoF, std::vector<std::pair<long long, long long>>& rels, const Cell ci[], long long i, const Cell cj[], long long j, double theta) {
   double dC = std::transform_reduce(ci[i].C.begin(), ci[i].C.end(), cj[j].C.begin(), (double)0., std::plus<double>(), [](double x, double y) { return (x - y) * (x - y); });
@@ -317,6 +341,12 @@ void buildBinaryTree3(Cell* cells, double* bodies, long long* indices, long long
       std::sort(sort_idx.begin(), sort_idx.end(), 
         [&](size_t i, size_t j) { return bodies3[i][sdim] < bodies3[j][sdim]; });
 
+      //std::cout<<"Sort idx"<<std::endl;
+      //for (size_t i = 0; i < sort_idx.size(); ++i) {
+      //  std::cout<<sort_idx[i]<<", ";
+      //}
+      //std::cout<<std::endl;
+
       std::vector<double> bodies_copy(i_num * 3);
       std::vector<long long> indices_copy(i_num);
       std::memcpy(bodies_copy.data(), &bodies[i_begin * 3], sizeof(double) * i_num * 3);
@@ -325,7 +355,9 @@ void buildBinaryTree3(Cell* cells, double* bodies, long long* indices, long long
         for (long long j = 0; j < 3; ++j)
           bodies[(i_begin + i) * 3 + j] = bodies_copy[sort_idx[i] * 3 + j];
         indices[i_begin + i] = indices_copy[sort_idx[i]];
+        //std::cout<<indices[i_begin + i]<<", ";
       }
+      //std::cout<<std::endl;
       long long len = (offset + i) * 2 + 2;
       //std::cout<<"Child 0 "<<len<<std::endl;
       Cell& c0 = cells[len];
@@ -345,7 +377,7 @@ void buildBinaryTree3(Cell* cells, double* bodies, long long* indices, long long
   }
 }
 
-void buildBinaryTreeNodes(Cell* cells, elastWave3d::nodal_point* nodes, long long* indices, long long num_nodes, long long levels, long long first_cell_idx) {
+void buildBinaryTreeNodes(Cell* cells, const elastWave3d::nodal_point* nodes, long long* indices, long long num_nodes, long long levels, long long first_cell_idx) {
   cells[first_cell_idx].Body[0] = 0; //bodies_offset;
   cells[first_cell_idx].Body[1] = num_nodes; //bodies_offset + nbodies;
   get_bounds(nodes, num_nodes, cells[first_cell_idx].R.data(), cells[first_cell_idx].C.data());
@@ -356,46 +388,48 @@ void buildBinaryTreeNodes(Cell* cells, elastWave3d::nodal_point* nodes, long lon
     //std::cout<<"level "<<level<<std::endl;
     cell_offset = level ? cell_offset * 2 + 2 : first_cell_idx;
     for (long long i = 0; i < (1 << level); i++) {
-      //std::cout<<"i "<<i<<std::endl;
-      //std::cout<<"cell "<<cell_offset+i<<std::endl;
+      //std::cout<<"cell "<<i<<std::endl;
       Cell& ci = cells[cell_offset + i];
       long long sdim = std::distance(ci.R.begin(), std::max_element(ci.R.begin(), ci.R.end()));
-      long long nodes_begin = ci.Body[0];// - bodies_offset;
-      long long nodes_end = ci.Body[1];// - bodies_offset;
+      long long nodes_begin = ci.Body[0];
+      long long nodes_end = ci.Body[1];
 
       long long i_num = nodes_end - nodes_begin;
-      //std::sort(&nodes[nodes_begin], &nodes[nodes_end], 
-      //  [&](elastWave3d::nodal_point x, elastWave3d::nodal_point y) { return x.xc[sdim] < y.xc[sdim]; });
       std::vector<long long> sort_idx(i_num);
       std::iota(sort_idx.begin(), sort_idx.end(), 0);
       std::sort(sort_idx.begin(), sort_idx.end(), 
-        [&](size_t i, size_t j) { return nodes[nodes_begin + i].xc[sdim] < nodes[nodes_begin + j].xc[sdim]; });
+        [&](size_t i, size_t j) { return nodes[indices[nodes_begin + i]].xc[sdim] < nodes[indices[nodes_begin + j]].xc[sdim]; });
 
-      std::vector<elastWave3d::nodal_point> bodies_copy(i_num * 3);
+      //std::cout<<"Sort idx"<<std::endl;
+      //for (size_t i = 0; i < sort_idx.size(); ++i) {
+      //  std::cout<<sort_idx[i]<<", ";
+      //}
+      //std::cout<<std::endl;
+      // actually we don't want to shuffle the bodies
+      //std::vector<elastWave3d::nodal_point> bodies_copy(i_num);
       std::vector<long long> indices_copy(i_num);
-      std::memcpy(bodies_copy.data(), &nodes[nodes_begin], sizeof(elastWave3d::nodal_point) * i_num);
+      //std::memcpy(bodies_copy.data(), &nodes[nodes_begin], sizeof(elastWave3d::nodal_point) * i_num);
       std::memcpy(indices_copy.data(), &indices[nodes_begin], sizeof(long long) * i_num);
       for (long long i = 0; i < i_num; ++i) {
-      //  for (long long j = 0; j < 3; ++j)
-        nodes[nodes_begin + i] = bodies_copy[sort_idx[i]];
+        //nodes[nodes_begin + i] = bodies_copy[sort_idx[i]];
         indices[nodes_begin + i] = indices_copy[sort_idx[i]];
+        //std::cout<<indices[nodes_begin + i]<<", ";
       }
+      //std::cout<<std::endl;
       long long len = (cell_offset + i) * 2 + 2;
-      //std::cout<<"Child 0 "<<len<<std::endl;
       Cell& child0 = cells[len];
       Cell& child1 = cells[len + 1];
       ci.Child[0] = len;
       ci.Child[1] = len + 2;
 
       long long nodes_mid = nodes_begin + (nodes_end - nodes_begin) / 2;
-      //std::cout<<nodes_begin<<" "<<nodes_mid<<" "<<nodes_end<<std::endl;
-      child0.Body[0] = nodes_begin;// + bodies_offset;
-      child0.Body[1] = nodes_mid;// + bodies_offset;
-      child1.Body[0] = nodes_mid;//+ bodies_offset;
-      child1.Body[1] = nodes_end;// + bodies_offset;
+      child0.Body[0] = nodes_begin;
+      child0.Body[1] = nodes_mid;
+      child1.Body[0] = nodes_mid;
+      child1.Body[1] = nodes_end;
 
-      get_bounds(&nodes[nodes_begin], nodes_mid - nodes_begin, child0.R.data(), child0.C.data());
-      get_bounds(&nodes[nodes_mid], nodes_end - nodes_mid, child1.R.data(), child1.C.data());
+      get_bounds(nodes, &indices[nodes_begin], nodes_mid - nodes_begin, child0.R.data(), child0.C.data());
+      get_bounds(nodes, &indices[nodes_mid], nodes_end - nodes_mid, child1.R.data(), child1.C.data());
     }
   }
 }
@@ -447,6 +481,58 @@ void buildBinaryTreeNodes(Cell* cells, elastWave3d::nodal_point* nodes, long lon
 
       get_bounds(&nodes[nodes_begin], nodes_mid - nodes_begin, child0.R.data(), child0.C.data());
       get_bounds(&nodes[nodes_mid], nodes_end - nodes_mid, child1.R.data(), child1.C.data());
+    }
+  }
+}
+
+void buildBinaryTreeElems(Cell* cells, const elastWave3d::element* elems, long long* indices, long long num_elems, long long levels, long long first_cell_idx, long long num_nodes) {
+  cells[first_cell_idx].Body[0] = num_nodes;
+  cells[first_cell_idx].Body[1] = num_nodes + num_elems;
+  cells[first_cell_idx].nodes = false;
+  get_bounds(elems, num_elems, cells[first_cell_idx].R.data(), cells[first_cell_idx].C.data());
+
+  long long nleaf = (long long)1 << levels;
+  long long cell_offset = 0;
+  for (long long level = 0; level < levels; ++level) {
+    cell_offset = level ? cell_offset * 2 + 2 : first_cell_idx;
+    for (long long i = 0; i < (1 << level); i++) {
+      Cell& ci = cells[cell_offset + i];
+      long long sdim = std::distance(ci.R.begin(), std::max_element(ci.R.begin(), ci.R.end()));
+      long long elems_begin = ci.Body[0] - num_nodes;
+      long long elems_end = ci.Body[1] - num_nodes;
+
+      long long i_num = elems_end - elems_begin;
+      std::vector<long long> sort_idx(i_num);
+      std::iota(sort_idx.begin(), sort_idx.end(), 0);
+      std::sort(sort_idx.begin(), sort_idx.end(), 
+        [&](size_t i, size_t j) { return elems[indices[elems_begin + i]].xc[sdim] < elems[indices[elems_begin + j]].xc[sdim]; });
+
+      //std::vector<elastWave3d::element> bodies_copy(i_num);
+      std::vector<long long> indices_copy(i_num);
+      //std::memcpy(bodies_copy.data(), &elems[elems_begin], sizeof(elastWave3d::element) * i_num);
+      std::memcpy(indices_copy.data(), &indices[elems_begin], sizeof(long long) * i_num);
+      for (long long i = 0; i < i_num; ++i) {
+        //elems[elems_begin + i] = bodies_copy[sort_idx[i]];
+        indices[elems_begin + i] = indices_copy[sort_idx[i]];
+      }
+      long long len = (cell_offset + i) * 2 + 2;
+      //std::cout<<"Child 0 "<<len<<std::endl;
+      Cell& child0 = cells[len];
+      Cell& child1 = cells[len + 1];
+      ci.Child[0] = len;
+      ci.Child[1] = len + 2;
+
+      long long elems_mid = elems_begin + (elems_end - elems_begin) / 2;
+      //std::cout<<nodes_begin<<" "<<nodes_mid<<" "<<nodes_end<<std::endl;
+      child0.Body[0] = elems_begin + num_nodes;
+      child0.Body[1] = elems_mid + num_nodes;
+      child0.nodes = false;
+      child1.Body[0] = elems_mid + num_nodes;
+      child1.Body[1] = elems_end + num_nodes;
+      child1.nodes = false;
+
+      get_bounds(elems, &indices[elems_begin], elems_mid - elems_begin, child0.R.data(), child0.C.data());
+      get_bounds(elems, &indices[elems_mid], elems_end - elems_mid, child1.R.data(), child1.C.data());
     }
   }
 }
