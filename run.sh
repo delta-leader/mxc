@@ -9,6 +9,6 @@ cd build
 
 MAT=2530
 export OMP_NUM_THREADS=64
-for i in {1..50}; do
-  mpirun -n 1 ./main.app ${MAT} 0 32 32 0 1e-12 fused2 $i > "../output/MAT_${MAT}/omega_${i}.txt"
-done
+#for i in {1..50}; do
+mpirun -n 1 ./main.app ${MAT} 0 64 64 0 1e-12 fused2 1 > "../output/MAT_${MAT}/omega_1_leaf_64_rank_64.txt"
+#done

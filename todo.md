@@ -221,3 +221,42 @@ Ideas for our contribution
   - compare to other common preconditioners for this problem
     - without preconditioner - analytical preconditioner cannot be applied because the linear/constant bases are mixed (HPC preconditioner would already be novel)
   - submit to Computer Physics Communication
+    - I downloaded their remplate and made a sample project
+    - I did not find any page limit, but most articles in the last two issues have 10-12 pages, although I also saw up to 20
+  - what will we write about
+    - I don't really understand the physics, so I'd love to limit that discussion to the introduction/background
+    - focus on the H2 preconditioner instead
+      - construction:
+        - making two trees and fusing them
+      - factorization
+        - selecting the corresponding matrix rowsin the upper levels?
+      - investigations:
+        - which tree/sorting works best
+        - restarted vs non-restarted GMRES?
+        - omega/leaf-size/rank?
+        - comparison to HSS/other preconditioners
+        - other geometries?
+        - multi-node implementation?
+
+Further experiments:
+  - add growing ranks for larger matrices
+  - 32 * 3 = 96 = 32
+  One Leaf 32 x 32 nodes = 96 x 96 matrix
+  - increase rank to 40 or more
+  - timings for matrix assembly vs construction
+  - omega: set 10 as the limit
+
+This is my current idea for making this application use MPI:
+  - we cannot construct the dense matrix for all processes, instead, we follow the partition of the leaf level
+    - i.e. each process only constructs the rows it is responsible for and then creates only the local h-matrix approx
+    - What do we need?
+      - all processes need the complete nodes and elements list -> we can just read them from the file
+      - We partition the points locally, but how exactly?
+      - Also, currently we construct the H2 from the lower triangle, we would need to change that to the upper triangle
+      - I don't really understand the current communicator
+        - First, change the code so that each H2 matrix on the leaf level stores it's corresponding rows
+        - construction needs to be changed to use the rows instead of the columns
+        - we need to communicate the selected rows from the child to the parent (if they are not on the same node)
+        - factorization and preconditioning should inherently work
+        - we need to calculate the matrix vector product inside GMRES on each node locally
+        - it seems that everything else is already local, although I don't really understand it

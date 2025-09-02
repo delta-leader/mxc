@@ -143,12 +143,22 @@ int main(int argc, char* argv[]) {
   MatrixGenerator matgen(omega);
   Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
   Eigen::VectorXcd rhs_gen(Nbody * 3);
+  double get_scale_time = MPI_Wtime();
   double scale = std::sqrt(matgen.get_max_nodes(nodes.data(), num_nodes, elems.data(), num_elems) / matgen.get_max_elems(nodes.data(), num_nodes, elems.data(), num_elems));
+  get_scale_time = MPI_Wtime() - get_scale_time;
+  double gen_matrix_time = MPI_Wtime();
   matgen.gen_matrix_sorted(nodes.data(), num_nodes, elems.data(), num_elems, nodes.data(), num_nodes, elems.data(), num_elems, nodes_indices, elems_indices, scale, A_gen.data());
+  gen_matrix_time = MPI_Wtime() - gen_matrix_time;
+  double gen_rhs_time = MPI_Wtime();
   matgen.gen_rhs_sorted(nodes.data(), num_nodes, elems.data(), num_elems, nodes_indices, elems_indices, scale, rhs_gen.data());
+  gen_rhs_time = MPI_Wtime() - gen_rhs_time;
   //std::cout<<"MAX "<<matgen.get_max_nodes(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
   //std::cout<<"MAX Elems "<<matgen.get_max_elems(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
   //std::cout<<"Scale "<<scale<<std::endl;
+  std::cout<<"MATRIX ASSEMBLY"<<std::endl;
+  std::cout<<"Calc scale time "<<get_scale_time<<std::endl;
+  std::cout<<"Gen matrix time "<<gen_matrix_time<<std::endl;
+  std::cout<<"Gen rhs time "<<gen_rhs_time<<std::endl;
   
   // generate random x
   std::vector<std::complex<double>> Xbody(Nbody * 3);
@@ -256,6 +266,7 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
+    std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << std::endl;
   }
 
   //initNcclComms(&nccl_comms, matM.allocedComm);
@@ -286,9 +297,9 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     //std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
-    std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
-    //std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
-    //std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
+    //std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
+    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
+    std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
   }
 
