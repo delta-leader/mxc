@@ -36,15 +36,19 @@ int main(int argc, char* argv[]) {
   // Reading the mes data (i.e. nodes and elems)
   // For the elements we calculate the centroid and store it in elems
   //read_mesh_data(n_nodes, nodes, n_elems, elems, "../input/mesh_sphere_" + MAT + "nodes.inp");
-  long long num_nodes, num_elems;
-  read_mesh_specs(num_nodes, num_elems, "../input/mesh_sphere_" + MAT + "nodes.inp");
-  long long Nbody = num_nodes + num_elems;
+  //long long num_nodes, num_elems;
+  //read_mesh_specs(num_nodes, num_elems, "../input/mesh_sphere_" + MAT + "nodes.inp");
+  //long long Nbody = num_nodes + num_elems;
   // leaf size is expressed in terms of #elems, since we don't want to split an elment
+  
+  
+  //std::vector<struct elastWave3d::nodal_point> nodes(num_nodes);
+  //std::vector<struct elastWave3d::element> elems(num_elems);
+  //read_mesh_fortran(num_nodes, nodes, num_elems, elems, stoi(MAT));
+  MatrixGenerator matgen(M);
+  long long Nbody = matgen.get_num_nodes() + matgen.get_num_elems();
+  std::cout<<"Nodes/Elements: "<<matgen.get_num_nodes()<<" "<<matgen.get_num_elems()<<std::endl;
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
-  std::cout<<"Nodes/Elements: "<<num_nodes<<" "<<num_elems<<std::endl;
-  std::vector<struct elastWave3d::nodal_point> nodes(num_nodes);
-  std::vector<struct elastWave3d::element> elems(num_elems);
-  read_mesh_fortran(num_nodes, nodes, num_elems, elems, stoi(MAT));
   // Mesh check
   //for (int i = 0; i < 5; ++i)
   //  std::cout<<nodes2[i].xc[0]<<", "<<nodes2[i].xc[1]<<", "<<nodes2[i].xc[2]<<std::endl;
@@ -63,10 +67,10 @@ int main(int argc, char* argv[]) {
   //std::iota(idx.begin(), idx.end(), 0);
   //std::vector<double> all(nodes);
   //all.insert(all.end(), elems.begin(), elems.end());
-  std::vector<long long> nodes_indices(num_nodes);
-  std::iota(nodes_indices.begin(), nodes_indices.end(), 0);
-  std::vector<long long> elems_indices(num_elems);
-  std::iota(elems_indices.begin(), elems_indices.end(), 0);
+  //std::vector<long long> nodes_indices(num_nodes);
+  //std::iota(nodes_indices.begin(), nodes_indices.end(), 0);
+  //std::vector<long long> elems_indices(num_elems);
+  //std::iota(elems_indices.begin(), elems_indices.end(), 0);
 
   long long levels, Nleaf, ncells;
   std::vector<Cell> cell;
@@ -79,10 +83,10 @@ int main(int argc, char* argv[]) {
     // build the tree for the whole matrix
     buildBinaryTree(&cell[0], &all[0], idx.data(), Nbody, levels);*/
   } else {
-    long long levels_elems = (long long) std::ceil(std::log2((double)num_elems / leaf_size));
+    long long levels_elems = (long long) std::ceil(std::log2((double)matgen.get_num_elems() / leaf_size));
     long long Nleaf_elems = (long long)1 << levels_elems;
     long long ncells_elems = Nleaf_elems + Nleaf_elems - 1;
-    long long levels_nodes = (long long) std::ceil(std::log2((double)num_nodes / leaf_size));
+    long long levels_nodes = (long long) std::ceil(std::log2((double)matgen.get_num_nodes() / leaf_size));
     long long Nleaf_nodes = (long long)1 << levels_nodes;
     long long ncells_nodes = Nleaf_nodes + Nleaf_nodes - 1;
     if (tree_mode == "fused1") {
@@ -112,15 +116,15 @@ int main(int argc, char* argv[]) {
         cell.resize(ncells);
         //buildBinaryTree3(&cell[0], &nodes[0], idx.data(), n_nodes, levels_nodes, 1, 0);
         //buildBinaryTree3(&cell[0], &elems[0], &idx[n_nodes], n_elems, levels_elems, 0, n_nodes);
-        buildBinaryTreeNodes(&cell[0], &nodes[0], nodes_indices.data(), num_nodes, levels_nodes, 1);
-        buildBinaryTreeElems(&cell[0], &elems[0], elems_indices.data(), num_elems, levels_elems, 0, num_nodes);
+        buildBinaryTreeNodes(&cell[0], matgen.get_nodes().data(), matgen.get_nodes_idx().data(), matgen.get_num_nodes(), levels_nodes, 1);
+        buildBinaryTreeElems(&cell[0], matgen.get_elems().data(), matgen.get_elems_idx().data(), matgen.get_num_elems(), levels_elems, 0, matgen.get_num_nodes());
         //buildBinaryTree3(&cell[0], &nodes[0], nodes_indices.data(), n_nodes, levels_nodes, 1, 0);
         //buildBinaryTree3(&cell[0], &elems[0], elems_indices.data(), n_elems, levels_elems, 0, n_nodes);
         /* root has three children */
         cell[0].Child[0] = 1;
         cell[0].Child[1] = 4;
         cell[0].Body[0] = 0;
-        cell[0].Body[1] = num_nodes + num_elems;
+        cell[0].Body[1] = matgen.get_num_nodes() + matgen.get_num_elems();
       } else {
         std::cout<<"Invalid tree mode '" + tree_mode +"'"<<std::endl;
         return -1;
@@ -132,7 +136,7 @@ int main(int argc, char* argv[]) {
   std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
 
   // read the rhs, reference solution and matrix from the file
-  long long n_mat = (num_nodes + num_elems) * 3;
+  long long n_mat = Nbody * 3;
   //std::vector<std::complex<double>> mat(n_mat * n_mat);
   //read_data2(mat.data(), "../input/checkMatrix.dat", n_mat * n_mat);
   //Eigen::Map<Eigen::MatrixXcd> A(mat.data(), n_mat,  n_mat);
@@ -140,17 +144,23 @@ int main(int argc, char* argv[]) {
   //read_data2(b.data(), "../input/checkRHS.dat", n_mat);
   //Eigen::Map<Eigen::VectorXcd> rhs(b.data(), n_mat);
  
-  MatrixGenerator matgen(omega);
-  Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
-  Eigen::VectorXcd rhs_gen(Nbody * 3);
+  //MatrixGenerator matgen(omega);
+  Eigen::MatrixXcd A_gen(n_mat, n_mat);
+  Eigen::VectorXcd rhs_gen(n_mat);
   double get_scale_time = MPI_Wtime();
-  double scale = std::sqrt(matgen.get_max_nodes(nodes.data(), num_nodes, elems.data(), num_elems) / matgen.get_max_elems(nodes.data(), num_nodes, elems.data(), num_elems));
+  double scale = matgen.calc_scale(omega);
   get_scale_time = MPI_Wtime() - get_scale_time;
   double gen_matrix_time = MPI_Wtime();
-  matgen.gen_matrix_sorted(nodes.data(), num_nodes, elems.data(), num_elems, nodes.data(), num_nodes, elems.data(), num_elems, nodes_indices, elems_indices, scale, A_gen.data());
+  matgen.gen_matrix_sorted(A_gen.data(), omega, scale);
+  //matgen.gen_matrix(A_gen.data(), omega, 1);
+  //for (int i = 0; i < n_mat; ++i)
+  //  std::cout<<rhs_gen(i)<<std::endl;
   gen_matrix_time = MPI_Wtime() - gen_matrix_time;
   double gen_rhs_time = MPI_Wtime();
-  matgen.gen_rhs_sorted(nodes.data(), num_nodes, elems.data(), num_elems, nodes_indices, elems_indices, scale, rhs_gen.data());
+  matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
+  //matgen.gen_rhs(rhs_gen.data(), omega, scale);
+  //for (int i = 0; i < n_mat; ++i)
+  //  std::cout<<rhs_gen(i)<<std::endl;
   gen_rhs_time = MPI_Wtime() - gen_rhs_time;
   //std::cout<<"MAX "<<matgen.get_max_nodes(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;
   //std::cout<<"MAX Elems "<<matgen.get_max_elems(nodes2.data(), num_nodes, elems2.data(), num_elems)<<std::endl;

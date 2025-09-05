@@ -8,18 +8,28 @@
 
 class MatrixGenerator {
 private:
-  double omega;
-  const std::complex<double> alpha;
-  const double mu0;
-  const double mu1;
+  double mu0;
+  double mu1;
+  long long num_nodes, num_elems;
+  std::vector<struct elastWave3d::nodal_point> nodes;
+  std::vector<struct elastWave3d::element> elems;
+  std::vector<long long> nodes_idx, elems_idx;
+  double scale = 1;
 public:
-  MatrixGenerator(double omega=1.0);
-  void gen_matrix(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems, const elastWave3d::nodal_point* ynodes, long long num_ynodes, const elastWave3d::element* yelems, long long num_yelems, std::complex<double> cmat[]) const;
-  void gen_matrix_sorted(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems, const elastWave3d::nodal_point* ynodes, long long num_ynodes, const elastWave3d::element* yelems, long long num_yelems, std::vector<long long>& nodes_indices, std::vector<long long>& elems_indices, const double scale, std::complex<double> cmat[]) const;
-  void gen_rhs(const elastWave3d::nodal_point* nodes, long long num_nodes, const elastWave3d::element* elems, long long num_elems, std::complex<double> rhs[], bool equation_type=true) const;
-  void gen_rhs_sorted(const elastWave3d::nodal_point* nodes, long long num_nodes, const elastWave3d::element* elems, long long num_elems, std::vector<long long>& nodes_indices, std::vector<long long>& elems_indices, const double scale, std::complex<double> rhs[], bool equation_type=true) const;
-  double get_max_nodes(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems) const;
-  double get_max_elems(const elastWave3d::nodal_point* xnodes, long long num_xnodes, const elastWave3d::element* xelems, long long num_xelems) const;
+  MatrixGenerator(const int size);
+  long long get_num_nodes() const {return num_nodes;};
+  long long get_num_elems() const {return num_elems;};
+  const std::vector<struct elastWave3d::nodal_point>& get_nodes() const {return nodes;};
+  const std::vector<struct elastWave3d::element>& get_elems() const {return elems;};
+  std::vector<long long>& get_nodes_idx() {return nodes_idx;};
+  std::vector<long long>& get_elems_idx() {return elems_idx;};
+  void gen_matrix(std::complex<double> cmat[], const double omega, double scale = 0) const;
+  void gen_matrix_sorted(std::complex<double> cmat[], const double omega, double scale = 0) const;
+  void gen_rhs(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
+  void gen_rhs_sorted(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
+  double get_max_nodes(const double omega) const;
+  double get_max_elems(const double omega) const;
+  double calc_scale(const double omega);
 };
 
 class Accessor {

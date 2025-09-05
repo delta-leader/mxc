@@ -260,3 +260,11 @@ This is my current idea for making this application use MPI:
         - factorization and preconditioning should inherently work
         - we need to calculate the matrix vector product inside GMRES on each node locally
         - it seems that everything else is already local, although I don't really understand it
+      FIRST STEP
+        - construct the matrix on each leaf level and check if we can broadcast them together
+          - NOTE: even if alpha is not used in the C code, it needs to be set in Fortran? not sure
+          - I rewrote the matrix generator so that it now saves all the nodes and elements
+            -> construction of the rhs seems to work, but there is an error for the matrix
+              - all matrix elements seem to be zero, I need to dig deeper
+              - found the issue, the 'analysis_condition' file is only read after the mesh, so I needed
+                to set mu0 and mu1 later in the code

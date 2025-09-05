@@ -14,7 +14,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-void uniform_unit_cube(double* bodies, long long nbodies, double diameter, long long dim) {
+inline void uniform_unit_cube(double* bodies, long long nbodies, double diameter, long long dim) {
   long long side = std::ceil(std::pow(nbodies, 1. / dim));
   long long lens[3] = { dim > 0 ? side : 1, dim > 1 ? side : 1, dim > 2 ? side : 1 };
   double step = diameter / side;
@@ -31,7 +31,7 @@ void uniform_unit_cube(double* bodies, long long nbodies, double diameter, long 
   }
 }
 
-void uniform_unit_cube_rnd(double* bodies, long long nbodies, double diameter, long long dim, unsigned int seed) {
+inline void uniform_unit_cube_rnd(double* bodies, long long nbodies, double diameter, long long dim, unsigned int seed) {
   std::mt19937 gen(seed);
   std::uniform_real_distribution uniform_dist(0., diameter);
 
@@ -43,7 +43,7 @@ void uniform_unit_cube_rnd(double* bodies, long long nbodies, double diameter, l
   });
 }
 
-void mesh_sphere(double* bodies, long long nbodies, double r) {
+inline void mesh_sphere(double* bodies, long long nbodies, double r) {
   const double phi = M_PI * (3. - std::sqrt(5.));  // golden angle in radians
   const double d = r + r;
   const double r2 = r * r;
@@ -63,7 +63,7 @@ void mesh_sphere(double* bodies, long long nbodies, double r) {
   }
 }
 
-void toPolar(double* cart_coords, double* polar_coords) {
+inline void toPolar(double* cart_coords, double* polar_coords) {
   double radius = std::sqrt(cart_coords[0] * cart_coords[0] + cart_coords[1] * cart_coords[1] + cart_coords[2] * cart_coords[2]);
   double theta = std::acos(cart_coords[2] / radius);
   double phi = std::acos(cart_coords[0] / std::sqrt(cart_coords[0] * cart_coords[0] + cart_coords[1] * cart_coords[1] )) * (cart_coords[1] < 0 ? -1 : 1);
@@ -72,7 +72,7 @@ void toPolar(double* cart_coords, double* polar_coords) {
   polar_coords[1] = phi;
 }
 
-void read_mesh_specs(long long& num_nodes, long long& num_elems, const std::string& fname) {
+inline void read_mesh_specs(long long& num_nodes, long long& num_elems, const std::string& fname) {
   std::ifstream file(fname);
   std::string line;
   std::getline(file, line);
@@ -85,7 +85,7 @@ void read_mesh_specs(long long& num_nodes, long long& num_elems, const std::stri
   iss >> num_nodes;
 }
 
-void read_mesh_fortran(long long& num_nodes, std::vector<struct elastWave3d::nodal_point>& nodes, long long& num_elems, std::vector<struct elastWave3d::element>& elems, int mat_num) {
+inline void read_mesh_fortran(long long& num_nodes, std::vector<struct elastWave3d::nodal_point>& nodes, long long& num_elems, std::vector<struct elastWave3d::element>& elems, int mat_num) {
   int numNodeBasis = num_nodes;
   int numElemBasis = num_elems;
   elastWave3d::input_non_global(nodes.data(), numNodeBasis, elems.data(), numElemBasis, mat_num);
@@ -102,7 +102,7 @@ void read_mesh_fortran(long long& num_nodes, std::vector<struct elastWave3d::nod
   num_elems = numElemBasis;
 } 
 
-void read_mesh_data(long long& num_nodes, std::vector<double>& nodes, long long& num_elems, std::vector<double>& elems, const std::string& fname) {
+inline void read_mesh_data(long long& num_nodes, std::vector<double>& nodes, long long& num_elems, std::vector<double>& elems, const std::string& fname) {
   // Open the file and skip the first two lines
   std::ifstream file(fname);
   std::string line;
@@ -154,7 +154,7 @@ void read_mesh_data(long long& num_nodes, std::vector<double>& nodes, long long&
 }
 
 // I don't think this is fully implemented, why would we only convert the elements to polar coordinates?
-void read_mesh_data_polar(long long& num_nodes, std::vector<double>& nodes, long long& num_elems, std::vector<double>& elems, std::vector<double>& elems_polar, const std::string& fname) {
+inline void read_mesh_data_polar(long long& num_nodes, std::vector<double>& nodes, long long& num_elems, std::vector<double>& elems, std::vector<double>& elems_polar, const std::string& fname) {
   // Open the file and skip the first two lines
   std::ifstream file(fname);
   std::string line;
@@ -209,7 +209,7 @@ void read_mesh_data_polar(long long& num_nodes, std::vector<double>& nodes, long
   //std::cout<<std::endl;
 }
 
-void read_data(std::complex<double>* values, const std::string& fname, const long long n) {
+inline void read_data(std::complex<double>* values, const std::string& fname, const long long n) {
   std::ifstream file(fname);
   long long a, b;
   file >> a >> b;
@@ -231,7 +231,7 @@ void read_data(std::complex<double>* values, const std::string& fname, const lon
   }
 }
 
-void read_data2(std::complex<double>* values, const std::string& fname, const long long n) {
+inline void read_data2(std::complex<double>* values, const std::string& fname, const long long n) {
   std::ifstream file(fname);
   std::string line;
   double real, img;
@@ -245,7 +245,7 @@ void read_data2(std::complex<double>* values, const std::string& fname, const lo
   }
 }
 
-void read_vector(std::complex<double>* values, long long* indices, const std::string& fname, const long long n) {
+inline void read_vector(std::complex<double>* values, long long* indices, const std::string& fname, const long long n) {
   std::ifstream file(fname);
   long long a, b;
   file >> a >> b;
@@ -269,7 +269,7 @@ void read_vector(std::complex<double>* values, long long* indices, const std::st
   }
 }
 
-void read_matrix(std::complex<double>* values, long long* indices, const std::string& fname, const long long n) {
+inline void read_matrix(std::complex<double>* values, long long* indices, const std::string& fname, const long long n) {
   std::ifstream file(fname);
   long long a, b;
   file >> a >> b;
@@ -297,7 +297,7 @@ void read_matrix(std::complex<double>* values, long long* indices, const std::st
   }
 }
 
-void write_to_csv(const char* fname, int mpi_size, long long N, double theta, long long leaf_size, long long rank, double epi, const char* mode, 
+inline void write_to_csv(const char* fname, int mpi_size, long long N, double theta, long long leaf_size, long long rank, double epi, const char* mode, 
   double h2cerr, double h2ctime, double h2ctime_comm, double h2mvtime, double h2mvtime_comm, double dense_mvtime,
   double mctime, double mctime_comm, double mcerr, double factor_time, double factor_time_comm, double sub_time, double sub_time_comm, double sub_err,
   double gmres_err, double gmres_iters, double gmres_time, double gmres_time_comm, const double* iter_err) {
