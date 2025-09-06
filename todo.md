@@ -268,3 +268,4 @@ This is my current idea for making this application use MPI:
               - all matrix elements seem to be zero, I need to dig deeper
               - found the issue, the 'analysis_condition' file is only read after the mesh, so I needed
                 to set mu0 and mu1 later in the code
+        - actually the first step should be to build row bases instead of column bases and test
