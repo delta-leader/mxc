@@ -269,3 +269,11 @@ This is my current idea for making this application use MPI:
               - found the issue, the 'analysis_condition' file is only read after the mesh, so I needed
                 to set mu0 and mu1 later in the code
         - actually the first step should be to build row bases instead of column bases and test
+          - DONE, for the small matrix, this actually achieved slightly better accuracy
+        - constructed the matrix for each cell on the leaf-level in a row-wise fashion
+        - wrote a method to do a dense matrix-vector with the matrices from the leaf level
+          - seems to work
+          - need to check copying back of the result
+            - checked, the function currently takes a vector of local length and broadcasts it before calculating only the local part of the restul
+              -> not sure if this is the best version
+          - need to test in a multi-process environment

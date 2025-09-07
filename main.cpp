@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
   //  std::cout<<rhs_gen(i)<<std::endl;
   gen_matrix_time = MPI_Wtime() - gen_matrix_time;
   double gen_rhs_time = MPI_Wtime();
-  matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
+  //matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
   //matgen.gen_rhs(rhs_gen.data(), omega, scale);
   //for (int i = 0; i < n_mat; ++i)
   //  std::cout<<rhs_gen(i)<<std::endl;
@@ -223,6 +223,8 @@ int main(int argc, char* argv[]) {
   double refmatvec_time = MPI_Wtime();
   Eigen::Map<Eigen::VectorXcd> t(&X2[0], lenX);
   t = A_gen * t;
+  //for (int i = 0; i < lenX; ++i)
+  //  std::cout<<t(i)<<std::endl;
 
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   // double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
@@ -262,7 +264,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  H2MatrixSolver matM(A_gen, 0, rank, leveled_rank, cell, theta, levels);
+  H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega, scale);
+  //H2MatrixSolver matM(A_gen, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, epi, rank, leveled_rank, cell, theta, levels, all_sorted);
 
@@ -271,8 +274,10 @@ int main(int argc, char* argv[]) {
   m_construct_comm_time = ColCommMPI::get_comm_time();
 
   std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
-  matM.matVecMul(&X1[0]);
+  matM.matVecMulDense(&X1[0]);
+  //matM.matVecMul(&X1[0]);
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
+  std::cout<<X2[0]<<", "<<X2[1]<<", "<<X2[2]<<", "<<X2[3]<<", "<<X2[4]<<", "<<X2[5]<<std::endl;
 
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
@@ -282,7 +287,7 @@ int main(int argc, char* argv[]) {
   //initNcclComms(&nccl_comms, matM.allocedComm);
   //matM.init_gpu_handles(nccl_comms);
 
-  MPI_Barrier(MPI_COMM_WORLD);
+  /*MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
   matM.factorizeM();
@@ -328,13 +333,13 @@ int main(int argc, char* argv[]) {
     std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
     for (long long i = 0; i <= matM.iters; i++)
       std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
-
+  */
   //   /*if (csv != nullptr)
   //     write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
   //       h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 
   //       m_construct_time, m_construct_comm_time, cerr_m, h2_factor_time, h2_factor_comm_time, h2_sub_time, h2_sub_comm_time, serr, 
   //       matA.resid[matA.iters], matA.iters, gmres_time, gmres_comm_time, matA.resid.data());*/
-  }
+  //}
 
   // //GMRES without preconditioning
   // std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));

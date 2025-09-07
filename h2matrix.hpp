@@ -1,6 +1,7 @@
 #pragma once
 
 #include <matrix_container.hpp>
+#include <kernel.hpp>
 #include <hidr.hpp>
 #include <Eigen/Dense>
 
@@ -26,6 +27,7 @@ private:
 public:
   long long lenX;
   long long LowerZ;
+  long long n_mat;
 
   std::vector<long long> Dims;
   std::vector<long long> DimsLr;
@@ -57,6 +59,7 @@ public:
   void construct(const MatrixGenerator& matgen, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, const double omega, const double scale);
 
   void matVecUpwardPass(const std::complex<double>* X_in, const ColCommMPI& comm);
+  void matVecDense(std::complex<double>* X_in, const ColCommMPI& comm);
   void matVecHorizontalandDownwardPass(std::complex<double>* Y_out, const ColCommMPI& comm);
   void matVecLeafHorizontalPass(std::complex<double>* X_io, const ColCommMPI& comm);
 

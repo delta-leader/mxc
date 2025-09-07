@@ -29,6 +29,7 @@ public:
   H2MatrixSolver(const Accessor& eval_d, const MatrixAccessor& eval, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, const double bodies[], long long levels, MPI_Comm world = MPI_COMM_WORLD);
   H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, MPI_Comm world = MPI_COMM_WORLD);
   H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, std::vector<double>& pts, MPI_Comm world = MPI_COMM_WORLD);
+  H2MatrixSolver(const MatrixGenerator& matgen, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, double omega, double scale, MPI_Comm world = MPI_COMM_WORLD);
   void init_gpu_handles(const ncclComms nccl_comms);
   void move_data_gpu();
 
@@ -36,6 +37,7 @@ public:
   void matVecMulSp(deviceHandle_t handle, std::complex<double> X[]);
 
   void matVecMul(std::complex<double> X[]);
+  void matVecMulDense(std::complex<double> X[]);
   void factorizeM();
   void factorizeDeviceM(deviceHandle_t handle);
   void solvePrecondition(std::complex<double> X[]);
