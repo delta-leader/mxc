@@ -443,15 +443,8 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   }
 
   std::vector<long long> neighbor_ones(xlen, 1ll);
-  for (size_t i = 0; i<Dims.size(); ++i)
-    std::cout<<Dims[i]<<", ";
-  std::cout<<std::endl;
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
   comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
-  std::cout<<"xlen: "<<xlen<<std::endl;
-  for (size_t i = 0; i<Dims.size(); ++i)
-    std::cout<<Dims[i]<<", ";
-  std::cout<<std::endl;
   X.alloc(xlen, Dims.data());
   Y.alloc(xlen, Dims.data());
 
@@ -545,7 +538,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
           //memcpy(A[ij], M[i] + cells[cj].Body[0] * 3, sizeof(std::complex<double>) * M *N);
           Eigen::Map<Eigen::MatrixXcd> A_ij(A[ij], M, N);
-          //std::cout<<0<<" "<<cells[ci].Body[0] * 3<<", "<<M<<" "<<N<<std::endl;
+          // we could optimize this, as we don't necessarily need to make a copy here
           A_ij = Mat_i.block(0, cells[cj].Body[0] * 3, M, N);
         }
         //double threshold = 1e-2;

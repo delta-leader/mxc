@@ -249,7 +249,7 @@ int main(int argc, char* argv[]) {
   //H2MatrixSolver matM(A_gen, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, epi, rank, leveled_rank, cell, theta, levels, all_sorted);
-  std::cout<<"Construction finished"<<std::endl;
+  //std::cout<<"Construction finished"<<std::endl;
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
@@ -276,7 +276,7 @@ int main(int argc, char* argv[]) {
   ref = A_gen * ref;
   //for (int i = 0; i < lenX; ++i)
   //  std::cout<<t(i)<<std::endl;
-  std::cout<<"Ref finished"<<std::endl;
+  //std::cout<<"Ref finished"<<std::endl;
 
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   // double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
@@ -289,14 +289,6 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double cerr_m = H2MatrixSolver::solveRelErr(lenX_local, &X3[offset_local], &X2[offset_local]);
   MPI_Barrier(MPI_COMM_WORLD);
-  if (mpi_rank == 0) {
-    std::cout<<"Rank 0"<<std::endl;
-    std::cout<<X3[0]<<", "<<X3[1]<<", "<<X3[2]<<", "<<X3[3]<<", "<<X3[4]<<", "<<X3[5]<<std::endl;
-  }
-  if (mpi_rank == 1) {
-    std::cout<<"Rank 1"<<std::endl;
-    std::cout<<X3[0]<<", "<<X3[1]<<", "<<X3[2]<<", "<<X3[3]<<", "<<X3[4]<<", "<<X3[5]<<std::endl;
-  }
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
     std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << std::endl;
