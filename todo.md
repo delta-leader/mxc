@@ -277,3 +277,16 @@ This is my current idea for making this application use MPI:
             - checked, the function currently takes a vector of local length and broadcasts it before calculating only the local part of the restul
               -> not sure if this is the best version
           - need to test in a multi-process environment
+            - doesn't work and I don't understand why
+              - it seems that the neighbor broadcast doesn't do anything
+              - forthermore, it seems that xlen is only the number of cells on this level for one process, so we never allocate enough storage?
+              - all of this currently does not make much sense to me
+                - maybe the new tree breaks something in the communicator
+                - ask Ma about details tomorrow
+                  - all reduce change to bitwise OR (future reference)
+                - it seems the real issue was that I was using HSS and the communicator was not working as expected
+                  because there is no neighbor communication happening in HSS
+                  - the neighbor communicator for HSS is on the first level, which makes sense, we actually don't need to communicate
+                    on the lower level, we just communicate on the level where the data is split into different processes, but how to find that level?
+              - Managed to get the matrix-vector multiplication to work
+                - I'm questioning whether it would make more sense to allocate all Matrices on a single node into the same matrix

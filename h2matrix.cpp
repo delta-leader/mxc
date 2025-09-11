@@ -376,7 +376,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
 
 
 void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, const double omega, const double scale) {
-  // number of cells on this level
+  // number of cells on this level (this process and neighbors)
   long long xlen = comm.lenNeighbors();
   // index of the first cell for this process on this level
   long long ibegin = comm.oLocal();
@@ -385,7 +385,6 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   // index of the first cell for this process in the global cell array
   long long ybegin = comm.oGlobal();
   n_mat = matgen.get_num_total() * 3;
-  std::cout<<"Start "<<n_mat<<std::endl;
 
   // dimensions for each cell on this level
   Dims.resize(xlen, 0);
@@ -430,26 +429,29 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     // total number of particles on this process
     lenX = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
     LowerZ = 0;
-    std::cout<<"Rows on this node: "<<lenX<<std::endl;
     std::vector<long long> row_offsets(&Dims[ibegin], &Dims[ibegin + nodes]);
     for (auto& offset : row_offsets)
       offset *= n_mat;
     Mat.alloc(nodes, row_offsets.data());
-    std::cout<<Mat.size()<<std::endl;
+    // I do this in a loop now, but I could also just create one big matrix
+    // in one go if I reduce the dimensions first
+    // this would however, change the data layout and I would need to account for that
     for (long long i = 0; i < nodes; ++i) {
       matgen.gen_matrix_sorted(Mat[i], cells[ybegin + i].Body[0], Dims[ibegin + i] / 3, omega, scale);
-      //if (!i)
-      //  for (long long j=0; j < row_offsets[0]; ++j)
-      //    std::cout<<Mat[i][j]<<std::endl;
     }
-    std::cout<<"allocated matrix"<<std::endl;
-    // we should also calculate the scale distributed, but lets keep that for later
-    //matgen.gen_matrix_sorted(Mat[0], omega, scale);
+     // we should also calculate the scale distributed, but lets keep that for later
   }
 
   std::vector<long long> neighbor_ones(xlen, 1ll);
+  for (size_t i = 0; i<Dims.size(); ++i)
+    std::cout<<Dims[i]<<", ";
+  std::cout<<std::endl;
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
   comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
+  std::cout<<"xlen: "<<xlen<<std::endl;
+  for (size_t i = 0; i<Dims.size(); ++i)
+    std::cout<<Dims[i]<<", ";
+  std::cout<<std::endl;
   X.alloc(xlen, Dims.data());
   Y.alloc(xlen, Dims.data());
 
@@ -1801,30 +1803,29 @@ void H2Matrix::constructBLR(const Eigen::Ref<const Eigen::MatrixXcd> &mat, doubl
   }
 }
 
-void H2Matrix::matVecDense(std::complex<double>* X_io, const ColCommMPI& comm) {
+void H2Matrix::matVecDense(const std::complex<double>* X_in, std::complex<double>* X_out, const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
   typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+  // if we have a dedicated output vector we don't need a barrier
+  // before writing
 
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
-  // broadcast X to all nodes
-  std::copy(&X_io[0], &X_io[lenX], X[ibegin]);
-  comm.neighbor_bcast(X[0], NbXoffsets.data());
-  Vector_t x_in(X[0], n_mat);
+  Eigen::Map<const Eigen::VectorXcd> x_in(&X_in[0], n_mat);
+  //Eigen::VectorXcd xin2(x_in);
+  //Matrix_t A2(Mat[0], n_mat, n_mat);
+  //Eigen::VectorXcd xout2 = A2 * xin2;
 
+  // there really should be no need to do this in a loop
+  // there is because of the data layout
   long long offset = 0;
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
     Matrix_t A(Mat[i], M, n_mat);
-    //if (!i)
-    //for (long long i = 0; i < M; ++i)
-     //for (long long j = 0; j < n_mat; ++j)
-       //std::cout<<A(i,j)<<std::endl;
-    Vector_t x_out(&X_io[offset], M);
+    Vector_t x_out(&X_out[offset], M);
+
     x_out = A * x_in;
     offset += M;
-    //for (long long i = 0; i < M; ++i)
-    //  std::cout<<x(i)<<std::endl;
   }
 }
 

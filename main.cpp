@@ -125,6 +125,25 @@ int main(int argc, char* argv[]) {
         cell[0].Child[1] = 4;
         cell[0].Body[0] = 0;
         cell[0].Body[1] = matgen.get_num_nodes() + matgen.get_num_elems();
+        /*std::cout<<"Root"<<std::endl;
+        std::cout<<"R: "<<cell[0].R[0]<<", "<<cell[0].R[1]<<", "<<cell[0].R[2]<<std::endl;
+        std::cout<<"C: "<<cell[0].C[0]<<", "<<cell[0].C[1]<<", "<<cell[0].C[2]<<std::endl;
+        std::cout<<"Node 1"<<std::endl;
+        std::cout<<"R: "<<cell[1].R[0]<<", "<<cell[1].R[1]<<", "<<cell[1].R[2]<<std::endl;
+        std::cout<<"C: "<<cell[1].C[0]<<", "<<cell[1].C[1]<<", "<<cell[1].C[2]<<std::endl;
+        std::cout<<"Node 2"<<std::endl;
+        std::cout<<"R: "<<cell[2].R[0]<<", "<<cell[2].R[1]<<", "<<cell[2].R[2]<<std::endl;
+        std::cout<<"C: "<<cell[2].C[0]<<", "<<cell[2].C[1]<<", "<<cell[2].C[2]<<std::endl;
+        std::cout<<"Node 3"<<std::endl;
+        std::cout<<"R: "<<cell[3].R[0]<<", "<<cell[3].R[1]<<", "<<cell[3].R[2]<<std::endl;
+        std::cout<<"C: "<<cell[3].C[0]<<", "<<cell[3].C[1]<<", "<<cell[3].C[2]<<std::endl;*/
+        for (int d = 0; d < 3; ++d) {
+          cell[0].R[d] = cell[1].R[d];
+          cell[0].C[d] = (cell[0].C[d] + cell[1].C[d]) / 2;
+        }
+        //std::cout<<"Root"<<std::endl;
+        //std::cout<<"R: "<<cell[0].R[0]<<", "<<cell[0].R[1]<<", "<<cell[0].R[2]<<std::endl;
+        //std::cout<<"C: "<<cell[0].C[0]<<", "<<cell[0].C[1]<<", "<<cell[0].C[2]<<std::endl;
       } else {
         std::cout<<"Invalid tree mode '" + tree_mode +"'"<<std::endl;
         return -1;
@@ -192,44 +211,6 @@ int main(int argc, char* argv[]) {
 //   matA.init_gpu_handles(nccl_comms);
 //   matA.allocSparseMV(handle, nccl_comms);*/
 
-  // multiply by 3 to get the actual length
-  // this way, we can reduce the number of elems if necessary
-  long long lenX = Nbody * 3;
-  std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
-  std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
-
-  // copy random x into X1, X2
-  std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
-  std::copy(&Xbody[0], &Xbody[lenX], &X2[0]);
-
-  // MPI_Barrier(MPI_COMM_WORLD);
-  // double matvec_time = MPI_Wtime(), matvec_comm_time;
-  // std::cout<<"Matvec"<<std::endl;
-  // matA.matVecMul(&X1[0]);
-  // std::cout<<"Matvec finished"<<std::endl;
-  // todo remove this testing code of the transpose
-  //matA.matVecMulSp(handle, &X1[0]);
-  //Eigen::MatrixXcd RX = U_sorted.triangularView<Eigen::Lower>();
-  //Eigen::MatrixXcd RX2 = U_sorted.triangularView<Eigen::StrictlyLower>().transpose();
-  //Eigen::MatrixXcd RX3 = RX + RX2;
-  //Eigen::Map<Eigen::VectorXcd> t2(&X2[0], lenX);
-  //Eigen::VectorXcd r = RX3 * t2;
-
-  //MPI_Barrier(MPI_COMM_WORLD);
-  //matvec_time = MPI_Wtime() - matvec_time;
-  //matvec_comm_time = ColCommMPI::get_comm_time();
-
-  // calculate reference into X2
-  double refmatvec_time = MPI_Wtime();
-  Eigen::Map<Eigen::VectorXcd> t(&X2[0], lenX);
-  t = A_gen * t;
-  //for (int i = 0; i < lenX; ++i)
-  //  std::cout<<t(i)<<std::endl;
-
-  refmatvec_time = MPI_Wtime() - refmatvec_time;
-  // double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
-  // //double cerr = H2MatrixSolver::solveRelErr(lenX, r.data(), result.data());
-
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
@@ -268,17 +249,54 @@ int main(int argc, char* argv[]) {
   //H2MatrixSolver matM(A_gen, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, epi, rank, leveled_rank, cell, theta, levels, all_sorted);
-
+  std::cout<<"Construction finished"<<std::endl;
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
 
-  std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
-  matM.matVecMulDense(&X1[0]);
-  //matM.matVecMul(&X1[0]);
-  double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
-  std::cout<<X2[0]<<", "<<X2[1]<<", "<<X2[2]<<", "<<X2[3]<<", "<<X2[4]<<", "<<X2[5]<<std::endl;
+  // multiply by 3 to get the actual length
+  // this way, we can reduce the number of elems if necessary
+  long long lenX = Nbody * 3;
+  long long lenX_local = (matM.local_bodies.second - matM.local_bodies.first) * 3;
+  long long offset_local = matM.local_bodies.first * 3;
+  // make the vectors full size and pass them on in a strided fashion
+  std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
+  std::vector<std::complex<double>> X3(lenX, std::complex<double>(0., 0.));
 
+  // copy random x into X1, X2
+  std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
+  std::copy(&Xbody[0], &Xbody[lenX], &X2[0]);
+  //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X1[0]);
+  //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X2[0]);
+
+   // calculate reference into X2
+  double refmatvec_time = MPI_Wtime();
+  Eigen::Map<Eigen::VectorXcd> ref(&X2[0], lenX);
+  ref = A_gen * ref;
+  //for (int i = 0; i < lenX; ++i)
+  //  std::cout<<t(i)<<std::endl;
+  std::cout<<"Ref finished"<<std::endl;
+
+  refmatvec_time = MPI_Wtime() - refmatvec_time;
+  // double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
+  // //double cerr = H2MatrixSolver::solveRelErr(lenX, r.data(), result.data());
+
+  //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X1[0]);
+  std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
+  matM.matVecMulDense(&X1[0], &X3[offset_local]);
+  //matM.matVecMul(&X1[0]);
+  MPI_Barrier(MPI_COMM_WORLD);
+  double cerr_m = H2MatrixSolver::solveRelErr(lenX_local, &X3[offset_local], &X2[offset_local]);
+  MPI_Barrier(MPI_COMM_WORLD);
+  if (mpi_rank == 0) {
+    std::cout<<"Rank 0"<<std::endl;
+    std::cout<<X3[0]<<", "<<X3[1]<<", "<<X3[2]<<", "<<X3[3]<<", "<<X3[4]<<", "<<X3[5]<<std::endl;
+  }
+  if (mpi_rank == 1) {
+    std::cout<<"Rank 1"<<std::endl;
+    std::cout<<X3[0]<<", "<<X3[1]<<", "<<X3[2]<<", "<<X3[3]<<", "<<X3[4]<<", "<<X3[5]<<std::endl;
+  }
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
     std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << std::endl;

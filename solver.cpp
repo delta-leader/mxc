@@ -234,11 +234,11 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
   A[levels].matVecLeafHorizontalPass(X, comm[levels]);
 }
 
-void H2MatrixSolver::matVecMulDense(std::complex<double> X[]) {
+void H2MatrixSolver::matVecMulDense(const std::complex<double> X[], std::complex<double> Y[]) {
   if (levels < 0)
     return;
 
-  A[levels].matVecDense(X, comm[levels]);
+  A[levels].matVecDense(X, Y, comm[levels]);
 }
 
 void H2MatrixSolver::factorizeM() {

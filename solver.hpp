@@ -37,7 +37,7 @@ public:
   void matVecMulSp(deviceHandle_t handle, std::complex<double> X[]);
 
   void matVecMul(std::complex<double> X[]);
-  void matVecMulDense(std::complex<double> X[]);
+  void matVecMulDense(const std::complex<double> X[], std::complex<double> Y[]);
   void factorizeM();
   void factorizeDeviceM(deviceHandle_t handle);
   void solvePrecondition(std::complex<double> X[]);
