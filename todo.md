@@ -290,3 +290,16 @@ This is my current idea for making this application use MPI:
                     on the lower level, we just communicate on the level where the data is split into different processes, but how to find that level?
               - Managed to get the matrix-vector multiplication to work
                 - I'm questioning whether it would make more sense to allocate all Matrices on a single node into the same matrix
+              - Upper level far fields
+                - S_ind just stores the indices for each row in a cell (globally numbered)
+                - When building the basis, we permute the indices, so that the selected ones are in front
+
+Updates from the 9/15 meeting:
+  - it seems that my idea of re-using the previously created matrix to extract the far field was not
+    considered favourably
+  - instead, the idea was to create the matrix at each level from scratch, using the indices from the    previous level
+  - additionally, it seemed like the consens was to use the whole far field instead of the sampled one (which I think is going to introduce some heavy computations)
+  - I think this approach should be considerably easier to implement
+    - Write a wrapper function to generate the matrix from matrix indices instead of node/element indices
+    - use this to do a full construction/factorization/gmres run
+    - think about optimizations only after this is done

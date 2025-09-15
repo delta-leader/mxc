@@ -91,9 +91,20 @@ void gen_matrix(const MatrixAccessor& eval, long long m, long long n, const doub
 }
 
 void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, long long m, long long n, const long long* rows, const long long* cols, Eigen::Ref<Eigen::MatrixXcd> Aij) {
+  std::cout<<"Generating matrix "<<m<<" x "<<n<<std::endl;
   for (long long i = 0; i < m; ++i) {
     for (long long j = 0; j < n; ++j) {
       Aij(i, j) = mat(rows[i], cols[j]);
+    }
+  }
+}
+
+void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, long long m, long long n, const long long* rows, const long long* cols, long long start, Eigen::Ref<Eigen::MatrixXcd> Aij) {
+  std::cout<<"Generating matrix "<<m<<" x "<<n<<std::endl;
+  std::cout<<"Start "<<start<<std::endl;
+  for (long long i = 0; i < m; ++i) {
+    for (long long j = 0; j < n; ++j) {
+      Aij(i, j) = mat(rows[i] - start, cols[j]);
     }
   }
 }

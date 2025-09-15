@@ -77,10 +77,11 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   //}
   std::cout<<"Level "<<levels<<std::endl;
   A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega, scale);
+  A[levels].lowest = true;
   //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
-    //std::cout<<"Level "<<l<<std::endl;
-    //A[l].construct(mat, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1]);
+    std::cout<<"Level "<<l<<std::endl;
+    A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega, scale);
   }
 
   long long llen = comm[levels].lenLocal();
@@ -125,7 +126,7 @@ H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, do
   A[levels].construct(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
-    //std::cout<<"Level "<<l<<std::endl;
+    std::cout<<"Level "<<l<<std::endl;
     A[l].construct(mat, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1]);
   }
 
