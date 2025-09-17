@@ -301,5 +301,6 @@ Updates from the 9/15 meeting:
   - additionally, it seemed like the consens was to use the whole far field instead of the sampled one (which I think is going to introduce some heavy computations)
   - I think this approach should be considerably easier to implement
     - Write a wrapper function to generate the matrix from matrix indices instead of node/element indices
+      - the whole matrix is correct
     - use this to do a full construction/factorization/gmres run
     - think about optimizations only after this is done

@@ -646,3 +646,87 @@ double MatrixGenerator::get_max_nodes(const double omega) const {
   }
   return max;
 }
+
+void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale) const {
+  if (!scale)
+    scale = this->scale;
+  long long nmat = (num_nodes + num_elems) * 3;
+  std::vector<std::complex<double>> mat3x3(9, 0.0);
+  std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
+  for (long long i = 0; i < num_rows; ++i) {
+    long long row_idx = row_indices[i] / 3;
+    //std::cout<<row_indices[i]<<std::endl;
+    if (row_idx < num_nodes) {
+      for (long long j = 0; j < num_cols; ++j) {
+        long long col_idx = col_indices[j] / 3;
+        if (col_idx < num_nodes) {
+          //std::cout<<row_idx<<" "<<col_idx<<std::endl;
+          //std::cout<<nodes_idx_inv[row_idx]<< " "<<nodes_idx_inv[col_idx]<<std::endl;
+          //std::cout<<nodes_idx[row_idx]<< " " <<nodes_idx[col_idx] <<std::endl;
+          // W0 + W1
+          // W0
+          const int out_in = 0;
+          const int slp_or_dlp = 4;
+          const int linear_or_const = 0;
+          std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[col_idx] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+          // W1
+          const int out_in_2nd = 1;
+          std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[col_idx] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+          cmat[i + j * num_rows] = mat3x3.at(i%3 + 3* (j%3)) + (mu1/mu0)*mat3x3_2nd.at(i%3 + 3* (j%3));
+        } else {
+          col_idx -= num_nodes;
+          // -(aT0 + aT1)
+          // aT0
+          const int out_in = 0;
+          const int slp_or_dlp = 3;
+          const int linear_or_const = 0;
+          std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+          // aT1
+          const int out_in_2nd = 1;
+          std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+          cmat[i + j * num_rows] = -mat3x3.at(i%3 + 3*(j%3)) - mat3x3_2nd.at(i%3 + 3*(j%3));
+          cmat[i + j * num_rows] *= scale;
+        }
+      }
+    } else {
+      row_idx -= num_nodes;
+      for (long long j = 0; j < num_cols; ++j) {
+        long long col_idx = col_indices[j] / 3;
+        if (col_idx < num_nodes) {
+          // T0 + T1
+          // T0
+          const int out_in = 0;
+          const int slp_or_dlp = 2;
+          const int linear_or_const = 1;
+          std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[col_idx] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+          // T1
+          const int out_in_2nd = 1;
+          std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[col_idx] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+          cmat[i + j * num_rows] = mat3x3.at(i%3 + 3*(j%3)) + mat3x3_2nd.at(i%3 + 3*(j%3));
+          cmat[i + j * num_rows] *= scale;
+        } else {
+          col_idx -= num_nodes;
+          // -(U0 + U1)
+          // U0
+          const int out_in = 0;
+          const int slp_or_dlp = 1;
+          const int linear_or_const = 1;
+          std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+          // U1
+          const int out_in_2nd = 1;
+          std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+          cmat[i + j * num_rows] = -mat3x3.at(i%3 + 3*(j%3)) - (mu0/mu1)*mat3x3_2nd.at(i%3 + 3*(j%3));
+          cmat[i + j * num_rows] *= scale * scale;
+        }
+      }
+    }
+  }
+}

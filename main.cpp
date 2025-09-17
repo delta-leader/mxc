@@ -188,6 +188,12 @@ int main(int argc, char* argv[]) {
   std::cout<<"Calc scale time "<<get_scale_time<<std::endl;
   std::cout<<"Gen matrix time "<<gen_matrix_time<<std::endl;
   std::cout<<"Gen rhs time "<<gen_rhs_time<<std::endl;
+
+  //Eigen::MatrixXcd A_gen2(n_mat, n_mat);
+  //std::vector<long long> mat_indices(n_mat);
+  //std::iota(mat_indices.begin(), mat_indices.end(), 0);
+  //matgen.gen_matrix_element(A_gen2.data(), mat_indices.data(), n_mat, mat_indices.data(), n_mat, omega, scale);
+  //std::cout<<"DIFF MATRIX "<<(A_gen2 - A_gen).norm() / A_gen.norm()<<std::endl;
   
   // generate random x
   std::vector<std::complex<double>> Xbody(Nbody * 3);
