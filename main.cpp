@@ -176,7 +176,7 @@ int main(int argc, char* argv[]) {
   //  std::cout<<rhs_gen(i)<<std::endl;
   gen_matrix_time = MPI_Wtime() - gen_matrix_time;
   double gen_rhs_time = MPI_Wtime();
-  //matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
+  matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
   //matgen.gen_rhs(rhs_gen.data(), omega, scale);
   //for (int i = 0; i < n_mat; ++i)
   //  std::cout<<rhs_gen(i)<<std::endl;
@@ -251,6 +251,7 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
+  //H2MatrixSolver matM(A_gen, 0, rank, leveled_rank, cell, theta, levels, matgen, omega, scale);
   H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega, scale);
   //H2MatrixSolver matM(A_gen, 0, rank, leveled_rank, cell, theta, levels);
   //H2MatrixSolver matM(A_sorted, 0, rank, leveled_rank, cell, theta, levels);
@@ -290,10 +291,11 @@ int main(int argc, char* argv[]) {
 
   //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X1[0]);
   std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
-  matM.matVecMulDense(&X1[0], &X3[offset_local]);
-  //matM.matVecMul(&X1[0]);
+  //matM.matVecMulDense(&X1[0], &X3[offset_local]);
+  matM.matVecMul(&X1[0]);
   MPI_Barrier(MPI_COMM_WORLD);
-  double cerr_m = H2MatrixSolver::solveRelErr(lenX_local, &X3[offset_local], &X2[offset_local]);
+  //double cerr_m = H2MatrixSolver::solveRelErr(lenX_local, &X1[offset_local], &X2[offset_local]);
+  double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
@@ -303,7 +305,7 @@ int main(int argc, char* argv[]) {
   //initNcclComms(&nccl_comms, matM.allocedComm);
   //matM.init_gpu_handles(nccl_comms);
 
-  /*MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_WORLD);
   double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
 
   matM.factorizeM();
@@ -349,7 +351,8 @@ int main(int argc, char* argv[]) {
     std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
     for (long long i = 0; i <= matM.iters; i++)
       std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
-  */
+  }
+  
   //   /*if (csv != nullptr)
   //     write_to_csv(csv, mpi_size, Nbody, theta, leaf_size, rank, epi, mode.data(), cerr, 
   //       h2_construct_time, h2_construct_comm_time, matvec_time, matvec_comm_time, refmatvec_time, 

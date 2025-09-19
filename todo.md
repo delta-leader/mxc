@@ -300,7 +300,15 @@ Updates from the 9/15 meeting:
   - instead, the idea was to create the matrix at each level from scratch, using the indices from the    previous level
   - additionally, it seemed like the consens was to use the whole far field instead of the sampled one (which I think is going to introduce some heavy computations)
   - I think this approach should be considerably easier to implement
-    - Write a wrapper function to generate the matrix from matrix indices instead of node/element indices
+    - Write a wrapper function to generate the matrix from matrix indices instead of node/element indices DONE
       - the whole matrix is correct
+        - the matrix was only correct because it was being created sequentially, I found another bug and it is fixed now
+      - The sequence of S_ind now also seems to be correct
+      - I get the same results for construction, factorization and GMRES solve as with the previous full matrix version
     - use this to do a full construction/factorization/gmres run
+      - Construction DONE
+      - Factorization DONE
+      - GMRES
+        - with full matrix DONE
+        - with distributed matvec
     - think about optimizations only after this is done

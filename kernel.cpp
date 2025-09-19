@@ -663,6 +663,7 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
           //std::cout<<row_idx<<" "<<col_idx<<std::endl;
           //std::cout<<nodes_idx_inv[row_idx]<< " "<<nodes_idx_inv[col_idx]<<std::endl;
           //std::cout<<nodes_idx[row_idx]<< " " <<nodes_idx[col_idx] <<std::endl;
+          //std::cout<<"Write to mat at "<< i + j *num_rows<<" from "<<i%3 + 3* (j%3)<<std::endl;
           // W0 + W1
           // W0
           const int out_in = 0;
@@ -674,7 +675,7 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
           const int out_in_2nd = 1;
           std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
           elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[col_idx] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
-          cmat[i + j * num_rows] = mat3x3.at(i%3 + 3* (j%3)) + (mu1/mu0)*mat3x3_2nd.at(i%3 + 3* (j%3));
+          cmat[i + j * num_rows] = mat3x3.at(row_indices[i]%3 + 3* (col_indices[j]%3)) + (mu1/mu0)*mat3x3_2nd.at(row_indices[i]%3 + 3* (col_indices[j]%3));
         } else {
           col_idx -= num_nodes;
           // -(aT0 + aT1)
@@ -688,7 +689,7 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
           const int out_in_2nd = 1;
           std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
           elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
-          cmat[i + j * num_rows] = -mat3x3.at(i%3 + 3*(j%3)) - mat3x3_2nd.at(i%3 + 3*(j%3));
+          cmat[i + j * num_rows] = -mat3x3.at(row_indices[i]%3 + 3*(col_indices[j]%3)) - mat3x3_2nd.at(row_indices[i]%3 + 3*(col_indices[j]%3));
           cmat[i + j * num_rows] *= scale;
         }
       }
@@ -708,7 +709,7 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
           const int out_in_2nd = 1;
           std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
           elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[col_idx] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
-          cmat[i + j * num_rows] = mat3x3.at(i%3 + 3*(j%3)) + mat3x3_2nd.at(i%3 + 3*(j%3));
+          cmat[i + j * num_rows] = mat3x3.at(row_indices[i]%3 + 3*(col_indices[j]%3)) + mat3x3_2nd.at(row_indices[i]%3 + 3*(col_indices[j]%3));
           cmat[i + j * num_rows] *= scale;
         } else {
           col_idx -= num_nodes;
@@ -723,7 +724,7 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
           const int out_in_2nd = 1;
           std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
           elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
-          cmat[i + j * num_rows] = -mat3x3.at(i%3 + 3*(j%3)) - (mu0/mu1)*mat3x3_2nd.at(i%3 + 3*(j%3));
+          cmat[i + j * num_rows] = -mat3x3.at(row_indices[i]%3 + 3*(col_indices[j]%3)) - (mu0/mu1)*mat3x3_2nd.at(row_indices[i]%3 + 3*(col_indices[j]%3));
           cmat[i + j * num_rows] *= scale * scale;
         }
       }
