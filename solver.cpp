@@ -401,6 +401,83 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
   }
 }
 
+void H2MatrixSolver::solveGMRESDense(double tol, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
+  std::cout<<"START GMRES"<<std::endl;
+  long long n_mat = A[levels].n_mat;
+  long long N = A[levels].lenX;
+  long long ld = inner_iters + 1;
+  std::cout<<N<<" "<<n_mat<<std::endl;
+
+  Eigen::Map<const Eigen::VectorXcd> B(b, N);
+  Eigen::Map<Eigen::VectorXcd> X(x, N);
+  Eigen::VectorXcd global(n_mat);
+
+  std::complex<double> nsum = B.adjoint() * B;
+  comm[levels].level_sum(&nsum, 1);
+  double normb = std::sqrt(nsum.real());
+  if (normb == 0.)
+    normb = 1.;
+
+  Eigen::VectorXcd R = B;
+  resid.resize(outer_iters + 1);
+  resid[0] = 1.;
+  iters = 0;
+
+  while (iters < outer_iters && tol <= resid[iters]) {
+    std::cout<<"Iteration"<<std::endl;
+    solvePrecondition(R.data());
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+
+    double beta = std::sqrt(nsum.real());
+    Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(ld, inner_iters);
+    Eigen::MatrixXcd v = Eigen::MatrixXcd::Zero(N, ld);
+    v.col(0) = R * (1. / beta);
+    
+    for (long long i = 0; i < inner_iters; i++) {
+      //R = v.col(i);
+      //matVecMul(R.data());
+      // here we need to use the new matvec
+      // R is only the local part, so that's fine, but v should be the full vector but it seems v is only local
+      // this code will break if N is not equal on all processes
+      std::cout<<"Before Gather "<<v.col(i).data()<<std::endl;
+      std::cout<<"Before Gather "<<global.data()<<std::endl;
+      MPI_Allgather(v.col(i).data(), N, MPI_C_DOUBLE_COMPLEX, global.data(), N, MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
+      std::cout<<"Gather"<<std::endl;
+      //R = mat * v.col(i);
+      matVecMulDense(global.data(), R.data());
+      std::cout<<"MAtvec"<<std::endl;
+      solvePrecondition(R.data());
+
+      H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
+      comm[levels].level_sum(H.col(i).data(), i + 1);
+      R.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
+
+      nsum = R.adjoint() * R;
+      comm[levels].level_sum(&nsum, 1);
+      H(i + 1, i) = std::sqrt(nsum.real());
+      v.col(i + 1) = R * (1. / H(i + 1, i));
+    }
+
+    Eigen::VectorXcd s = Eigen::VectorXcd::Zero(ld);
+    s(0) = beta;
+    R = H.householderQr().solve(s);
+    X.noalias() += v.leftCols(inner_iters) * R;
+
+    R = -X;
+    //matVecMul(R.data());
+    // and here also
+    MPI_Allgather(R.data(), N, MPI_C_DOUBLE_COMPLEX, global.data(), N, MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
+    matVecMulDense(global.data(), R.data());
+    //R = mat * R;
+    R += B;
+
+    nsum = R.adjoint() * R;
+    comm[levels].level_sum(&nsum, 1);
+    resid[++iters] = std::sqrt(nsum.real()) / normb;
+  }
+}
+
 void H2MatrixSolver::solveGMRESDense(double tol, const Eigen::Ref<const Eigen::MatrixXcd>& mat, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
   long long N = A[levels].lenX;
   long long ld = inner_iters + 1;

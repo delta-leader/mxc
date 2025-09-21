@@ -48,6 +48,7 @@ public:
   void solveGMRESDensePrecon(double tol, const Eigen::PartialPivLU<Eigen::MatrixXcd>& precon, const Eigen::Ref<const Eigen::MatrixXcd>& mat, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters);
   void solveGMRESDenseNoPrecon(double tol, const Eigen::Ref<const Eigen::MatrixXcd>& mat, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters);  
   void solveGMRESDevice(deviceHandle_t handle, double tol, H2MatrixSolver& M, std::complex<double> X[], const std::complex<double> B[], long long inner_iters, long long outer_iters, const ncclComms nccl_comms);
+  void solveGMRESDense(double tol, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters);
 
   void free_all_comms();
   void freeSparseMV();

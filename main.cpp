@@ -260,32 +260,36 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
+  std::cout<<"Construction Finished"<<std::endl;
 
   // multiply by 3 to get the actual length
   // this way, we can reduce the number of elems if necessary
-  long long lenX = Nbody * 3;
-  long long lenX_local = (matM.local_bodies.second - matM.local_bodies.first) * 3;
-  long long offset_local = matM.local_bodies.first * 3;
+  //long long lenX = Nbody * 3;
+  long long lenX = (matM.local_bodies.second - matM.local_bodies.first) * 3;
+  long long offset = matM.local_bodies.first * 3;
   // make the vectors full size and pass them on in a strided fashion
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
-  std::vector<std::complex<double>> X3(lenX, std::complex<double>(0., 0.));
+  //std::vector<std::complex<double>> X3(lenX, std::complex<double>(0., 0.));
+  std::cout<<"offset: "<<offset<<" "<<lenX<<std::endl;
 
   // copy random x into X1, X2
-  std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
-  std::copy(&Xbody[0], &Xbody[lenX], &X2[0]);
+  std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
+  std::copy(&Xbody[offset], &Xbody[offset + lenX], &X2[0]);
   //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X1[0]);
   //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X2[0]);
 
    // calculate reference into X2
   double refmatvec_time = MPI_Wtime();
   Eigen::Map<Eigen::VectorXcd> ref(&X2[0], lenX);
-  ref = A_gen * ref;
+  Eigen::Map<Eigen::VectorXcd> xbody(&Xbody[0], Nbody*3);
+  ref = A_gen.middleRows(offset, lenX) * xbody;
   //for (int i = 0; i < lenX; ++i)
   //  std::cout<<t(i)<<std::endl;
   //std::cout<<"Ref finished"<<std::endl;
 
   refmatvec_time = MPI_Wtime() - refmatvec_time;
+  std::cout<<"Ref Matvec finished"<<std::endl;
   // double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
   // //double cerr = H2MatrixSolver::solveRelErr(lenX, r.data(), result.data());
 
@@ -294,6 +298,7 @@ int main(int argc, char* argv[]) {
   //matM.matVecMulDense(&X1[0], &X3[offset_local]);
   matM.matVecMul(&X1[0]);
   MPI_Barrier(MPI_COMM_WORLD);
+  std::cout<<"Matvec finished"<<std::endl;
   //double cerr_m = H2MatrixSolver::solveRelErr(lenX_local, &X1[offset_local], &X2[offset_local]);
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -338,7 +343,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matM.solveGMRESDense(epi, A_gen, &X1[0], &rhs_gen[0], 10, 50);
+  matM.solveGMRESDense(epi, &X1[0], &rhs_gen[offset], 10, 50);
+  //matM.solveGMRESDense(epi, A_gen, &X1[0], &rhs_gen[0], 10, 50);
   //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
   //matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
 
