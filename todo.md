@@ -310,5 +310,15 @@ Updates from the 9/15 meeting:
       - Factorization DONE
       - GMRES
         - with full matrix DONE
-        - with distributed matvec
+        - with distributed matvec DONE
+      - everythin works now on a single node
+      - distributed execution leads to discrepancies
+        - construction error does not match
+          - checked that the reference matvec has the same norm on 1 and 2 processes
+          - How to check where the distributed construction goes wrong?
+          - Works now for the 1 level case (the passed in vectors were wrong)
+            - unless I oversuscribe (i.e. more processes than leaf nodes), then the allgatherv crashes
+          - For the 2 level case it still breaks, so I need to check that
+            - Fixed that, the loop to select the far field was running only over the local nodes
+            - It works, but not for HSS, because there the tree is clearly split on the lower level and not all processes are in the communicator
     - think about optimizations only after this is done

@@ -294,7 +294,7 @@ int main(int argc, char* argv[]) {
   // //double cerr = H2MatrixSolver::solveRelErr(lenX, r.data(), result.data());
 
   //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X1[0]);
-  std::copy(&Xbody[0], &Xbody[lenX], &X1[0]);
+  std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
   //matM.matVecMulDense(&X1[0], &X3[offset_local]);
   matM.matVecMul(&X1[0]);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -330,7 +330,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   h2_sub_time = MPI_Wtime() - h2_sub_time;
   h2_sub_comm_time = ColCommMPI::get_comm_time();
-  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[matM.local_bodies.first]);
+  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[offset]);
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {

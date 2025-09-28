@@ -12,6 +12,7 @@
 #include <Eigen/Sparse>
 
 #include<iostream>
+#include<fstream>
 
 long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> a[], std::complex<double> c[], bool orth) {
   long long K = std::min(M, N), rank = 0;
@@ -436,6 +437,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   long long nodes = comm.lenLocal();
   // index of the first cell for this process in the global cell array
   long long ybegin = comm.oGlobal();
+  //std::cout<<"Construct "<<xlen<<" "<<ibegin<<" "<<nodes<<" "<<ybegin<<std::endl;
 
   // dimensions for each cell on this level
   Dims.resize(xlen, 0);
@@ -458,6 +460,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   std::vector<long long> localChildOffsets(nodes + 1, -1);
   
   if (0 < localChildLen) {
+    //std::cout<<"Intermediate"<<std::endl;
     long long lowerBegin = lowerComm.oLocal() + comm.LowerX;
     long long localChildIndex = lowerBegin - cells[ybegin].Child[0];
     std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
@@ -475,6 +478,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     n_mat = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes], 0ll);
   }
   else {
+    //std::cout<<"Leaf"<<std::endl;
     // only for leaf level
     // Dims stores the number of particels for each cell (multiplied by 3)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return (c.Body[1] - c.Body[0]) * 3; });
@@ -496,6 +500,10 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     //Cols.resize(nodes, n_mat);
      // we should also calculate the scale distributed, but lets keep that for later
   }
+  //std::cout<<"Dims: ";
+  //for (auto& val: Dims)
+  //  std::cout<<val<<", ";
+  //std::cout<<std::endl;
 
   std::vector<long long> neighbor_ones(xlen, 1ll);
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
@@ -542,6 +550,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
 
       // for all children (i.e. only on the intermediate levels)
       for (long long y = childi; y < cendi; y++) {
+        //std::cout<<"Intermediate2"<<std::endl;
         long long offset_y = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[y]);
         long long ny = lowerA.DimsLr[y];
         // S_ind already has been broadcast on the lower level, so this is fine
@@ -576,6 +585,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
        
       // leaf level (i.e. no children)
       if (cendi <= childi) {
+        //std::cout<<"Leaf2"<<std::endl;
         long long ci = i + ybegin;
         // numbering the indices locally will not work for the far field
         std::iota(S_ind[i + ibegin], S_ind[i + ibegin + 1], cells[ci].Body[0] * 3);
@@ -591,7 +601,9 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
           Eigen::Map<Eigen::MatrixXcd> A_ij(A[ij], M, N);
           // we could optimize this, as we don't necessarily need to make a copy here
+          //std::cout<<cells[cj].Body[0] * 3<<std::endl;
           A_ij = Mat_i.block(0, cells[cj].Body[0] * 3, M, N);
+          //std::cout<<A_ij(0, 0)<<std::endl;
         }
         if (1. <= epi) {
           // build an HSS basis
@@ -600,9 +612,10 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           long long diag = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
           long long left = cells[ci].Body[0] * 3;
           long long right = cells[ci].Body[1] * 3;
-          //std::cout<<"Left Cols "<<0<<" "<<cells[ci].Body[0] * 3<<" | "<<M<<std::endl;
+          //std::cout<<"Left Cols "<<cells[ci].Body[0] * 3<<" "<<cells[ci].Body[1] * 3<<" | "<<M<<std::endl;
           far.leftCols(left) = Mat_i.leftCols(left);
           far.rightCols(n_mat - right) = Mat_i.rightCols(n_mat - right);
+          //std::cout<<far(0, 0)<<std::endl;
           long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
           //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
@@ -610,6 +623,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           // build an H2 basis
           // generate the far field only if it exists
           if (far_cols > 0) {
+            //std::cout<<"Far"<<std::endl;
             // not tested after transpose
             Eigen::MatrixXcd far(M, far_cols);
             long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
@@ -664,12 +678,12 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
       if (localChildOffsets[i+1] <= localChildOffsets[i]) {
         continue;
       }
-
+      //std::cout<<"Intermediate3"<<std::endl;
       long long M = Dims[i + ibegin];
       std::vector<long long> far_field(Dims);
       if (1. <= epi) {
         // HSS basis
-        far_field[i] = 0;
+        far_field[ibegin + i] = 0;
       } else {
         // H2 basis
         for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
@@ -679,22 +693,28 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
       auto far_cols = std::reduce(far_field.begin(), far_field.end());
       // only compute the far field if it exists
       if (far_cols) {
+        //std::cout<<"Far intermediate "<<far_cols<<std::endl;
         std::vector<long long> FS_ind(far_cols);
         long long start = 0;
         //long long corr_start;
-        for (long long ij = 0; ij < nodes; ij++) {
+        for (size_t ij = 0; ij < far_field.size(); ij++) {
+        //for (long long ij = 0; ij < nodes; ij++) {
           if (far_field[ij]) {
             //std::cout<<"Far field "<<ij<<std::endl;
-            std::copy(S_ind[ij + ibegin], S_ind[ij + ibegin] + far_field[ij], &FS_ind[start]);
+            std::copy(S_ind[ij], S_ind[ij] + far_field[ij], &FS_ind[start]);
+            //std::copy(S_ind[ij + ibegin], S_ind[ij + ibegin] + far_field[ij], &FS_ind[start]);
             start += far_field[ij];
           }
         }
+        //for (auto& val : FS_ind)
+        //  std::cout<<val<<", ";
+        //std::cout<<std::endl;
 
         // now we have the indices for the far field columns
         // and create the far field matrix F
         Eigen::MatrixXcd F(M, far_cols);
         matgen.gen_matrix_element(F.data(), S_ind[i + ibegin], M, FS_ind.data(), far_cols, omega, scale);
-
+        //std::cout<<F(0,0)<<" "<<F(3, 3)<<" "<<F(6, 6)<<std::endl;
         long long rank = compute_basis(F.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
         //std::cout<<"Rank "<<rank<<std::endl;
         DimsLr[i + ibegin] = rank;
@@ -2658,17 +2678,36 @@ void H2Matrix::matVecUpwardPass(const std::complex<double>* X_in, const ColCommM
   long long ibegin = comm.oLocal();
   long long nodes = comm.lenLocal();
   std::copy(&X_in[LowerZ], &X_in[LowerZ + lenX], X[ibegin]);
+  //std::cout<<"lenX "<<lenX<<std::endl;
+  //std::cout<<"LowerZ "<<LowerZ<<std::endl;
+
+  int mpi_rank = 0, mpi_size = 1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  std::string fname = "matvec";
+  fname += std::to_string(mpi_rank) + ".txt";
+  std::ofstream myfile;
+  myfile.open(fname, std::ios::app);
+  if (!myfile)
+    std::cout<<"Could not open file"<<std::endl;
+  myfile<<"Loop over "<<nodes<<" Nodes\n";
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
     long long N = DimsLr[i + ibegin];
+    //std::cout<<"Node "<<i<<" "<<M<<" x "<<N<<std::endl;
     Vector_t x(X[i + ibegin], M);
     if (0 < N) {
       Vector_t z(Z[i + ibegin], N);
       Matrix_t q(Q[i + ibegin], M, N);
       z = q.transpose() * x;
+      for (long long j = 0; j < M; ++j) {
+        myfile<<q(j, 0)<<"\n";
+      }
+      myfile<<"\n";
     }
   }
+  myfile<<"\n\n\n"<<std::endl;
+  myfile.close();
 
   comm.neighbor_bcast(Z[0], NbZoffsets.data());
 }

@@ -272,8 +272,10 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
     return;
 
   A[levels].matVecUpwardPass(X, comm[levels]);
-  for (long long l = levels - 1; l >= 0; l--)
+  for (long long l = levels - 1; l >= 0; l--){
+    std::cout<<"Level "<<l<<std::endl;
     A[l].matVecUpwardPass(A[l + 1].Z[0], comm[l]);
+  }
 
   for (long long l = 0; l < levels; l++)
     A[l].matVecHorizontalandDownwardPass(A[l + 1].W[0], comm[l]);
@@ -407,6 +409,18 @@ void H2MatrixSolver::solveGMRESDense(double tol, std::complex<double> x[], const
   long long N = A[levels].lenX;
   long long ld = inner_iters + 1;
   std::cout<<N<<" "<<n_mat<<std::endl;
+  
+  int mpi_size = 1;
+  //int mpi_rank = 0, mpi_size = 1;
+  //MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  long long offset = local_bodies.second * 3;
+  //std::cout<<mpi_rank<<" Offset "<<offset<<std::endl;
+  std::vector<long long> offsets(mpi_size+1);
+  MPI_Allgather(&offset, 1, MPI_LONG_LONG_INT, &offsets[1], 1, MPI_LONG_LONG_INT, MPI_COMM_WORLD);
+  std::vector<int> recvcounts(offsets.size() - 1), displs(offsets.size() - 1);
+  std::transform(offsets.begin() + 1, offsets.end(), offsets.begin(), recvcounts.begin(), [](long long end, long long begin) { return (int)(end - begin); });
+  std::transform(offsets.begin(), std::prev(offsets.end()), displs.begin(), [](long long begin) { return (int)begin; });
 
   Eigen::Map<const Eigen::VectorXcd> B(b, N);
   Eigen::Map<Eigen::VectorXcd> X(x, N);
@@ -424,7 +438,7 @@ void H2MatrixSolver::solveGMRESDense(double tol, std::complex<double> x[], const
   iters = 0;
 
   while (iters < outer_iters && tol <= resid[iters]) {
-    std::cout<<"Iteration"<<std::endl;
+    //std::cout<<"Iteration"<<std::endl;
     solvePrecondition(R.data());
     nsum = R.adjoint() * R;
     comm[levels].level_sum(&nsum, 1);
@@ -440,13 +454,14 @@ void H2MatrixSolver::solveGMRESDense(double tol, std::complex<double> x[], const
       // here we need to use the new matvec
       // R is only the local part, so that's fine, but v should be the full vector but it seems v is only local
       // this code will break if N is not equal on all processes
-      std::cout<<"Before Gather "<<v.col(i).data()<<std::endl;
-      std::cout<<"Before Gather "<<global.data()<<std::endl;
-      MPI_Allgather(v.col(i).data(), N, MPI_C_DOUBLE_COMPLEX, global.data(), N, MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
-      std::cout<<"Gather"<<std::endl;
+      //std::cout<<"Before Gather "<<v.col(i).data()<<std::endl;
+      //std::cout<<"Before Gather "<<global.data()<<std::endl;
+      //MPI_Allgather(v.col(i).data(), N, MPI_C_DOUBLE_COMPLEX, global.data(), N, MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
+      MPI_Allgatherv(v.col(i).data(), N, MPI_C_DOUBLE_COMPLEX, global.data(), &recvcounts[0], &displs[0], MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
+      //std::cout<<"Gather"<<std::endl;
       //R = mat * v.col(i);
       matVecMulDense(global.data(), R.data());
-      std::cout<<"MAtvec"<<std::endl;
+      //std::cout<<"MAtvec"<<std::endl;
       solvePrecondition(R.data());
 
       H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
@@ -467,7 +482,8 @@ void H2MatrixSolver::solveGMRESDense(double tol, std::complex<double> x[], const
     R = -X;
     //matVecMul(R.data());
     // and here also
-    MPI_Allgather(R.data(), N, MPI_C_DOUBLE_COMPLEX, global.data(), N, MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
+    //MPI_Allgather(R.data(), N, MPI_C_DOUBLE_COMPLEX, global.data(), N, MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
+    MPI_Allgatherv(R.data(), N, MPI_C_DOUBLE_COMPLEX, global.data(), &recvcounts[0], &displs[0], MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
     matVecMulDense(global.data(), R.data());
     //R = mat * R;
     R += B;
@@ -694,6 +710,8 @@ double H2MatrixSolver::solveRelErr(long long lenX, const std::complex<double> X[
     err[1] = err[1] + (ref[i].real() * ref[i].real());
     //std::cout<<X[i]<<" - "<<ref[i] << " = " << diff << std::endl;
   }
+  std::cout<<"Error local " <<err[0]<<" "<<err[1]<<std::endl;
   MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
+  std::cout<<"Error " <<err[0]<<" "<<err[1]<<std::endl;
   return std::sqrt(err[0] / err[1]);
 }
