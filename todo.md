@@ -321,4 +321,8 @@ Updates from the 9/15 meeting:
           - For the 2 level case it still breaks, so I need to check that
             - Fixed that, the loop to select the far field was running only over the local nodes
             - It works, but not for HSS, because there the tree is clearly split on the lower level and not all processes are in the communicator
+              - each cell stores the begin and end locations (local bodies) so I know which points to exclude
     - think about optimizations only after this is done
+
+    - The current meshes are all unit spheres
+      - If I want to increase the number of unknowns, I can just use translation to add more spheres
