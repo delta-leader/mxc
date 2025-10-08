@@ -326,3 +326,7 @@ Updates from the 9/15 meeting:
 
     - The current meshes are all unit spheres
       - If I want to increase the number of unknowns, I can just use translation to add more spheres
+
+TODO:
+  - make the matrix construction symmetric and see if that solves the current H2 problem
+  - check definitness

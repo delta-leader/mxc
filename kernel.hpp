@@ -15,6 +15,7 @@ private:
   std::vector<struct elastWave3d::element> elems;
   std::vector<long long> nodes_idx, elems_idx;
   double scale = 1;
+  Eigen::MatrixXcd A;
 public:
   MatrixGenerator(const int size);
   long long get_num_nodes() const {return num_nodes;};
@@ -33,6 +34,7 @@ public:
   double get_max_elems(const double omega) const;
   double calc_scale(const double omega);
   void gen_matrix_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale = 0) const;
+  void generateA(const double omega, double scale = 0);
 };
 
 class Accessor {

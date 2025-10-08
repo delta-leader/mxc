@@ -170,6 +170,7 @@ int main(int argc, char* argv[]) {
   double scale = matgen.calc_scale(omega);
   get_scale_time = MPI_Wtime() - get_scale_time;
   double gen_matrix_time = MPI_Wtime();
+  matgen.generateA(omega, scale);
   matgen.gen_matrix_sorted(A_gen.data(), omega, scale);
   //matgen.gen_matrix(A_gen.data(), omega, 1);
   //for (int i = 0; i < n_mat; ++i)
@@ -284,9 +285,9 @@ int main(int argc, char* argv[]) {
   Eigen::Map<Eigen::VectorXcd> ref(&X2[0], lenX);
   Eigen::Map<Eigen::VectorXcd> xbody(&Xbody[0], Nbody*3);
   ref = A_gen.middleRows(offset, lenX) * xbody;
-  //for (int i = 0; i < lenX; ++i)
-  //  std::cout<<t(i)<<std::endl;
-  //std::cout<<"Ref finished"<<std::endl;
+  for (int i = 0; i < lenX; ++i)
+    std::cout<<ref(i)<<std::endl;
+  std::cout<<"Ref finished"<<std::endl;
 
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   std::cout<<"Ref Matvec finished"<<std::endl;
