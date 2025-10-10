@@ -499,14 +499,21 @@ void MatrixGenerator::generateA(const double omega, double scale) {
       }
     }
   }
-  //A.triangularView<Eigen::StrictlyLower>() = A.triangularView<Eigen::StrictlyUpper>().transpose();
+  Eigen::ComplexEigenSolver<Eigen::MatrixXcd> solver(A);
+  std::cout<<"Eigenvalues"<<std::endl;
+  for (int i = 0; i<A.rows(); ++i){
+    std::cout<<solver.eigenvalues().col(0)[i]<<std::endl;
+  }
+  A.triangularView<Eigen::StrictlyLower>() = A.triangularView<Eigen::StrictlyUpper>().transpose();
 }
 
 void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale) const {
   long long nmat = (num_nodes + num_elems) * 3;
-  for (long long i = 0; i < num_rows; ++i)
+  for (long long i = 0; i < num_rows * 3; ++i)
     for (long long j = 0; j < nmat; ++j)
-      cmat[i + j * nmat] = A(start + i, j);
+      cmat[i + j * num_rows * 3] = A(start * 3 + i, j);
+  // This seems to be a huge issue, why did I use nmat below when the matrix is supposed to be stored in column-major order?
+  // Actually I set nmat to num_rows * 3 below, so everything is fine!
   /*if (!scale)
     scale = this->scale;
   long long nmat = num_rows * 3;

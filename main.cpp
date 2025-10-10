@@ -285,8 +285,8 @@ int main(int argc, char* argv[]) {
   Eigen::Map<Eigen::VectorXcd> ref(&X2[0], lenX);
   Eigen::Map<Eigen::VectorXcd> xbody(&Xbody[0], Nbody*3);
   ref = A_gen.middleRows(offset, lenX) * xbody;
-  for (int i = 0; i < lenX; ++i)
-    std::cout<<ref(i)<<std::endl;
+  //for (int i = 0; i < lenX; ++i)
+  //  std::cout<<ref(i)<<std::endl;
   std::cout<<"Ref finished"<<std::endl;
 
   refmatvec_time = MPI_Wtime() - refmatvec_time;
