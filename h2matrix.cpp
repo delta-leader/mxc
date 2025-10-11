@@ -683,6 +683,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
       long long idx_begin = cells[ybegin + i].Body[0];
       long long idx_end = cells[ybegin + i].Body[1];
       std::vector<long long> F_ind(matgen.get_num_total() - idx_end + idx_begin);
+      //std::cout<<F_ind.size()<<" far field indices"<<std::endl;
       // only HSS basis
       //if (1. <= epi) {
       long long fj;
@@ -718,8 +719,8 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
 
         // now we have the indices for the far field columns
         // and create the far field matrix F
-        Eigen::MatrixXcd F(M, F_ind.size());
-        matgen.gen_matrix_element(F.data(), S_ind[i + ibegin], M, F_ind.data(), F_ind.size(), omega, scale);
+        Eigen::MatrixXcd F(M, F_ind.size() * 3);
+        matgen.gen_matrix_idx_element(F.data(), S_ind[i + ibegin], M, F_ind.data(), F_ind.size(), omega, scale);
         //std::cout<<F(0,0)<<" "<<F(3, 3)<<" "<<F(6, 6)<<std::endl;
         long long rank = compute_basis(F.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
         //std::cout<<"Rank "<<rank<<std::endl;
