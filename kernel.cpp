@@ -988,3 +988,26 @@ void MatrixGenerator::gen_matrix_idx_element(std::complex<double> cmat[], const 
     }
   }*/
 }
+
+void MatrixGenerator::writeA(const std::string& filename) {
+    std::ofstream out(filename, std::ios::binary);
+    //typename Matrix::Index rows=matrix.rows(), cols=matrix.cols();
+    long long rows = A.rows();
+    long long cols = A.cols();
+    out.write((char*) (&rows), sizeof(long long));
+    out.write((char*) (&cols), sizeof(long long));
+    out.write((char*) (&scale), sizeof(double));
+    out.write((char*) A.data(), rows*cols*sizeof(typename Eigen::MatrixXcd::Scalar));
+    out.close();
+}
+
+void MatrixGenerator::readA(const std::string& filename) {
+    std::ifstream in(filename, std::ios::binary);
+    long long rows, cols;
+    in.read((char*) (&rows),sizeof(long long));
+    in.read((char*) (&cols),sizeof(long long));
+    in.read((char*) (&scale),sizeof(double));
+    A.resize(rows, cols);
+    in.read( (char *) A.data(), rows*cols*sizeof(typename Eigen::MatrixXcd::Scalar));
+    in.close();
+}

@@ -329,7 +329,11 @@ Updates from the 9/15 meeting:
 
 TODO:
   - test for multiple spheres
+    - currently it does not seem to work for multiple spheres (i.e doesn't converge)
   - serialize the matrix
+    - tested for the small matrix, seems to work
+    - but not sure if it actually saves memory?
+    - at least it seems to match what I calculated
   - change to row major?
   - check my mesh generation script if it adds the .inp postfix
 

@@ -36,6 +36,8 @@ public:
   void gen_matrix_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale = 0) const;
   void gen_matrix_idx_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale = 0) const;
   void generateA(const double omega, double scale = 0);
+  void writeA(const std::string& filename);
+  void readA(const std::string& filename);
 };
 
 class Accessor {
