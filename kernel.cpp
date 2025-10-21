@@ -135,12 +135,32 @@ void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, std::vector<long 
   }
 }
 
-MatrixGenerator::MatrixGenerator(const int size) {
-  std::string filename = "../input/mesh_sphere_" + std::to_string(size) + "nodes.inp";
+MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
+  std::cout<<"GENERATING"<<std::endl;
+  std::string filename;
+  switch (spheres) {
+    case 8:
+      filename = "../input/new/eight_spheres_" + std::to_string(size) + ".inp";
+      break;
+    case 4:
+      filename = "../input/new/four_spheres_" + std::to_string(size) + ".inp";
+      break;
+    case 2:
+      filename = "../input/new/two_spheres_" + std::to_string(size) + ".inp";
+      break;
+    case 1:
+      filename = "../input/new/sphere_" + std::to_string(size) + ".inp";
+      break;
+    default:
+      filename = "../input/mesh_sphere_" + std::to_string(size) + "nodes.inp";
+  }
+  std::cout<<"READ MESH SPECS"<<std::endl;
   read_mesh_specs(num_nodes, num_elems, filename);
   nodes.resize(num_nodes);
   elems.resize(num_elems);
-  read_mesh_fortran(num_nodes, nodes, num_elems, elems, size);
+  std::cout<<num_nodes<<" "<<num_elems<<std::endl;
+  std::cout<<"READ FORtran"<<std::endl;
+  read_mesh_fortran(num_nodes, nodes, num_elems, elems, size, spheres);
   nodes_idx.resize(num_nodes);
   std::iota(nodes_idx.begin(), nodes_idx.end(), 0);
   elems_idx.resize(num_elems);

@@ -85,10 +85,10 @@ inline void read_mesh_specs(long long& num_nodes, long long& num_elems, const st
   iss >> num_nodes;
 }
 
-inline void read_mesh_fortran(long long& num_nodes, std::vector<struct elastWave3d::nodal_point>& nodes, long long& num_elems, std::vector<struct elastWave3d::element>& elems, int mat_num) {
+inline void read_mesh_fortran(long long& num_nodes, std::vector<struct elastWave3d::nodal_point>& nodes, long long& num_elems, std::vector<struct elastWave3d::element>& elems, int mat_num, int sphere_num=0) {
   int numNodeBasis = num_nodes;
   int numElemBasis = num_elems;
-  elastWave3d::input_non_global(nodes.data(), numNodeBasis, elems.data(), numElemBasis, mat_num);
+  elastWave3d::input_non_global(nodes.data(), numNodeBasis, elems.data(), numElemBasis, sphere_num, mat_num);
   // If there are duplicate nodes or element, shrink the vecors
   if (numNodeBasis < nodes.size()){
     std::cout << "shrink nodes" << std::endl;

@@ -328,5 +328,9 @@ Updates from the 9/15 meeting:
       - If I want to increase the number of unknowns, I can just use translation to add more spheres
 
 TODO:
-  - make the matrix construction symmetric and see if that solves the current H2 problem
-  - check definitness
+  - test for multiple spheres
+  - serialize the matrix
+  - change to row major?
+  - check my mesh generation script if it adds the .inp postfix
+
+  - paper from here https://arxiv.org/pdf/2509.19986

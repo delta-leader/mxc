@@ -17,7 +17,7 @@ private:
   double scale = 1;
   Eigen::MatrixXcd A;
 public:
-  MatrixGenerator(const int size);
+  MatrixGenerator(const int size, const int spheres=0);
   long long get_num_nodes() const {return num_nodes;};
   long long get_num_elems() const {return num_elems;};
   long long get_num_total() const {return num_elems + num_nodes;};

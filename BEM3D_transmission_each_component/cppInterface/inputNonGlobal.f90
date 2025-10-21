@@ -2,7 +2,7 @@ module input_non_global_mod
   implicit none
 contains
   !--------------------------------------------
-  subroutine input_non_global(nodals, nnode, elems, nel, mat_num) bind(c)
+  subroutine input_non_global(nodals, nnode, elems, nel, sphere_num, mat_num) bind(c)
     use iso_c_binding
     use struct_type_fixed_len_node_mod
     use BEM3d_small_mod
@@ -14,6 +14,7 @@ contains
     integer(c_int), intent(inout) :: nnode
     type(element), intent(inout) :: elems(nel)
     integer(c_int), intent(inout) :: nel
+    integer(c_int), intent(in) :: sphere_num
     integer(c_int), intent(in) :: mat_num
 
     integer::i,j,k
@@ -22,7 +23,17 @@ contains
     character(len=10) :: mat_num_char     ! use your maximum expected len
     character(len=50) :: filename
     write(mat_num_char , '(I10)') mat_num        ! convert integer to char
-    write(filename, '("../input/mesh_sphere_", A, "nodes.inp")') trim(adjustl(mat_num_char))
+    if (sphere_num == 8) then
+      write(filename, '("../input/new/eight_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+    else if (sphere_num == 4) then
+      write(filename, '("../input/new/four_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+    else if (sphere_num == 2) then
+      write(filename, '("../input/new/two_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+    else if (sphere_num == 1) then
+      write(filename, '("../input/new/sphere_", A, ".inp")') trim(adjustl(mat_num_char))
+    else
+      write(filename, '("../input/mesh_sphere_", A, "nodes.inp")') trim(adjustl(mat_num_char))
+    end if
     !write(*,*) filename
 
     write(*,*) 'inputNonGlobal, !dbg'

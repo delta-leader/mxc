@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
   //std::vector<struct elastWave3d::nodal_point> nodes(num_nodes);
   //std::vector<struct elastWave3d::element> elems(num_elems);
   //read_mesh_fortran(num_nodes, nodes, num_elems, elems, stoi(MAT));
-  MatrixGenerator matgen(M);
+  MatrixGenerator matgen(M, 4);
   long long Nbody = matgen.get_num_nodes() + matgen.get_num_elems();
   std::cout<<"Nodes/Elements: "<<matgen.get_num_nodes()<<" "<<matgen.get_num_elems()<<std::endl;
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
