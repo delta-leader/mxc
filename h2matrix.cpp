@@ -592,7 +592,8 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
         Qi = Eigen::MatrixXcd::Identity(M, M);
 
         long long far_cols = n_mat;
-        Eigen::Map<Eigen::MatrixXcd> Mat_i(Mat[i], M, n_mat);
+        //Eigen::Map<Eigen::MatrixXcd> Mat_i(Mat[i], M, n_mat);
+        Eigen::Map<Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> Mat_i(Mat[i], M, n_mat);
         // generate the near field aka dense matrices in A
         for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
           //std::cout<<"J "<<ij<<std::endl;
@@ -602,6 +603,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           Eigen::Map<Eigen::MatrixXcd> A_ij(A[ij], M, N);
           // we could optimize this, as we don't necessarily need to make a copy here
           //std::cout<<cells[cj].Body[0] * 3<<std::endl;
+          // it seems Eigen handles the row-major to column-major conversion automatically
           A_ij = Mat_i.block(0, cells[cj].Body[0] * 3, M, N);
           //std::cout<<A_ij(0, 0)<<std::endl;
         }
@@ -620,6 +622,8 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
         } else {
+          // this should currently never be called
+          std::cout<<"Far for H2 basis"<<std::endl;
           // build an H2 basis
           // generate the far field only if it exists
           if (far_cols > 0) {
@@ -2654,7 +2658,8 @@ void H2Matrix::constructBLR(const Eigen::Ref<const Eigen::MatrixXcd> &mat, doubl
 
 void H2Matrix::matVecDense(const std::complex<double>* X_in, std::complex<double>* X_out, const ColCommMPI& comm) {
   typedef Eigen::Map<Eigen::VectorXcd> Vector_t;
-  typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+  //typedef Eigen::Map<const Eigen::MatrixXcd> Matrix_t;
+  typedef Eigen::Map<Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> Matrix_t;
   // if we have a dedicated output vector we don't need a barrier
   // before writing
 

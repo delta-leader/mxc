@@ -17,6 +17,7 @@ find_package(CUDAToolkit REQUIRED)
 
 file(GLOB sources "*.cpp" "*.cu")
 file(GLOB headers "*.hpp" "*.cuh")
+list(REMOVE_AT sources -1)
 
 add_subdirectory(
   BEM3D_transmission_each_component
@@ -30,4 +31,16 @@ target_include_directories(main.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(main.app PRIVATE "-Wall" "-Wextra" "-fexceptions" "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>" "-fPIE")
+endif()
+
+file(GLOB wsources "*.cpp" "*.cu")
+list(REMOVE_AT wsources -4)
+add_executable(write.app ${wsources} ${headers})
+target_link_libraries(write.app BLAS::BLAS LAPACK::LAPACK lapacke OpenMP::OpenMP_CXX MPI::MPI_CXX Eigen3::Eigen CUDA::cudart CUDA::cublas CUDA::cusparse nccl elastWave3d)
+
+target_compile_definitions(write.app PRIVATE EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
+target_include_directories(write.app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(write.app PRIVATE "-Wall" "-Wextra" "-fexceptions" "$<$<CONFIG:DEBUG>:-O0;-g3;-ggdb>" "-fPIE")
 endif()

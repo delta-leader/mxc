@@ -26,8 +26,8 @@ public:
   std::vector<long long>& get_nodes_idx() {return nodes_idx;};
   std::vector<long long>& get_elems_idx() {return elems_idx;};
   void gen_matrix(std::complex<double> cmat[], const double omega, double scale = 0) const;
-  void gen_matrix_sorted(std::complex<double> cmat[], const double omega, double scale = 0) const;
-  void gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale = 0) const;
+  void gen_matrix_sorted(std::complex<double> cmat[], const double omega, double scale = 0, bool cache = false) const;
+  void gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale = 0, bool cache = false) const;
   void gen_rhs(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
   void gen_rhs_sorted(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
   double get_max_nodes(const double omega) const;

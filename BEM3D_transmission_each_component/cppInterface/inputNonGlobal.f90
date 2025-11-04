@@ -32,8 +32,9 @@ contains
     else if (sphere_num == 1) then
       write(filename, '("../input/new/sphere_", A, ".inp")') trim(adjustl(mat_num_char))
     else
-      write(filename, '("../input/mesh_sphere_", A, "nodes.inp")') trim(adjustl(mat_num_char))
-    end if
+      !write(filename, '("../input/mesh_sphere_", A, "nodes.inp")') trim(adjustl(mat_num_char))
+      write(filename, '("../input/mesh_two_sphere_", A, "nodes.inp")') trim(adjustl(mat_num_char)) 
+   end if
     !write(*,*) filename
 
     write(*,*) 'inputNonGlobal, !dbg'

@@ -335,6 +335,51 @@ TODO:
     - but not sure if it actually saves memory?
     - at least it seems to match what I calculated
   - change to row major?
+    - Mat is now read and stored in row major order!
+    - that should actually be all that is needed
+    - I could optimize some calls now if multiple leafs are stored on the same node (i.e. remove loops)
+    - add caching to generation of A and test -> DONE
   - check my mesh generation script if it adds the .inp postfix
+  - run tests for larger matrices using Tsubame
+    - compile on tsubame
+    - how to best serialize the matrix on multiple processes?
+      - MPI_File_write_at and reat_at?
+      - basically, I want an application to just serialize a matrix with as many processes as possible (i.e. as fast as possible)
+      - the experiments should then use that serialized matrix
+      - after completing the experiments we delete the matrix again
+      - I think the writing only makes sense if it is row major, otherwise I would have to read non-consecutive chunks of memory
+      -> changing to row major should be the first priority DONE
+      - So I create an executable that generates the dense matrix on n processes
+        - each process creates total/n rows and writes them to a file
+        - but what about the scale factor - we get it from the diagonal, so it's okay
+        - we can also serialize it with the matrix
+        - but the nodes have to be sorted ...
+          - we can do that as long as I know the leaf size
+        - the create_matrix_sorted function has not really been written to support arbitrary splits,
+          it currently only supports splits entirely in the nodes or element dimension
+          - to support arbitrary splits -> DONE but not tested
+            - if start < num_nodes write all the rows until either num_rows or num_nodes run out
+              - if num_rows runs out -> we are finished and can return
+              if num_nodes runs out -> we need to continue to the elements
+            if start > num_nodes -> just write elements until nrows (should be safe)
+          - how to test the writing?
+          - I read and compared the matrix and it seems to work, next check for multiple processes
 
   - paper from here https://arxiv.org/pdf/2509.19986
+
+  - two sphere mesh
+    - Matsumoto's code - mesh size is insufficient -> try to increase the number of elements (around 10 000)
+    - verify that the Dense LU actually converges (i.e. condition number is not too large, Matsumoto sensei says two spheres should not be too ill conditioned) -> Dense LU converges fast
+      - find out if the problem is on the numerical side or the physics side
+    - Use group jh240021
+    - Check if there are no duplicates in the mesh! -> Matsumoto-san's code removes duplicates in remove_dn_sort_nn_non_global
+    - Future: more complex geometry (not a toy problem)
+      - not a regular shape, but still a structured mesh (e.g. submarine, twisted cylinder, flower petal, ...)
+
+
+- Creating the matrix does not work for arbitrary processes
+ - each process gets a starting row and a number of rows to write (target matrix[0-num_rows]) reading from [start-start+num_rows]
+ - if start < num_nodes
+   write starting from 0 until either num_nodes have been written or start+rows_written is larger than num_nodes
+ - calculate remaining rows as num_rows - rows_written
+ - write the remaining rows starting from rows_written until num_rows

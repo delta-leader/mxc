@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
   //std::vector<struct elastWave3d::nodal_point> nodes(num_nodes);
   //std::vector<struct elastWave3d::element> elems(num_elems);
   //read_mesh_fortran(num_nodes, nodes, num_elems, elems, stoi(MAT));
-  MatrixGenerator matgen(M, 1);
+  MatrixGenerator matgen(M, 2);
   long long Nbody = matgen.get_num_nodes() + matgen.get_num_elems();
   std::cout<<"Nodes/Elements: "<<matgen.get_num_nodes()<<" "<<matgen.get_num_elems()<<std::endl;
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -170,10 +170,14 @@ int main(int argc, char* argv[]) {
   double scale = matgen.calc_scale(omega);
   get_scale_time = MPI_Wtime() - get_scale_time;
   double gen_matrix_time = MPI_Wtime();
-  matgen.generateA(omega, scale);
-  matgen.writeA("A_binary");
-  matgen.readA("A_binary");
-  matgen.gen_matrix_sorted(A_gen.data(), omega, scale);
+  //matgen.generateA(omega, scale);
+  //matgen.writeA("A_binary");
+  //matgen.readA("A_binary");
+  matgen.gen_matrix_sorted(A_gen.data(), omega, scale, true);
+  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(A_gen);
+  double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() -1);
+  std::cout<<"Condition number: "<<cond<<std::endl;
+  Eigen::PartialPivLU<Eigen::MatrixXcd> lu(A_gen);
   //matgen.gen_matrix(A_gen.data(), omega, 1);
   //for (int i = 0; i < n_mat; ++i)
   //  std::cout<<rhs_gen(i)<<std::endl;
@@ -346,7 +350,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matM.solveGMRESDense(epi, &X1[0], &rhs_gen[offset], 10, 50);
+  //matM.solveGMRESDense(epi, &X1[0], &rhs_gen[offset], 10, 50);
+  matM.solveGMRESDensePrecon(epi, lu, A_gen, &X1[0], &rhs_gen[offset], 10, 50);
   //matM.solveGMRESDense(epi, A_gen, &X1[0], &rhs_gen[0], 10, 50);
   //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
   //matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
