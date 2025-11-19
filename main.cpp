@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
   //std::vector<struct elastWave3d::nodal_point> nodes(num_nodes);
   //std::vector<struct elastWave3d::element> elems(num_elems);
   //read_mesh_fortran(num_nodes, nodes, num_elems, elems, stoi(MAT));
-  MatrixGenerator matgen(M, 2);
+  MatrixGenerator matgen(M, 1);
   long long Nbody = matgen.get_num_nodes() + matgen.get_num_elems();
   std::cout<<"Nodes/Elements: "<<matgen.get_num_nodes()<<" "<<matgen.get_num_elems()<<std::endl;
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -174,7 +174,29 @@ int main(int argc, char* argv[]) {
   //matgen.writeA("A_binary");
   //matgen.readA("A_binary");
   matgen.gen_matrix_sorted(A_gen.data(), omega, scale, true);
-  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(A_gen);
+  
+  /*Eigen::MatrixXcd A_symm = A_gen.triangularView<Eigen::Upper>();
+  Eigen::MatrixXcd A_symm2 = A_gen.triangularView<Eigen::StrictlyUpper>(); //A_gen.transpose().triangularView<Eigen::StrictlyLower>();
+  A_symm = A_symm + A_symm2.adjoint();
+  for (long long i = 0; i < 6; ++i) {
+    for (long long j = 0; j < 6; ++j)
+      std::cout<<A_symm(i,j)<<", ";
+    std::cout<<std::endl;
+  }*/
+  //Eigen::MatrixXcd test = A_symm * A_symm.adjoint();
+  /*for (long long i = 0; i < test.rows(); ++i) {
+    for (long long j = 0; j < test.cols(); ++j)
+      if (test(i,j).imag())
+        std::cout<<"Not zero at "<<i<<" "<<j<<std::endl;
+  }*/
+  //std::cout<<test.norm()<<std::endl;
+  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(A_gen, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  long long k = 100;
+  Eigen::MatrixXcd S = Eigen::MatrixXcd::Zero(k, k);
+  for (long long i = 0; i < k; ++i)
+    S(i,i) = svd.singularValues()(n_mat - k + i);
+  Eigen::MatrixXcd usv = svd.matrixU().rightCols(k) * S * svd.matrixV().rightCols(k).adjoint();
+  std::cout<<"SVD norm: "<<(usv - usv.transpose()).norm() / usv.norm()<<std::endl;
   double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size() -1);
   std::cout<<"Condition number: "<<cond<<std::endl;
   Eigen::PartialPivLU<Eigen::MatrixXcd> lu(A_gen);

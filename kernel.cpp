@@ -542,7 +542,6 @@ void MatrixGenerator::generateA(const double omega, double scale) {
 
 // this creates the matrix in row major now
 void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale, bool cache) const {
-  std::cout<<"Generating "<<start<<" "<<num_rows<<std::endl;
   long long nmat = (num_nodes + num_elems) * 3;
   //if (A.rows() == nmat || A.cols() == nmat) {
   //  // matrix has been cached
@@ -562,7 +561,7 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long s
     //std::cout<<mu0<<"-"<<mu1<<std::endl;
     if (start < num_nodes) {
       #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd) collapse(2)
-      for(int xindex = 0; xindex < std::min(num_rows, num_nodes); xindex++){
+      for(int xindex = 0; xindex < std::min(num_rows, num_nodes - start); xindex++){
         for(int yindex = 0; yindex < num_nodes; yindex++){
           //std::cout<<"row "<<xindex <<", col "<<yindex<<std::endl;
       
@@ -596,7 +595,7 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long s
       //rowShift = num_xnodes;
       //colShift = num_yelems;
       #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd) collapse(2)
-      for(int xindex = 0; xindex < std::min(num_rows, num_nodes); xindex++){
+      for(int xindex = 0; xindex < std::min(num_rows, num_nodes - start); xindex++){
         for(int yindex = 0; yindex < num_elems; yindex++){
           // aT0
           const int out_in = 0;
@@ -617,30 +616,26 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long s
           }
         }
       }
-      if (num_rows > num_nodes) {
-        std::cout<<"Got here"<<std::endl;
-        // we need to continue writing the elements
-        long long new_rows = num_rows - num_nodes;
-        gen_matrix_sorted(&cmat[num_nodes * 3 * nmat], num_nodes, new_rows, omega, scale, cache);
-      }
-    } else {
-      start -= num_nodes;
+    }
+    long long rows_generated = num_nodes - start > 0 ? num_nodes - start : 0;
+    if (num_rows - rows_generated) {
+      start = start < num_nodes ? 0 : start - num_nodes;
       // T0 + T1
       //rowShift = num_xelems;
       //colShift = num_ynodes;
       #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd) collapse(2)
-      for(int xindex = 0; xindex < num_rows; xindex++){
+      for(int xindex = rows_generated; xindex < num_rows; xindex++){
         for(int yindex = 0; yindex < num_nodes; yindex++){
           // T0
           const int out_in = 0;
           const int slp_or_dlp = 2;
           const int linear_or_const = 1;
           std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[start + xindex] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[start + xindex - rows_generated] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
           // T1
           const int out_in_2nd = 1;
           std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
-          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[start + xindex] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[start + xindex - rows_generated] + 1, nodes.data(), num_nodes, elems.data(), num_elems, nodes_idx[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
           for(int j = 0; j < 3; j++){
             for(int i = 0; i < 3; i++){
               cmat[(i + 3*xindex) * nmat + j + 3*yindex] = mat3x3.at(i + 3*j) + mat3x3_2nd.at(i + 3*j);
@@ -654,18 +649,18 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long s
       //rowShift = num_xelems;
       //colShift = num_yelems;
       #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd) collapse(2)
-      for(int xindex = 0; xindex < num_rows; xindex++){
+      for(int xindex = rows_generated; xindex < num_rows; xindex++){
         for(int yindex = 0; yindex < num_elems; yindex++){
           // U0
           const int out_in = 0;
           const int slp_or_dlp = 1;
           const int linear_or_const = 1;
           std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[start + xindex] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[start + xindex - rows_generated] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
           // U1
           const int out_in_2nd = 1;
           std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
-          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[start + xindex] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+          elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[start + xindex - rows_generated] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
           for(int j = 0; j < 3; j++){
             for(int i = 0; i < 3; i++){
               cmat[(i + 3*xindex) * nmat + j + 3*yindex + 3*num_nodes] = -mat3x3.at(i + 3*j) - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);

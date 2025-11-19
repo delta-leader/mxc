@@ -383,3 +383,19 @@ TODO:
    write starting from 0 until either num_nodes have been written or start+rows_written is larger than num_nodes
  - calculate remaining rows as num_rows - rows_written
  - write the remaining rows starting from rows_written until num_rows
+ -> DONE this seems to work now
+
+ Mesh suggestions:
+  - submarine hull
+  - other papers for elastic wave scattering / elastodynamics
+
+Two scatterers:
+- send screenshots of geometry
+- check original ordering
+- compute singular vectors (should be the same for symmetric matrix) U*VT 
+  - one sphere vs two sphere
+  - where is the major error coming from
+
+My current goal is to run large scale experiments with the salt model on tsubame
+  - if I get a solution in sufficient time -> publish
+  - otherwise I need to invest more time

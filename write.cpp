@@ -65,7 +65,8 @@ int main(int argc, char* argv[]) {
   double scale = matgen.calc_scale(omega);
   std::cout<<"Generating matrix "<<own_rows*3<<" "<<n_mat<<std::endl;
   std::cout<< num_rows *mpi_rank<<" "<<own_rows<<std::endl;
-  if (mpi_rank == 0){
+  matgen.gen_matrix_sorted(A_gen.data(), num_rows * mpi_rank, own_rows, omega, scale);
+  /*if (mpi_rank == 0){
     matgen.gen_matrix_sorted(A_gen.data(), num_rows * mpi_rank, own_rows, omega, scale);
     std::cout<<"Process "<<mpi_rank<<" finished"<<std::endl;
   }
@@ -79,7 +80,7 @@ int main(int argc, char* argv[]) {
     matgen.gen_matrix_sorted(A_gen.data(), num_rows * mpi_rank, own_rows, omega, scale);
     std::cout<<"Process "<<mpi_rank<<" finished"<<std::endl;
   }
-  MPI_Barrier(MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_WORLD);*/
   std::cout<<"Generated matrix"<<std::endl;
   MPI_File fh;
   std::string filename = "../input/cache/sphere_" + std::to_string(num_spheres) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
