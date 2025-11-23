@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);*/
   std::cout<<"Generated matrix"<<std::endl;
   MPI_File fh;
-  std::string filename = "../input/cache/sphere_" + std::to_string(num_spheres) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
+  std::string filename = "../input/cache/" + std::to_string(num_spheres) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
   std::cout<<"Open File "<<filename<<std::endl;
   MPI_File_open(MPI_COMM_WORLD, filename.c_str(), MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
   MPI_Offset offset = 0;
@@ -101,18 +101,18 @@ int main(int argc, char* argv[]) {
     double leafS = leaf_size;
     MPI_File_write_at(fh, offset, &leafS, 1, MPI_DOUBLE, &status);
   }
-  std::cout<<"Write Data"<<std::endl;
+  //std::cout<<"Write Data"<<std::endl;
   offset = 4 * sizeof(double) + mpi_rank * num_rows * 3 * n_mat * sizeof(std::complex<double>);
   // write into the actual file
   MPI_File_write_at(fh, offset, A_gen.data(), own_rows * 3 * n_mat, MPI_C_DOUBLE_COMPLEX, &status);
-  std::cout<<"Process "<<mpi_rank<<" finished writing"<<std::endl;
+  //std::cout<<"Process "<<mpi_rank<<" finished writing"<<std::endl;
   // I still need an offset into this
   //matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
   // Serialize into a single file here
   MPI_File_close(&fh);
 
   // testing
-  
+  /*
   MPI_File_open(MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
   if (mpi_rank == 0) {
   std::vector<std::complex<double>> A2(n_mat * n_mat);
@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
   matgen.gen_matrix_sorted(A_check.data(), omega, scale);
   Eigen::Map<Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> A2_check(A2.data(), n_mat, n_mat);
   std::cout<<"Matrix norm: "<<(A_check - A2_check).norm()<<std::endl;
-  }
+  }*/
   MPI_Finalize();
   return 0;
 }

@@ -2830,9 +2830,9 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
 
     if (0 < Mr) {
       // this is only a check for singularity, not needed for the actual computation
-      std::vector<int> ipiv(Mr);
-      Eigen::MatrixXcd test = Aii.bottomRightCorner(Mr, Mr);
-      auto error = LAPACKE_zgetrf(LAPACK_COL_MAJOR, Mr, Mr, reinterpret_cast<__complex__ double*>(test.data()), Mr, ipiv.data());
+      //std::vector<int> ipiv(Mr);
+      //Eigen::MatrixXcd test = Aii.bottomRightCorner(Mr, Mr);
+      //auto error = LAPACKE_zgetrf(LAPACK_COL_MAJOR, Mr, Mr, reinterpret_cast<__complex__ double*>(test.data()), Mr, ipiv.data());
 
       Eigen::PartialPivLU<Eigen::MatrixXcd> fac(Aii.bottomRightCorner(Mr, Mr));
       V.bottomRows(Mr) = fac.solve(Ui.rightCols(Mr).adjoint());
@@ -2840,7 +2840,7 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
         Aii.bottomLeftCorner(Mr, Ms).noalias() = V.bottomRows(Mr) * b.topRows(Ms).transpose();
         Aii.topLeftCorner(Ms, Ms).noalias() -= Aii.topRightCorner(Ms, Mr) * Aii.bottomLeftCorner(Mr, Ms);
       }
-      info += error; //(std::abs(fac.determinant()) <= std::numeric_limits<double>::min());
+      //info += error; //(std::abs(fac.determinant()) <= std::numeric_limits<double>::min());
     }
 
     for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) 

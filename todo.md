@@ -395,6 +395,8 @@ Two scatterers:
 - compute singular vectors (should be the same for symmetric matrix) U*VT 
   - one sphere vs two sphere
   - where is the major error coming from
+ - try with k=100 to k=1100 (for single and double sphere)
+
 
 My current goal is to run large scale experiments with the salt model on tsubame
   - if I get a solution in sufficient time -> publish

@@ -2,6 +2,7 @@
 #include <device_csr_matrix.cuh>
 #include <comm-mpi.hpp>
 
+#include <algorithm>
 #include <numeric>
 #include <thrust/device_vector.h>
 #include <thrust/complex.h>

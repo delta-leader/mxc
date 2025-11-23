@@ -27,6 +27,8 @@ contains
       write(filename, '("../input/new/eight_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 4) then
       write(filename, '("../input/new/four_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+    else if (sphere_num == 3) then
+      write(filename, '("../input/salt/salt_", A, "k.inp")') trim(adjustl(mat_num_char)) 
     else if (sphere_num == 2) then
       write(filename, '("../input/new/two_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 1) then
