@@ -38,6 +38,7 @@ contains
     dummat(:, :) = 0.0d0
     zten2(:, :) = 0.0d0
 
+
     select case (out_in)
     case(0)
        elastp = elout

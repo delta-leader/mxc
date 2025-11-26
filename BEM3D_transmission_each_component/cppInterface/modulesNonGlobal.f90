@@ -15,7 +15,7 @@ module struct_type_fixed_len_node_mod
   type, bind(c) :: nodal_point
      integer(c_int) :: ident, nel
      !integer,dimension(:,:),allocatable::iel
-     integer(c_int) :: iel(10, 2)
+     integer(c_int) :: iel(20, 2)
      real(c_double),dimension(3) :: xc,nvec,svec
      complex(c_double_complex),dimension(3) :: u
   end type nodal_point

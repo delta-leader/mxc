@@ -30,6 +30,7 @@ public:
   void gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale = 0, bool cache = false) const;
   void gen_rhs(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
   void gen_rhs_sorted(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
+  void gen_rhs_sorted(std::complex<double> rhs[], long long start, long long num_rows, const double omega, double scale, bool equation_type = true) const;
   double get_max_nodes(const double omega) const;
   double get_max_elems(const double omega) const;
   double calc_scale(const double omega);

@@ -12,7 +12,7 @@ namespace elastWave3d{
   public:
     int ident;
     int nel;
-    int iel[20];
+    int iel[40];
     double xc[3];
     double nvec[3];
     double svec[3];
@@ -22,12 +22,18 @@ namespace elastWave3d{
     nodal_point(){
       ident = -1;
       nel = -1;
-      std::fill_n(iel, 20, -1);
+      std::fill_n(iel, 40, -1);
       std::fill_n(xc, 3, 0.0);
       std::fill_n(nvec, 3, 0.0);
       std::fill_n(svec, 3, 0.0);
       std::fill_n(u, 3, 0.0);
     }
+    
+    bool check() const {
+      if (nel > 20)
+        return false;
+      return true;
+    };
 
     // print this menber
     void show() const {

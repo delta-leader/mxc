@@ -136,7 +136,7 @@ void gen_matrix(const Eigen::Ref<const Eigen::MatrixXcd> &mat, std::vector<long 
 }
 
 MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
-  std::cout<<"GENERATING"<<std::endl;
+  //std::cout<<"GENERATING"<<std::endl;
   std::string filename;
   switch (spheres) {
     case 8:
@@ -158,13 +158,15 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
       //filename = "../input/mesh_sphere_" + std::to_string(size) + "nodes.inp";
       filename = "../input/mesh_two_sphere_" + std::to_string(size) + "nodes.inp";
   }
-  std::cout<<"READ MESH SPECS"<<std::endl;
+  //std::cout<<"READ MESH SPECS"<<std::endl;
   read_mesh_specs(num_nodes, num_elems, filename);
+  std::cout<<num_nodes<<" "<<num_elems<<std::endl;
   nodes.resize(num_nodes);
   elems.resize(num_elems);
-  std::cout<<num_nodes<<" "<<num_elems<<std::endl;
-  std::cout<<"READ Fortran"<<std::endl;
+  //std::cout<<num_nodes<<" "<<num_elems<<std::endl;
+  //std::cout<<"READ Fortran"<<std::endl;
   read_mesh_fortran(num_nodes, nodes, num_elems, elems, size, spheres);
+  std::cout<<num_nodes<<" "<<num_elems<<std::endl;
   nodes_idx.resize(num_nodes);
   std::iota(nodes_idx.begin(), nodes_idx.end(), 0);
   elems_idx.resize(num_elems);
@@ -766,6 +768,42 @@ void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], const double om
   }
 }
 
+void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], long long start, long long num_rows, const double omega, double scale, bool equation_type) const {
+  std::complex<double> alpha = elastWave3d::set_alpha(omega);
+  if (!scale)
+    scale = this->scale;
+  if (equation_type){
+    // PMCHWT
+    if (start < num_nodes) {
+      for(int i = 0; i < std::min(num_rows, num_nodes - start); i++){
+        std::complex<double> uout[3];
+        elastWave3d::inc_trac(nodes.data(), num_nodes, nodes_idx[start + i] + 1, elems.data(), num_elems, omega, uout); // i + 1 is fortran index
+        for(int j = 0; j < 3; j++){
+          rhs[j + 3 * i] = uout[j];
+          //rhs[i + nodeShift*j] = uout[j];
+        }
+      }
+    }
+    long long rows_generated = num_nodes - start > 0 ? num_nodes - start : 0;
+    if (num_rows - rows_generated) {
+      start = start < num_nodes ? 0 : start - num_nodes;
+      //const size_t elemShift = num_elems;
+      for(int i = rows_generated; i < num_rows; i++){
+        std::complex<double> uout[3];
+        elastWave3d::inc_disp_const_x(nodes.data(), num_nodes, elems[elems_idx[start + i - rows_generated]], omega, uout);
+        for(int j = 0; j < 3; j++){
+          rhs[j + 3 * i] = uout[j] * scale;
+          //rhs[i + elemShift*j + 3*num_nodes] = uout[j];
+      
+        }
+      }
+    }
+  }
+  else{
+    std::cout<<"Burton Miller evaluation, but expected PMCHWT"<<std::endl;
+  }
+}
+
 double MatrixGenerator::calc_scale(const double omega) {
   scale = std::sqrt(get_max_nodes(omega) / get_max_elems(omega));
   return scale;
@@ -806,7 +844,8 @@ double MatrixGenerator::get_max_nodes(const double omega) const {
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
   double max = 0;
-  #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd)
+  //#pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd)
+  //for(int xindex = 0; xindex < num_nodes; xindex++){
   for(int xindex = 0; xindex < num_nodes; xindex++){
       //std::cout<<"row "<<xindex <<", col "<<yindex<<std::endl;
       

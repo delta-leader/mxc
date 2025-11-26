@@ -401,3 +401,18 @@ Two scatterers:
 My current goal is to run large scale experiments with the salt model on tsubame
   - if I get a solution in sufficient time -> publish
   - otherwise I need to invest more time
+
+Store matrix in /gs/fs/jh240021/thomas
+
+fix the current bug in writing the salt model
+ - the error seems to come from somewhere within the fortran code
+ - it seems to be first caused by node 72
+ - my current assumption is that there is some problem with the data for that node
+ - I can use the show() function to print that data and maybe compar it?
+   - It seems the max number of elements that a node can be part of is hardcoded. I can increase the number, but there is now easy way to know if it was enough. Therefore I wrote a simple check() function, that checks for each node whether it is part of more elements than allowed
+   - I had to double the number to make it work
+check the rhs for the sphere case
+   - writing the RHS and matrix seems to work for 8 processes and the sphere
+ - Now I am trying to write the 50k salt matrix again
+    -> it worked with 8 processes on the lab server (50k problem)
+   
