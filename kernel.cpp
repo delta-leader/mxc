@@ -1092,13 +1092,20 @@ void MatrixGenerator::gen_matrix_idx_element_from_file(std::complex<double> cmat
   long long n_mat = (num_nodes + num_elems) * 3;
   MPI_Status status;
   MPI_Offset offset;
-  //std::vector<std::complex<double>> tmp(3);
-  // todo could be optimized to read consecutive entries at once
-  for (long long i = 0; i < num_rows; ++i)
-    for (long long j = 0; j < num_cols; ++j) {
-      offset = 4 * sizeof(double) + (row_indices[i] * n_mat + col_indices[j] * 3) * sizeof(std::complex<double>);
-      MPI_File_read_at(fh_matrix, offset, &cmat[i * num_cols * 3 + (j * 3 )], 3, MPI_C_DOUBLE_COMPLEX, &status);
+  long long num_elems = 1;
+  for (long long i = 1; i < num_cols; ++i) {
+    if (col_indices[i - 1] + 1 == col_indices[i])
+      ++num_elems;
+    else
+      break;
+  }
+  for (long long i = 0; i < num_rows; ++i) {
+    offset = 4 * sizeof(double) + row_indices[i] * n_mat * sizeof(std::complex<double>);
+    MPI_File_read_at(fh_matrix, offset + col_indices[0] * 3 * sizeof(std::complex<double>), &cmat[i * num_cols * 3], num_elems * 3, MPI_C_DOUBLE_COMPLEX, &status);
+    if (num_elems < num_cols) {
+      MPI_File_read_at(fh_matrix, offset + col_indices[num_elems] * 3 * sizeof(std::complex<double>), &cmat[i * num_cols * 3 + num_elems * 3], (num_cols - num_elems) * 3, MPI_C_DOUBLE_COMPLEX, &status);
     }
+  }
 }
 
 void MatrixGenerator::writeA(const std::string& filename) {

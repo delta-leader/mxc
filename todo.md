@@ -431,10 +431,14 @@ now we need to read from the file
       - gen_matrix_idx_element(Far, S_ind, F_ind)
         - gets the matrix from the nodes/elements indices
         - could leave this for later
+        - reading from file DONE
       - gen_matrix_element(S_ind, M, S_ind)
-        - I'm actually not sure what this does
+        - this generates the matrix from nodes/elements indices
+        - file read would have to be one by one, so it's probably not worth it
+        - I'll leave this for later (at least for now)
 
 when reading the file it just seems to be all zeroes
 -> Found the issue and FIXED it
+- read the right hand side and challenge the salt model
 
    
