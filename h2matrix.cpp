@@ -495,7 +495,8 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     // in one go if I reduce the dimensions first
     // this would however, change the data layout and I would need to account for that
     for (long long i = 0; i < nodes; ++i) {
-      matgen.gen_matrix_sorted(Mat[i], cells[ybegin + i].Body[0], Dims[ibegin + i] / 3, omega, scale);
+      //matgen.gen_matrix_sorted(Mat[i], cells[ybegin + i].Body[0], Dims[ibegin + i] / 3, omega, scale);
+      matgen.gen_matrix_sorted_from_file(Mat[i], cells[ybegin + i].Body[0], Dims[ibegin + i] / 3);
     }
     //Cols.resize(nodes, n_mat);
      // we should also calculate the scale distributed, but lets keep that for later
@@ -687,49 +688,55 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
       long long idx_begin = cells[ybegin + i].Body[0];
       long long idx_end = cells[ybegin + i].Body[1];
       std::vector<long long> F_ind(matgen.get_num_total() - idx_end + idx_begin);
-      //std::cout<<F_ind.size()<<" far field indices"<<std::endl;
-      // only HSS basis
-      //if (1. <= epi) {
-      long long fj;
-      for (fj = 0; fj < idx_begin; ++fj)
-        F_ind[fj] = fj;
-      for (long long j = idx_end; j < matgen.get_num_total(); ++j)
-        F_ind[fj++] = j;
-      //} else {
-        // H2 basis
-       // for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-       //   far_field[ACols[ij]] = 0;
-       // }
-      //}
-      //auto far_cols = std::reduce(far_field.begin(), far_field.end());
-      // only compute the far field if it exists
-      /*if (far_cols) {
-        //std::cout<<"Far intermediate "<<far_cols<<std::endl;
-        std::vector<long long> FS_ind(far_cols);
-        long long start = 0;
-        //long long corr_start;
-        for (size_t ij = 0; ij < far_field.size(); ij++) {
-        //for (long long ij = 0; ij < nodes; ij++) {
-          if (far_field[ij]) {
-            //std::cout<<"Far field "<<ij<<std::endl;
-            std::copy(S_ind[ij], S_ind[ij] + far_field[ij], &FS_ind[start]);
-            //std::copy(S_ind[ij + ibegin], S_ind[ij + ibegin] + far_field[ij], &FS_ind[start]);
-            start += far_field[ij];
-          }
-        }*/
-        //for (auto& val : F_ind)
-        //  std::cout<<val<<", ";
-        //std::cout<<std::endl;
+      // only construct the far field if it exists (i.e. skip node 0)
+      if (F_ind.size()) {
+        //std::cout<<F_ind.size()<<" far field indices"<<std::endl;
+        // only HSS basis
+        //if (1. <= epi) {
+        long long fj;
+        for (fj = 0; fj < idx_begin; ++fj)
+          F_ind[fj] = fj;
+        for (long long j = idx_end; j < matgen.get_num_total(); ++j)
+          F_ind[fj++] = j;
+        //} else {
+          // H2 basis
+         // for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+         //   far_field[ACols[ij]] = 0;
+         // }
+        //}
+        //auto far_cols = std::reduce(far_field.begin(), far_field.end());
+        // only compute the far field if it exists
+        /*if (far_cols) {
+          //std::cout<<"Far intermediate "<<far_cols<<std::endl;
+          std::vector<long long> FS_ind(far_cols);
+          long long start = 0;
+          //long long corr_start;
+          for (size_t ij = 0; ij < far_field.size(); ij++) {
+          //for (long long ij = 0; ij < nodes; ij++) {
+            if (far_field[ij]) {
+              //std::cout<<"Far field "<<ij<<std::endl;
+              std::copy(S_ind[ij], S_ind[ij] + far_field[ij], &FS_ind[start]);
+              //std::copy(S_ind[ij + ibegin], S_ind[ij + ibegin] + far_field[ij], &FS_ind[start]);
+              start += far_field[ij];
+            }
+          }*/
+          //for (auto& val : F_ind)
+          //  std::cout<<val<<", ";
+          //std::cout<<std::endl;
 
-        // now we have the indices for the far field columns
-        // and create the far field matrix F
-        Eigen::MatrixXcd F(M, F_ind.size() * 3);
-        matgen.gen_matrix_idx_element(F.data(), S_ind[i + ibegin], M, F_ind.data(), F_ind.size(), omega, scale);
-        //std::cout<<F(0,0)<<" "<<F(3, 3)<<" "<<F(6, 6)<<std::endl;
-        long long rank = compute_basis(F.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-        //std::cout<<"Rank "<<rank<<std::endl;
-        DimsLr[i + ibegin] = rank;
-      //}
+          // now we have the indices for the far field columns
+          // and create the far field matrix F
+          // compute F transpose directly
+          //Eigen::MatrixXcd F(M, F_ind.size() * 3);
+          Eigen::MatrixXcd F(F_ind.size() * 3, M);
+          matgen.gen_matrix_idx_element_from_file(F.data(), S_ind[i + ibegin], M, F_ind.data(), F_ind.size());
+          //matgen.gen_matrix_idx_element(F.data(), S_ind[i + ibegin], M, F_ind.data(), F_ind.size(), omega, scale);
+          //std::cout<<F(0,0)<<" "<<F(3, 3)<<" "<<F(6, 6)<<std::endl;
+          //long long rank = compute_basis(F.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          //std::cout<<"Rank "<<rank<<std::endl;
+          DimsLr[i + ibegin] = rank;
+      }
     }
 
     comm.dataSizesToNeighborOffsets(Qsizes.data());

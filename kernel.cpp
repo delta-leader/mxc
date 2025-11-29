@@ -176,6 +176,7 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
   mu1 = elastWave3d::get_mu(1, 1);
 }
 
+// generates the whole matrix
 void MatrixGenerator::gen_matrix(std::complex<double> cmat[], const double omega, double scale) const {
   if (!scale)
     scale = this->scale;
@@ -289,6 +290,7 @@ void MatrixGenerator::gen_matrix(std::complex<double> cmat[], const double omega
   }
 }
 
+// generates the whole matrix taking into account the reordering
 // column major
 void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], const double omega, double scale, bool cache) const {
   long long nmat = (num_nodes + num_elems) * 3;
@@ -421,6 +423,7 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], const doubl
   }
 }
 
+// generates the whole matrix for caching purposes
 void MatrixGenerator::generateA(const double omega, double scale) {
   if (!scale)
     scale = this->scale;
@@ -545,6 +548,7 @@ void MatrixGenerator::generateA(const double omega, double scale) {
   //A.triangularView<Eigen::StrictlyLower>() = A.triangularView<Eigen::StrictlyUpper>().transpose();
 }
 
+//generates a block of rows of the matrix, taking into account the reordering
 // this creates the matrix in row major now
 void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale, bool cache) const {
   long long nmat = (num_nodes + num_elems) * 3;
@@ -686,6 +690,16 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long s
   //}
 }
 
+//generates a block of rows of the matrix, taking into account the reordering from a file
+// this creates the matrix in row major now
+void MatrixGenerator::gen_matrix_sorted_from_file(std::complex<double> cmat[], long long start, const long long num_rows) const {
+  long long n_mat = (num_nodes + num_elems) * 3;
+  MPI_Status status;
+  MPI_Offset offset = 4 * sizeof(double) +  start * 3 * n_mat * sizeof(std::complex<double>);
+  MPI_File_read_at(fh_matrix, offset, cmat, num_rows * 3 * n_mat, MPI_C_DOUBLE_COMPLEX, &status);
+}
+
+// generates the rhs (without reordering)
 void MatrixGenerator::gen_rhs(std::complex<double> rhs[], const double omega, double scale, bool equation_type) const {
   std::complex<double> alpha = elastWave3d::set_alpha(omega);
   if (!scale)
@@ -727,6 +741,7 @@ void MatrixGenerator::gen_rhs(std::complex<double> rhs[], const double omega, do
   }
 }
 
+// generates the rhs, taking into account the reordering
 void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], const double omega, double scale, bool equation_type) const {
   std::complex<double> alpha = elastWave3d::set_alpha(omega);
   if (!scale)
@@ -768,6 +783,7 @@ void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], const double om
   }
 }
 
+// generates a certain number of rows of the RHS, taking into account the reordering
 void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], long long start, long long num_rows, const double omega, double scale, bool equation_type) const {
   std::complex<double> alpha = elastWave3d::set_alpha(omega);
   if (!scale)
@@ -802,6 +818,14 @@ void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], long long start
   else{
     std::cout<<"Burton Miller evaluation, but expected PMCHWT"<<std::endl;
   }
+}
+
+// generates a certain number of rows of the RHS, taking into account the reordering from a file
+// this creates the matrix in row major now
+void MatrixGenerator::gen_rhs_sorted_from_file(std::complex<double> rhs[], long long start, const long long num_rows) const {
+  MPI_Status status;
+  MPI_Offset offset = start * 3 * sizeof(std::complex<double>);
+  MPI_File_read_at(fh_matrix, offset, rhs, num_rows, MPI_C_DOUBLE_COMPLEX, &status);
 }
 
 double MatrixGenerator::calc_scale(const double omega) {
@@ -868,6 +892,8 @@ double MatrixGenerator::get_max_nodes(const double omega) const {
   return max;
 }
 
+// generates a block of the matrix from row and colum indices, taking into account the reordering
+// indices are actual matrix indices and not node/element indices
 void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale) const {
   long long nmat = (num_nodes + num_elems) * 3;
   for (long long i = 0; i < num_rows; ++i)
@@ -957,15 +983,18 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
   }*/
 }
 
+// generates a block of the matrix, taking into account the reordering
+// row indices are matrix indices, but column indices are node/element indices
 // this function uses the actual 3x3 indices ofr the rows, but node+element indices for the column space
 void MatrixGenerator::gen_matrix_idx_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale) const {
   //std::cout<<"Matrix with "<<num_rows<<" rows and "<<num_cols*3<<" columns"<<std::endl;
-  long long nmat = (num_nodes + num_elems) * 3;
+  /*long long nmat = (num_nodes + num_elems) * 3;
   for (long long i = 0; i < num_rows; ++i)
     for (long long j = 0; j < num_cols; ++j)
       for (long long d = 0; d < 3; ++d)
         cmat[i + (j * 3 + d) * num_rows] = A(row_indices[i], col_indices[j] * 3 + d);
-  /*if (!scale)
+  */
+  if (!scale)
     scale = this->scale;
   long long nmat = (num_nodes + num_elems) * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
@@ -1053,7 +1082,23 @@ void MatrixGenerator::gen_matrix_idx_element(std::complex<double> cmat[], const 
         }
       }
     }
-  }*/
+  }
+}
+
+// generates a block of the matrix, taking into account the reordering
+// row indices are matrix indices, but column indices are node/element indices
+// this function uses the actual 3x3 indices ofr the rows, but node+element indices for the column space
+void MatrixGenerator::gen_matrix_idx_element_from_file(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols) const {
+  long long n_mat = (num_nodes + num_elems) * 3;
+  MPI_Status status;
+  MPI_Offset offset;
+  //std::vector<std::complex<double>> tmp(3);
+  // todo could be optimized to read consecutive entries at once
+  for (long long i = 0; i < num_rows; ++i)
+    for (long long j = 0; j < num_cols; ++j) {
+      offset = 4 * sizeof(double) + (row_indices[i] * n_mat + col_indices[j] * 3) * sizeof(std::complex<double>);
+      MPI_File_read_at(fh_matrix, offset, &cmat[i * num_cols * 3 + (j * 3 )], 3, MPI_C_DOUBLE_COMPLEX, &status);
+    }
 }
 
 void MatrixGenerator::writeA(const std::string& filename) {
@@ -1077,4 +1122,14 @@ void MatrixGenerator::readA(const std::string& filename) {
     A.resize(rows, cols);
     in.read( (char *) A.data(), rows*cols*sizeof(typename Eigen::MatrixXcd::Scalar));
     in.close();
+}
+
+void MatrixGenerator::open_matrix_file(const std::string& filename) {
+  if (MPI_File_open(MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh_matrix) != MPI_SUCCESS)
+    std::cerr <<"could not open file '" << filename << "'" << std::endl;
+}
+
+void MatrixGenerator::open_rhs_file(const std::string& filename) {
+  if (MPI_File_open(MPI_COMM_WORLD, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh_rhs) != MPI_SUCCESS)
+    std::cerr << "could not open file '" << filename << "'" << std::endl;
 }

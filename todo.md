@@ -415,4 +415,26 @@ check the rhs for the sphere case
    - writing the RHS and matrix seems to work for 8 processes and the sphere
  - Now I am trying to write the 50k salt matrix again
     -> it worked with 8 processes on the lab server (50k problem)
+now we need to read from the file
+  - read the rhs (for each process)
+  - read the matrix rows on the leaf level (for each process)
+  - read or recalculate the rows on the upper level
+
+  Ideas for reading:
+    - provide the matrix generator with the filename and then get the data from there instead of the fortran code
+    - the matrix has already been sorted and scaled
+      - read the scale from the file
+    - when is the matge called in the construction?
+      - get the number of nodes/elements
+      - get the dense matrices on the leaf level
+      - gen_matrix_sorted(Mat[i], start, num_rows, omega scale (reads consecutively in multiples of three) DONE
+      - gen_matrix_idx_element(Far, S_ind, F_ind)
+        - gets the matrix from the nodes/elements indices
+        - could leave this for later
+      - gen_matrix_element(S_ind, M, S_ind)
+        - I'm actually not sure what this does
+
+when reading the file it just seems to be all zeroes
+-> Found the issue and FIXED it
+
    

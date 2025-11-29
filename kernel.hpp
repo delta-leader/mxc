@@ -5,6 +5,7 @@
 
 #include <Eigen/Dense>
 #include <include/elast3d.hpp>
+#include <mpi.h>
 
 class MatrixGenerator {
 private:
@@ -16,6 +17,8 @@ private:
   std::vector<long long> nodes_idx, elems_idx;
   double scale = 1;
   Eigen::MatrixXcd A;
+  MPI_File fh_matrix, fh_rhs;
+
 public:
   MatrixGenerator(const int size, const int spheres=0);
   long long get_num_nodes() const {return num_nodes;};
@@ -28,17 +31,22 @@ public:
   void gen_matrix(std::complex<double> cmat[], const double omega, double scale = 0) const;
   void gen_matrix_sorted(std::complex<double> cmat[], const double omega, double scale = 0, bool cache = false) const;
   void gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale = 0, bool cache = false) const;
+  void gen_matrix_sorted_from_file(std::complex<double> cmat[], long long start, const long long num_rows) const;
   void gen_rhs(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
   void gen_rhs_sorted(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
   void gen_rhs_sorted(std::complex<double> rhs[], long long start, long long num_rows, const double omega, double scale, bool equation_type = true) const;
+  void gen_rhs_sorted_from_file(std::complex<double> rhs[], long long start, long long num_rows) const;
   double get_max_nodes(const double omega) const;
   double get_max_elems(const double omega) const;
   double calc_scale(const double omega);
   void gen_matrix_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale = 0) const;
   void gen_matrix_idx_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale = 0) const;
+  void gen_matrix_idx_element_from_file(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols) const;
   void generateA(const double omega, double scale = 0);
   void writeA(const std::string& filename);
   void readA(const std::string& filename);
+  void open_matrix_file(const std::string& filename);
+  void open_rhs_file(const std::string& filename);
 };
 
 class Accessor {
