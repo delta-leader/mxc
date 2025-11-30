@@ -995,6 +995,21 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
   }
 }
 
+// generates a block of the matrix from row and colum indices, taking into account the reordering
+// indices are actual matrix indices and not node/element indices
+void MatrixGenerator::gen_matrix_element_from_file(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols) const {
+  long long n_mat = (num_nodes + num_elems) * 3;
+  MPI_Status status;
+  MPI_Offset offset;
+  std::vector<std::complex<double>> tmp(n_mat);
+  for (long long i = 0; i < num_rows; ++i) {
+    offset = 4 * sizeof(double) + row_indices[i] * n_mat * sizeof(std::complex<double>);
+    MPI_File_read_at(fh_matrix, offset, tmp.data(), n_mat, MPI_C_DOUBLE_COMPLEX, &status);
+    for (long long j = 0; j < num_cols; ++j)
+      cmat[i + j * num_rows] = tmp[col_indices[j]];
+  }
+}
+
 // generates a block of the matrix, taking into account the reordering
 // row indices are matrix indices, but column indices are node/element indices
 // this function uses the actual 3x3 indices ofr the rows, but node+element indices for the column space

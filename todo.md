@@ -440,5 +440,6 @@ now we need to read from the file
 when reading the file it just seems to be all zeroes
 -> Found the issue and FIXED it
 - read the right hand side and challenge the salt model
+  -> Read rhs DONE
 
    

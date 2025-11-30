@@ -70,14 +70,11 @@ int main(int argc, char* argv[]) {
   
   std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
 
-  // read the rhs, reference solution and matrix from the file
-  long long n_mat = Nbody * 3;
-
-  Eigen::MatrixXcd A_gen(n_mat, n_mat);
-  Eigen::VectorXcd rhs_gen(n_mat);
-  double get_scale_time = MPI_Wtime();
-  double scale = matgen.calc_scale(omega);
-  get_scale_time = MPI_Wtime() - get_scale_time;
+  //Eigen::MatrixXcd A_gen(n_mat, n_mat);
+  //Eigen::VectorXcd rhs_gen(n_mat);
+  //double get_scale_time = MPI_Wtime();
+  //double scale = matgen.calc_scale(omega);
+  //get_scale_time = MPI_Wtime() - get_scale_time;
   //double gen_matrix_time = MPI_Wtime();
   //matgen.gen_matrix_sorted(A_gen.data(), omega, scale, true);
   //gen_matrix_time = MPI_Wtime() - gen_matrix_time;
@@ -105,10 +102,10 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
 
-  matgen.open_matrix_file("../input/cache/1_160_1_32.dat");
-  matgen.open_rhs_file("../input/cache/rhs_1_160_1_32.dat");
-  double nmat, scale2, omega2, lsize;
-  matgen.read_mat_metadata(nmat, scale2, omega2, lsize);
+  matgen.open_matrix_file("../input/cache/1_568_1_32.dat");
+  matgen.open_rhs_file("../input/cache/rhs_1_568_1_32.dat");
+  double nmat, scale, omega2, lsize;
+  matgen.read_mat_metadata(nmat, scale, omega2, lsize);
   std::cout<<nmat<<", "<<scale<<", "<<omega2<<", "<<lsize<<std::endl;
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;

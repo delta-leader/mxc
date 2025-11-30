@@ -783,11 +783,13 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           // todo create this matrix and the one below
           //gen_matrix(eval, M, N, S[y], S[x], Ayx.data());
           //gen_matrix(Mat_i, M, N, S_ind[y], S_ind[x], Ayx);
-          matgen.gen_matrix_element(Ayx.data(), S_ind[y], M, S_ind[x], N, omega, scale);
+          //matgen.gen_matrix_element(Ayx.data(), S_ind[y], M, S_ind[x], N, omega, scale);
+          matgen.gen_matrix_element_from_file(Ayx.data(), S_ind[y], M, S_ind[x], N);
           Cyx.noalias() = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
         }
         else
-          matgen.gen_matrix_element(Cyx.data(), S_ind[y], M, S_ind[x], N, omega, scale);
+          //matgen.gen_matrix_element(Cyx.data(), S_ind[y], M, S_ind[x], N, omega, scale);
+          matgen.gen_matrix_element_from_file(Cyx.data(), S_ind[y], M, S_ind[x], N);
           //gen_matrix(Mat_i, M, N, S_ind[y], S_ind[x], Cyx);
           //gen_matrix(eval, M, N, S[y], S[x], Cyx.data());
       }
