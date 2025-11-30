@@ -47,6 +47,7 @@ public:
   void readA(const std::string& filename);
   void open_matrix_file(const std::string& filename);
   void open_rhs_file(const std::string& filename);
+  void read_mat_metadata(double& mat_size, double& scale, double& omega, double& leaf_size) const;
 };
 
 class Accessor {

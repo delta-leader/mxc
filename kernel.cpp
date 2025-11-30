@@ -828,6 +828,18 @@ void MatrixGenerator::gen_rhs_sorted_from_file(std::complex<double> rhs[], long 
   MPI_File_read_at(fh_matrix, offset, rhs, num_rows, MPI_C_DOUBLE_COMPLEX, &status);
 }
 
+void MatrixGenerator::read_mat_metadata(double& mat_size, double& scale, double& omega, double& leaf_size) const {
+  MPI_Status status;
+  MPI_Offset offset = 0;
+  MPI_File_read_at(fh_matrix, offset, &mat_size, 1, MPI_DOUBLE, &status);
+  offset += sizeof(double);
+  MPI_File_read_at(fh_matrix, offset, &scale, 1, MPI_DOUBLE, &status);
+  offset += sizeof(double);
+  MPI_File_read_at(fh_matrix, offset, &omega, 1, MPI_DOUBLE, &status);
+  offset += sizeof(double);
+  MPI_File_read_at(fh_matrix, offset, &leaf_size, 1, MPI_DOUBLE, &status);
+}
+
 double MatrixGenerator::calc_scale(const double omega) {
   scale = std::sqrt(get_max_nodes(omega) / get_max_elems(omega));
   return scale;

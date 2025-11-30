@@ -105,8 +105,11 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
 
-  matgen.open_matrix_file("../input/cache/1_568_1_32.dat");
-  matgen.open_rhs_file("../input/cache/rhs_1_568_1_32.dat");
+  matgen.open_matrix_file("../input/cache/1_160_1_32.dat");
+  matgen.open_rhs_file("../input/cache/rhs_1_160_1_32.dat");
+  double nmat, scale2, omega2, lsize;
+  matgen.read_mat_metadata(nmat, scale2, omega2, lsize);
+  std::cout<<nmat<<", "<<scale<<", "<<omega2<<", "<<lsize<<std::endl;
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega, scale);
@@ -134,12 +137,13 @@ int main(int argc, char* argv[]) {
 
    // calculate reference into X2
   double refmatvec_time = MPI_Wtime();
-  Eigen::Map<Eigen::VectorXcd> ref(&X2[0], lenX);
-  Eigen::Map<Eigen::VectorXcd> xbody(&Xbody[0], Nbody*3);
-  ref = A_gen.middleRows(offset, lenX) * xbody;
+  matM.matVecMulDense(&Xbody[0], &X2[0]);
+  //Eigen::Map<Eigen::VectorXcd> ref(&X2[0], lenX);
+  //Eigen::Map<Eigen::VectorXcd> xbody(&Xbody[0], Nbody*3);
+  //ref = A_gen.middleRows(offset, lenX) * xbody;
   //for (int i = 0; i < lenX; ++i)
   //  std::cout<<ref(i)<<std::endl;
-  std::cout<<"Ref finished"<<std::endl;
+  //std::cout<<"Ref finished"<<std::endl;
 
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   std::cout<<"Ref Matvec finished"<<std::endl;
