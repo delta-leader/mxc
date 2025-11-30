@@ -78,17 +78,17 @@ int main(int argc, char* argv[]) {
   double get_scale_time = MPI_Wtime();
   double scale = matgen.calc_scale(omega);
   get_scale_time = MPI_Wtime() - get_scale_time;
-  double gen_matrix_time = MPI_Wtime();
-  matgen.gen_matrix_sorted(A_gen.data(), omega, scale, true);
-  gen_matrix_time = MPI_Wtime() - gen_matrix_time;
-  double gen_rhs_time = MPI_Wtime();
-  matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
-  gen_rhs_time = MPI_Wtime() - gen_rhs_time;
+  //double gen_matrix_time = MPI_Wtime();
+  //matgen.gen_matrix_sorted(A_gen.data(), omega, scale, true);
+  //gen_matrix_time = MPI_Wtime() - gen_matrix_time;
+  //double gen_rhs_time = MPI_Wtime();
+  //matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
+  //gen_rhs_time = MPI_Wtime() - gen_rhs_time;
 
-  std::cout<<"MATRIX ASSEMBLY"<<std::endl;
-  std::cout<<"Calc scale time "<<get_scale_time<<std::endl;
-  std::cout<<"Gen matrix time "<<gen_matrix_time<<std::endl;
-  std::cout<<"Gen rhs time "<<gen_rhs_time<<std::endl;
+  //std::cout<<"MATRIX ASSEMBLY"<<std::endl;
+  //std::cout<<"Calc scale time "<<get_scale_time<<std::endl;
+  //std::cout<<"Gen matrix time "<<gen_matrix_time<<std::endl;
+  //std::cout<<"Gen rhs time "<<gen_rhs_time<<std::endl;
 
  
   // generate random x
@@ -119,21 +119,15 @@ int main(int argc, char* argv[]) {
   std::cout<<"Construction Finished"<<std::endl;
 
   // multiply by 3 to get the actual length
-  // this way, we can reduce the number of elems if necessary
-  //long long lenX = Nbody * 3;
   long long lenX = (matM.local_bodies.second - matM.local_bodies.first) * 3;
   long long offset = matM.local_bodies.first * 3;
-  // make the vectors full size and pass them on in a strided fashion
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
-  //std::vector<std::complex<double>> X3(lenX, std::complex<double>(0., 0.));
   std::cout<<"offset: "<<offset<<" "<<lenX<<std::endl;
 
   // copy random x into X1, X2
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X2[0]);
-  //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X1[0]);
-  //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X2[0]);
 
    // calculate reference into X2
   double refmatvec_time = MPI_Wtime();
@@ -174,8 +168,6 @@ int main(int argc, char* argv[]) {
   std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
 
   if (mpi_rank == 0) {
-    //std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << ", " << m_construct_comm_time << std::endl;
-    //std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
     std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;

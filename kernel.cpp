@@ -907,11 +907,11 @@ double MatrixGenerator::get_max_nodes(const double omega) const {
 // generates a block of the matrix from row and colum indices, taking into account the reordering
 // indices are actual matrix indices and not node/element indices
 void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale) const {
-  long long nmat = (num_nodes + num_elems) * 3;
-  for (long long i = 0; i < num_rows; ++i)
-    for (long long j = 0; j < num_cols; ++j)
-      cmat[i + j * num_rows] = A(row_indices[i], col_indices[j]);
-  /*if (!scale)
+  //long long nmat = (num_nodes + num_elems) * 3;
+  //for (long long i = 0; i < num_rows; ++i)
+  //  for (long long j = 0; j < num_cols; ++j)
+  //    cmat[i + j * num_rows] = A(row_indices[i], col_indices[j]);
+  if (!scale)
     scale = this->scale;
   long long nmat = (num_nodes + num_elems) * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
@@ -992,7 +992,7 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
         }
       }
     }
-  }*/
+  }
 }
 
 // generates a block of the matrix, taking into account the reordering
