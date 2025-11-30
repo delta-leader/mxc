@@ -138,25 +138,13 @@ int main(int argc, char* argv[]) {
    // calculate reference into X2
   double refmatvec_time = MPI_Wtime();
   matM.matVecMulDense(&Xbody[0], &X2[0]);
-  //Eigen::Map<Eigen::VectorXcd> ref(&X2[0], lenX);
-  //Eigen::Map<Eigen::VectorXcd> xbody(&Xbody[0], Nbody*3);
-  //ref = A_gen.middleRows(offset, lenX) * xbody;
-  //for (int i = 0; i < lenX; ++i)
-  //  std::cout<<ref(i)<<std::endl;
-  //std::cout<<"Ref finished"<<std::endl;
-
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   std::cout<<"Ref Matvec finished"<<std::endl;
-  // double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
-  // //double cerr = H2MatrixSolver::solveRelErr(lenX, r.data(), result.data());
 
-  //std::copy(&Xbody[matM.local_bodies.first * 3], &Xbody[matM.local_bodies.second * 3], &X1[0]);
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
-  //matM.matVecMulDense(&X1[0], &X3[offset_local]);
   matM.matVecMul(&X1[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   std::cout<<"Matvec finished"<<std::endl;
-  //double cerr_m = H2MatrixSolver::solveRelErr(lenX_local, &X1[offset_local], &X2[offset_local]);
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) {
@@ -193,9 +181,11 @@ int main(int argc, char* argv[]) {
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
   }
 
+  std::vector<std::complex<double>> rhs(lenX);
+  matgen.gen_rhs_sorted_from_file(rhs.data(), offset, lenX);
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matM.solveGMRESDense(epi, &X1[0], &rhs_gen[offset], 10, 50);
+  matM.solveGMRESDense(epi, &X1[0], &rhs[0], 10, 50);
   //matM.solveGMRESDensePrecon(epi, lu, A_gen, &X1[0], &rhs_gen[offset], 10, 50);
   //matM.solveGMRESDense(epi, A_gen, &X1[0], &rhs_gen[0], 10, 50);
   //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
