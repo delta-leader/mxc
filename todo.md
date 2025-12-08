@@ -442,4 +442,28 @@ when reading the file it just seems to be all zeroes
 - read the right hand side and challenge the salt model
   -> Read rhs DONE
 
+Test just LU factorization of the SALT model
+try torus (donut) shape
    
+
+Current research summary:
+Ma's version:
+  - failed convergence is primarily coming from the non-symmetric properties of the low-rank components
+  - even though the ISC paper produces very large errors, it works when coupled with a Krylov solver because the hierarchical decomposition decomposes the matrix into different spectrums, so that the Krylov iterations can effectively reduce the residual effectively (similar to a multi-grid fashion)
+  - the newer geometries are not working because of the limitations of the implementation that requires the per level H2 matrix to be formulated in a numerically symmetric way, but Matsumoto-sensei' code does not meet that criterion
+  - we conducted some experiments on the dense matrices and it seems only the sphere has an acceptable symmetric property which enables the sphere to run
+  - so we either need active development to drop the assumption on complete numerical symmetry during factorization or to not use the double-layer or hypersingular potential (the latter makes the BEM less convincing to readers)
+- Ma spends about half a way per week to work on the non-symmetric parts, but the H2 currently does not converge as good as HSS (even on a single node)
+  - he switched the ID to SVD so HSS converges much faster, but it degrades the H2 performance, but we don't know why
+- option two: reduce the problem complexity (will make the paper less convincing)
+
+His suggestions:
+- sparse matrix like LoRaSP, because many of them have good numerical symmetry
+- dig more on the ISC theory part, going more into the applied math part, trying to get more info on convergence properties, limitations, etc. 
+- H2 multigrid is based on symmetric matrices so it is going to be more challenging, 
+  - this means for multigrid we need SPD matrices, i.e. symmetric
+  - Helmholtz single layer potential is not SPD, but it seems that it is still able to extract the lower frequencies
+
+    complex geometry - single layer potential / let us change the problem util it works
+  look for a matrix that we can solve for a complex geometry 
+  it is already novel even if we do single layer potential and make the matrix symmetric, because the method is novel
