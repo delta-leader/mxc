@@ -25,6 +25,8 @@ contains
     write(mat_num_char , '(I10)') mat_num        ! convert integer to char
     if (sphere_num == 8) then
       write(filename, '("../input/new/eight_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+    else if (sphere_num == 5) then
+      write(filename, '("../input/torus/torus_", A, ".inp")') trim(adjustl(mat_num_char))  
     else if (sphere_num == 4) then
       write(filename, '("../input/new/four_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 3) then
