@@ -293,6 +293,38 @@ void MatrixGenerator::gen_matrix(std::complex<double> cmat[], const double omega
   }
 }
 
+// generates the whole matrix
+// only for single layer potential
+void MatrixGenerator::gen_matrix_single_layer(std::complex<double> cmat[], const double omega) const {
+  long long nmat = num_elems * 3;
+  std::vector<std::complex<double>> mat3x3(9, 0.0);
+  std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
+  // -(U0 + U1)
+  //rowShift = num_xelems;
+  //colShift = num_yelems;
+  #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd) collapse(2)
+  for(int xindex = 0; xindex < num_elems; xindex++){
+    for(int yindex = 0; yindex < num_elems; yindex++){
+      // U0
+      const int out_in = 0;
+      const int slp_or_dlp = 1;
+      const int linear_or_const = 1;
+      std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, xindex + 1, nodes.data(), num_nodes, elems.data(), num_elems, yindex + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      // U1
+      //const int out_in_2nd = 1;
+      //std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
+      //elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, xindex + 1, nodes.data(), num_nodes, elems.data(), num_elems, yindex + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+      for(int j = 0; j < 3; j++){
+        for(int i = 0; i < 3; i++){
+          cmat[i + 3*xindex + (j + 3*yindex) * nmat] = -mat3x3.at(i + 3*j);// - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
+          //cmat[xindex + rowShift*i + 3*num_xnodes + (yindex + colShift*j + 3*num_ynodes) * nmat]= -mat3x3.at(i + 3*j) - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
+        }
+      }
+    }
+  }
+}
+
 // generates the whole matrix taking into account the reordering
 // column major
 void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], const double omega, double scale, bool cache) const {
@@ -693,12 +725,55 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long s
   //}
 }
 
+// generates a block of rows of the matrix, taking into account the reordering
+// this creates the matrix in row major now
+// only creates the single layer potential
+void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double> cmat[], long long start, const long long num_rows, const double omega) const {
+  long long nmat = num_elems * 3;
+  std::vector<std::complex<double>> mat3x3(9, 0.0);
+  std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
+  // -(U0 + U1)
+  //rowShift = num_xelems;
+  //colShift = num_yelems;
+  #pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd) collapse(2)
+  for(int xindex = 0; xindex < num_rows; xindex++){
+    for(int yindex = 0; yindex < num_elems; yindex++){
+      // U0
+      const int out_in = 0;
+      const int slp_or_dlp = 1;
+      const int linear_or_const = 1;
+      std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      // U1
+      // const int out_in_2nd = 1;
+      // std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
+      // elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in_2nd, slp_or_dlp, linear_or_const, mat3x3_2nd.data());
+      for(int j = 0; j < 3; j++){
+        for(int i = 0; i < 3; i++){
+          cmat[(i + 3*xindex) * nmat + j + 3*yindex] = -mat3x3.at(i + 3*j);// - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
+          //cmat[xindex + rowShift*i + 3*num_xnodes + (yindex + colShift*j + 3*num_ynodes) * nmat]= -mat3x3.at(i + 3*j) - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
+        }
+      }
+    }
+  }
+}
+
 //generates a block of rows of the matrix, taking into account the reordering from a file
 // this creates the matrix in row major now
 void MatrixGenerator::gen_matrix_sorted_from_file(std::complex<double> cmat[], long long start, const long long num_rows) const {
   long long n_mat = (num_nodes + num_elems) * 3;
   MPI_Status status;
   MPI_Offset offset = 4 * sizeof(double) +  start * 3 * n_mat * sizeof(std::complex<double>);
+  MPI_File_read_at(fh_matrix, offset, cmat, num_rows * 3 * n_mat, MPI_C_DOUBLE_COMPLEX, &status);
+}
+
+//generates a block of rows of the matrix, taking into account the reordering from a file
+// this creates the matrix in row major now
+// only for single layer potential
+void MatrixGenerator::gen_matrix_sorted_from_file_single_layer(std::complex<double> cmat[], long long start, const long long num_rows) const {
+  long long n_mat = num_elems * 3;
+  MPI_Status status;
+  MPI_Offset offset = 3 * sizeof(double) +  start * 3 * n_mat * sizeof(std::complex<double>);
   MPI_File_read_at(fh_matrix, offset, cmat, num_rows * 3 * n_mat, MPI_C_DOUBLE_COMPLEX, &status);
 }
 
@@ -823,6 +898,24 @@ void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], long long start
   }
 }
 
+// generates a certain number of rows of the RHS, taking into account the reordering
+// only for single layer potential
+void MatrixGenerator::gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, bool equation_type) const {
+  std::complex<double> alpha = elastWave3d::set_alpha(omega);
+  if (equation_type){
+    // PMCHWT
+    for(int i = 0; i < num_rows; i++){
+      std::complex<double> uout[3];
+      elastWave3d::inc_disp_const_x(nodes.data(), num_nodes, elems[elems_idx[start + i]], omega, uout);
+      for(int j = 0; j < 3; j++){
+        rhs[j + 3 * i] = uout[j];   
+      }
+    }
+  } else{
+    std::cout<<"Burton Miller evaluation, but expected PMCHWT"<<std::endl;
+  }
+}
+
 // generates a certain number of rows of the RHS, taking into account the reordering from a file
 // this creates the matrix in row major now
 void MatrixGenerator::gen_rhs_sorted_from_file(std::complex<double> rhs[], long long start, const long long num_rows) const {
@@ -837,6 +930,16 @@ void MatrixGenerator::read_mat_metadata(double& mat_size, double& scale, double&
   MPI_File_read_at(fh_matrix, offset, &mat_size, 1, MPI_DOUBLE, &status);
   offset += sizeof(double);
   MPI_File_read_at(fh_matrix, offset, &scale, 1, MPI_DOUBLE, &status);
+  offset += sizeof(double);
+  MPI_File_read_at(fh_matrix, offset, &omega, 1, MPI_DOUBLE, &status);
+  offset += sizeof(double);
+  MPI_File_read_at(fh_matrix, offset, &leaf_size, 1, MPI_DOUBLE, &status);
+}
+
+void MatrixGenerator::read_mat_metadata_single_layer(double& mat_size, double& omega, double& leaf_size) const {
+  MPI_Status status;
+  MPI_Offset offset = 0;
+  MPI_File_read_at(fh_matrix, offset, &mat_size, 1, MPI_DOUBLE, &status);
   offset += sizeof(double);
   MPI_File_read_at(fh_matrix, offset, &omega, 1, MPI_DOUBLE, &status);
   offset += sizeof(double);
@@ -1001,12 +1104,13 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
 // generates a block of the matrix from row and colum indices, taking into account the reordering
 // indices are actual matrix indices and not node/element indices
 void MatrixGenerator::gen_matrix_element_from_file(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols) const {
-  long long n_mat = (num_nodes + num_elems) * 3;
+  long long n_mat = num_elems * 3;
   MPI_Status status;
   MPI_Offset offset;
   std::vector<std::complex<double>> tmp(n_mat);
   for (long long i = 0; i < num_rows; ++i) {
-    offset = 4 * sizeof(double) + row_indices[i] * n_mat * sizeof(std::complex<double>);
+    //offset = 4 * sizeof(double) + row_indices[i] * n_mat * sizeof(std::complex<double>);
+    offset = 3 * sizeof(double) + row_indices[i] * n_mat * sizeof(std::complex<double>);
     MPI_File_read_at(fh_matrix, offset, tmp.data(), n_mat, MPI_C_DOUBLE_COMPLEX, &status);
     for (long long j = 0; j < num_cols; ++j)
       cmat[i + j * num_rows] = tmp[col_indices[j]];
@@ -1119,7 +1223,7 @@ void MatrixGenerator::gen_matrix_idx_element(std::complex<double> cmat[], const 
 // row indices are matrix indices, but column indices are node/element indices
 // this function uses the actual 3x3 indices ofr the rows, but node+element indices for the column space
 void MatrixGenerator::gen_matrix_idx_element_from_file(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols) const {
-  long long n_mat = (num_nodes + num_elems) * 3;
+  long long n_mat = num_elems * 3;
   MPI_Status status;
   MPI_Offset offset;
   long long num_elems = 1;
@@ -1130,7 +1234,8 @@ void MatrixGenerator::gen_matrix_idx_element_from_file(std::complex<double> cmat
       break;
   }
   for (long long i = 0; i < num_rows; ++i) {
-    offset = 4 * sizeof(double) + row_indices[i] * n_mat * sizeof(std::complex<double>);
+    //offset = 4 * sizeof(double) + row_indices[i] * n_mat * sizeof(std::complex<double>);
+    offset = 3 * sizeof(double) + row_indices[i] * n_mat * sizeof(std::complex<double>);
     MPI_File_read_at(fh_matrix, offset + col_indices[0] * 3 * sizeof(std::complex<double>), &cmat[i * num_cols * 3], num_elems * 3, MPI_C_DOUBLE_COMPLEX, &status);
     if (num_elems < num_cols) {
       MPI_File_read_at(fh_matrix, offset + col_indices[num_elems] * 3 * sizeof(std::complex<double>), &cmat[i * num_cols * 3 + num_elems * 3], (num_cols - num_elems) * 3, MPI_C_DOUBLE_COMPLEX, &status);

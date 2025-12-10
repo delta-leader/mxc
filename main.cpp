@@ -18,57 +18,27 @@ int main(int argc, char* argv[]) {
   long long rank = argc > 4 ? std::atoll(argv[4]) : 32;
   long long leveled_rank =  argc > 5 ? std::atoll(argv[5]) : 0;
   double epi = argc > 6 ? std::atof(argv[6]) : 1e-10;
-  std::string tree_mode = argc > 7 ? std::string(argv[7]) : "default";
-  double omega = argc > 8 ? std::atof(argv[8]) : 1;
+  double omega = argc > 7 ? std::atof(argv[7]) : 1;
   //std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
   //const char* csv = argc > 8 ? argv[8] : nullptr;
 
   const std::string MAT = std::to_string(M);
  
-  MatrixGenerator matgen(M, 1);
-  long long Nbody = matgen.get_num_nodes() + matgen.get_num_elems();
-  std::cout<<"Nodes/Elements: "<<matgen.get_num_nodes()<<" "<<matgen.get_num_elems()<<std::endl;
+  MatrixGenerator matgen(M, 3);
+  long long Nbody = matgen.get_num_elems();
+  std::cout<<"Elements: "<<matgen.get_num_elems()<<std::endl;
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
 
-  long long levels, Nleaf, ncells;
   std::vector<Cell> cell;
-  if (tree_mode == "standard") {
-    std::cout<<"Tree mode '" + tree_mode +"' no longer supported"<<std::endl;
-  } else {
-    long long levels_elems = (long long) std::ceil(std::log2((double)matgen.get_num_elems() / leaf_size));
-    long long Nleaf_elems = (long long)1 << levels_elems;
-    long long ncells_elems = Nleaf_elems + Nleaf_elems - 1;
-    long long levels_nodes = (long long) std::ceil(std::log2((double)matgen.get_num_nodes() / leaf_size));
-    long long Nleaf_nodes = (long long)1 << levels_nodes;
-    long long ncells_nodes = Nleaf_nodes + Nleaf_nodes - 1;
-    if (tree_mode == "fused1") {
-      std::cout<<"Tree mode '" + tree_mode +"' no longer supported"<<std::endl;
-    } else {
-      if (tree_mode == "fused2") {
-        levels = levels_elems;
-        Nleaf = Nleaf_nodes + Nleaf_elems;
-        ncells = ncells_elems + ncells_nodes + 1;
-        cell.resize(ncells);
-        buildBinaryTreeNodes(&cell[0], matgen.get_nodes().data(), matgen.get_nodes_idx().data(), matgen.get_num_nodes(), levels_nodes, 1);
-        buildBinaryTreeElems(&cell[0], matgen.get_elems().data(), matgen.get_elems_idx().data(), matgen.get_num_elems(), levels_elems, 0, matgen.get_num_nodes());
-        /* root has three children */
-        cell[0].Child[0] = 1;
-        cell[0].Child[1] = 4;
-        cell[0].Body[0] = 0;
-        cell[0].Body[1] = matgen.get_num_nodes() + matgen.get_num_elems();
-        for (int d = 0; d < 3; ++d) {
-          cell[0].R[d] = cell[1].R[d];
-          cell[0].C[d] = (cell[0].C[d] + cell[1].C[d]) / 2;
-        }
-      } else {
-        std::cout<<"Invalid tree mode '" + tree_mode +"'"<<std::endl;
-        return -1;
-      }
-    }
-  }
-
-  
+  long long levels = (long long) std::ceil(std::log2((double)matgen.get_num_elems() / leaf_size));
+  long long Nleaf = (long long)1 << levels;
+  long long ncells = Nleaf + Nleaf - 1;
+  cell.resize(ncells);
+  buildBinaryTreeElemsOnly(&cell[0], matgen.get_elems().data(), matgen.get_elems_idx().data(), matgen.get_num_elems(), levels);
   std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
+  
+  for (size_t i = 0; i<cell.size(); ++i)
+    std::cout<<"Cell "<<i<<": "<<cell[i].Child[0]<<"-"<<cell[i].Child[1]<<std::endl;
 
   //Eigen::MatrixXcd A_gen(n_mat, n_mat);
   //Eigen::VectorXcd rhs_gen(n_mat);
@@ -102,14 +72,23 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
 
-  matgen.open_matrix_file("../input/cache/1_568_1_32.dat");
-  matgen.open_rhs_file("../input/cache/rhs_1_568_1_32.dat");
-  double nmat, scale, omega2, lsize;
-  matgen.read_mat_metadata(nmat, scale, omega2, lsize);
-  std::cout<<nmat<<", "<<scale<<", "<<omega2<<", "<<lsize<<std::endl;
+  matgen.open_matrix_file("../input/cache/3_1_1_32.dat");
+  matgen.open_rhs_file("../input/cache/rhs_3_1_1_32.dat");
+  double nmat, omega2, lsize;
+  matgen.read_mat_metadata_single_layer(nmat, omega2, lsize);
+  std::cout<<nmat<<", "<<omega2<<", "<<lsize<<std::endl;
+
+  Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
+  matgen.gen_matrix_sorted_from_file_single_layer(A_gen.data(), 0, Nbody);
+  Eigen::MatrixXcd U = A_gen.triangularView<Eigen::StrictlyUpper>();
+  Eigen::MatrixXcd L = A_gen.triangularView<Eigen::StrictlyLower>();
+  double error = (U - L.transpose()).norm() / U.norm();
+  std::cout<<"Symmetry error: "<<error<<std::endl;
+
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega, scale);
+  std::cout<<"create"<<std::endl;
+  H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();

@@ -35,3 +35,4 @@ void buildBinaryTreeNodes(Cell* cells, elastWave3d::nodal_point* nodes, long lon
 void buildBinaryTreeElems(Cell* cells, elastWave3d::element* elems, long long num_elems, long long levels, long long first_cell_idx);
 void buildBinaryTreeNodes(Cell* cells, const elastWave3d::nodal_point* nodes, long long* indices, long long num_nodes, long long levels, long long first_cell_idx);
 void buildBinaryTreeElems(Cell* cells, const elastWave3d::element* elems, long long* indices, long long num_elems, long long levels, long long first_cell_idx, long long num_nodes);
+void buildBinaryTreeElemsOnly(Cell* cells, const elastWave3d::element* elems, long long* indices, long long num_elems, long long levels);

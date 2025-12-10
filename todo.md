@@ -467,3 +467,11 @@ His suggestions:
     complex geometry - single layer potential / let us change the problem util it works
   look for a matrix that we can solve for a complex geometry 
   it is already novel even if we do single layer potential and make the matrix symmetric, because the method is novel
+
+  Try single layer potential:
+   - standard graph creation with splitting (storing the indices)
+     - DONE, but can't really test
+   - modified kernel functions
+     - too many functions, which ones should I modify?
+     - I think the best way to do this is still over the file,
+       so for now I only modify the file reading/writing functions

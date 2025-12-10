@@ -42,22 +42,19 @@ H2MatrixSolver::H2MatrixSolver(const Accessor& eval_d, const MatrixAccessor& eva
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
 }
 
-H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, double omega, double scale, MPI_Comm world) : 
+H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, double omega, MPI_Comm world) : 
   levels(levels), A(levels + 1), local_bodies(0, 0) {
   
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
   int mpi_size = 1;
   MPI_Comm_size(world, &mpi_size);
-
   std::vector<std::pair<long long, long long>> mapping(mpi_size, std::make_pair(0, 1));
   std::vector<std::pair<long long, long long>> tree(cells.size());
   std::transform(cells.begin(), cells.end(), tree.begin(), [](const Cell& c) { return std::make_pair(c.Child[0], c.Child[1]); });
-  
   for (long long i = 0; i <= levels; i++) {
     comm.emplace_back(&tree[0], &mapping[0], Near.RowIndex.data(), Near.ColIndex.data(), Far.RowIndex.data(), Far.ColIndex.data(), allocedComm, world);
   }
-
   bool fix_rank = (epi == 0.);
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
   //std::vector<Hmatrix> wsa(levels + 1);
@@ -76,12 +73,12 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   //  hidr[l].top_down_sweep(0, cells.data(), Far, hidr[l - 1]);
   //}
   std::cout<<"Level "<<levels<<std::endl;
-  A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega, scale);
+  A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
   A[levels].lowest = true;
   //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
     std::cout<<"Level "<<l<<std::endl;
-    A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega, scale);
+    A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega);
   }
 
   long long llen = comm[levels].lenLocal();

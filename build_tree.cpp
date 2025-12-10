@@ -590,3 +590,45 @@ void buildBinaryTreeElems(Cell* cells, elastWave3d::element* elems, long long nu
     }
   }
 }
+
+void buildBinaryTreeElemsOnly(Cell* cells, const elastWave3d::element* elems, long long* indices, long long num_elems, long long levels) {
+  cells[0].Body[0] = 0;
+  cells[0].Body[1] = num_elems;
+  cells[0].nodes = false;
+  get_bounds(elems, num_elems, cells[0].R.data(), cells[0].C.data());
+
+  long long nleaf = (long long)1 << levels;
+  for (long long i = 0; i < nleaf - 1; ++i) {
+    Cell& ci = cells[i];
+    long long sdim = std::distance(ci.R.begin(), std::max_element(ci.R.begin(), ci.R.end()));
+    long long elems_begin = ci.Body[0];
+    long long elems_end = ci.Body[1];
+
+    std::vector<long long> sort_idx(elems_end - elems_begin);
+    std::iota(sort_idx.begin(), sort_idx.end(), 0);
+    std::sort(sort_idx.begin(), sort_idx.end(), 
+      [&](size_t i, size_t j) { return elems[indices[elems_begin + i]].xc[sdim] < elems[indices[elems_begin + j]].xc[sdim]; });
+
+    std::vector<long long> indices_copy(elems_end - elems_begin);
+    std::memcpy(indices_copy.data(), &indices[elems_begin], sizeof(long long) * indices_copy.size());
+    for (size_t i = 0; i < indices_copy.size(); ++i) {
+      indices[elems_begin + i] = indices_copy[sort_idx[i]];
+    }
+    long long len = (i << 1) + 1;
+    Cell& child0 = cells[len];
+    Cell& child1 = cells[len + 1];
+    ci.Child[0] = len;
+    ci.Child[1] = len + 2;
+
+    long long elems_mid = elems_begin + (elems_end - elems_begin) / 2;
+    child0.Body[0] = elems_begin;
+    child0.Body[1] = elems_mid;
+    child0.nodes = false;
+    child1.Body[0] = elems_mid;
+    child1.Body[1] = elems_end;
+    child1.nodes = false;
+
+    get_bounds(elems, &indices[elems_begin], elems_mid - elems_begin, child0.R.data(), child0.C.data());
+    get_bounds(elems, &indices[elems_mid], elems_end - elems_mid, child1.R.data(), child1.C.data());
+  }
+}

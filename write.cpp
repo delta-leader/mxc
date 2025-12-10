@@ -19,39 +19,18 @@ int main(int argc, char* argv[]) {
 
   const std::string MAT = std::to_string(M);
   MatrixGenerator matgen(M, num_spheres);
-  long long Nbody = matgen.get_num_nodes() + matgen.get_num_elems();
-  std::cout<<"Nodes/Elements: "<<matgen.get_num_nodes()<<" "<<matgen.get_num_elems()<<std::endl;
-  // make sure the nodes are valid
-  for (size_t i = 0; i < matgen.get_num_nodes(); ++i) {
-     if (!matgen.get_nodes()[i].check())
-       std::cout << "Node " << i << " is part of too many elements"<<std::endl;
-  }
+  long long Nbody = matgen.get_num_elems();
+  std::cout<<"Elements: "<<matgen.get_num_elems()<<std::endl;
 
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
   
-  long long levels, Nleaf, ncells;
   std::vector<Cell> cell;
-  long long levels_elems = (long long) std::ceil(std::log2((double)matgen.get_num_elems() / leaf_size));
-  long long Nleaf_elems = (long long)1 << levels_elems;
-  long long ncells_elems = Nleaf_elems + Nleaf_elems - 1;
-  long long levels_nodes = (long long) std::ceil(std::log2((double)matgen.get_num_nodes() / leaf_size));
-  long long Nleaf_nodes = (long long)1 << levels_nodes;
-  long long ncells_nodes = Nleaf_nodes + Nleaf_nodes - 1;
-  levels = levels_elems;
-  Nleaf = Nleaf_nodes + Nleaf_elems;
-  ncells = ncells_elems + ncells_nodes + 1;
+  long long levels = (long long) std::ceil(std::log2((double)matgen.get_num_elems() / leaf_size));
+  long long Nleaf = (long long)1 << levels;
+  long long ncells = Nleaf + Nleaf - 1;
   cell.resize(ncells);
-  buildBinaryTreeNodes(&cell[0], matgen.get_nodes().data(), matgen.get_nodes_idx().data(), matgen.get_num_nodes(), levels_nodes, 1);
-  buildBinaryTreeElems(&cell[0], matgen.get_elems().data(), matgen.get_elems_idx().data(), matgen.get_num_elems(), levels_elems, 0, matgen.get_num_nodes());
-  /* root has three children */
-  cell[0].Child[0] = 1;
-  cell[0].Child[1] = 4;
-  cell[0].Body[0] = 0;
-  cell[0].Body[1] = matgen.get_num_nodes() + matgen.get_num_elems();
-  for (int d = 0; d < 3; ++d) {
-    cell[0].R[d] = cell[1].R[d];
-    cell[0].C[d] = (cell[0].C[d] + cell[1].C[d]) / 2;
-  }
+  buildBinaryTreeElemsOnly(&cell[0], matgen.get_elems().data(), matgen.get_elems_idx().data(), matgen.get_num_elems(), levels);
+  std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
 
   long long n_mat = Nbody * 3;
   int mpi_rank = 0, mpi_size = 1;
@@ -68,11 +47,11 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> A_gen(own_rows * 3 * n_mat);
   // todo : store the rhs
   Eigen::VectorXcd rhs_gen(own_rows * 3);
-  std::cout<<"Generate scale"<<std::endl;
-  double scale = matgen.calc_scale(omega);
+  //std::cout<<"Generate scale"<<std::endl;
+  //double scale = matgen.calc_scale(omega);
   std::cout<<"Generating matrix "<<own_rows*3<<" "<<n_mat<<std::endl;
   std::cout<< num_rows *mpi_rank<<" "<<own_rows<<std::endl;
-  matgen.gen_matrix_sorted(A_gen.data(), num_rows * mpi_rank, own_rows, omega, scale);
+  matgen.gen_matrix_sorted_single_layer(A_gen.data(), num_rows * mpi_rank, own_rows, omega);
   std::cout<<"Generated matrix"<<std::endl;
   MPI_File fh;
   std::string filename = "../input/cache/" + std::to_string(num_spheres) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
@@ -84,9 +63,6 @@ int main(int argc, char* argv[]) {
   if (mpi_rank == 0) {
     double nmat = n_mat;
     MPI_File_write_at(fh, offset, &nmat, 1, MPI_DOUBLE, &status);
-    //std::cout<<"Status "<<(int)status<<std::endl;
-    offset += sizeof(double);
-    MPI_File_write_at(fh, offset, &scale, 1, MPI_DOUBLE, &status);
     offset += sizeof(double);
     MPI_File_write_at(fh, offset, &omega, 1, MPI_DOUBLE, &status);
     offset += sizeof(double);
@@ -94,7 +70,7 @@ int main(int argc, char* argv[]) {
     MPI_File_write_at(fh, offset, &leafS, 1, MPI_DOUBLE, &status);
   }
   //std::cout<<"Write Data"<<std::endl;
-  offset = 4 * sizeof(double) + mpi_rank * num_rows * 3 * n_mat * sizeof(std::complex<double>);
+  offset = 3 * sizeof(double) + mpi_rank * num_rows * 3 * n_mat * sizeof(std::complex<double>);
   // write into the actual file
   std::cout<<"Writing matrix "<<mpi_rank<<std::endl;
   MPI_File_write_at(fh, offset, A_gen.data(), own_rows * 3 * n_mat, MPI_C_DOUBLE_COMPLEX, &status);
@@ -107,15 +83,12 @@ int main(int argc, char* argv[]) {
   std::string filename_rhs = "../input/cache/rhs_" + std::to_string(num_spheres) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
   std::cout<<"Open File "<<filename_rhs<<std::endl;
   MPI_File_open(MPI_COMM_WORLD, filename_rhs.c_str(), MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
-  offset = 0;
   offset = mpi_rank * num_rows * 3 * sizeof(std::complex<double>);
   std::cout<<"Writing RHS "<<mpi_rank<<std::endl;
-  matgen.gen_rhs_sorted(rhs_gen.data(), num_rows * mpi_rank, own_rows, omega, scale);
+  matgen.gen_rhs_sorted_single_layer(rhs_gen.data(), num_rows * mpi_rank, own_rows, omega);
   // write into the actual file
   MPI_File_write_at(fh, offset, rhs_gen.data(), own_rows * 3, MPI_C_DOUBLE_COMPLEX, &status);
   std::cout<<"Process "<<mpi_rank<<" finished writing"<<std::endl;
-  // I still need an offset into this
-  //matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
   // Serialize into a single file here
   MPI_File_close(&fh);
 

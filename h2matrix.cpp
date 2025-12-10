@@ -426,7 +426,7 @@ void H2Matrix::construct(const MatrixAccessor& eval, double epi, const Cell cell
   NbZoffsets.insert(NbZoffsets.begin(), DimsLr.begin(), DimsLr.end());
   NbZoffsets.erase(NbZoffsets.begin() + comm.dataSizesToNeighborOffsets(NbZoffsets.data()), NbZoffsets.end());
 }
-
+/*
 // here we always create the entire far field matrix from just the indices
 void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, const double omega, const double scale) {
   // number of cells on this level (this process and neighbors)
@@ -659,14 +659,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
             //far.bottomRows(add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
             long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
             //std::cout<<"Rank "<<rank<<std::endl;
-            /*for (int c = 0; c < far.cols(); ++c) {
-              double col_norm = far.col(c).norm();
-              long long count = 0;
-              for (int r = 0; r < far.rows(); ++r)
-                if (std::abs(far(r,c)) >= threshold * col_norm)
-                  count++;
-              std::cout<<"Col "<< c <<": " << count<<", Density: "<< ((double)count)/(far.rows())<<std::endl;
-            }*/
+
             DimsLr[i + ibegin] = rank;
           }
         }
@@ -697,6 +690,368 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
         for (fj = 0; fj < idx_begin; ++fj)
           F_ind[fj] = fj;
         for (long long j = idx_end; j < matgen.get_num_total(); ++j)
+          F_ind[fj++] = j;
+        //} else {
+          // H2 basis
+         // for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+         //   far_field[ACols[ij]] = 0;
+         // }
+        //}
+        //auto far_cols = std::reduce(far_field.begin(), far_field.end());
+        // only compute the far field if it exists
+          //for (auto& val : F_ind)
+          //  std::cout<<val<<", ";
+          //std::cout<<std::endl;
+
+          // now we have the indices for the far field columns
+          // and create the far field matrix F
+          // compute F transpose directly
+          //Eigen::MatrixXcd F(M, F_ind.size() * 3);
+          Eigen::MatrixXcd F(F_ind.size() * 3, M);
+          matgen.gen_matrix_idx_element_from_file(F.data(), S_ind[i + ibegin], M, F_ind.data(), F_ind.size());
+          //matgen.gen_matrix_idx_element(F.data(), S_ind[i + ibegin], M, F_ind.data(), F_ind.size(), omega, scale);
+          //std::cout<<F(0,0)<<" "<<F(3, 3)<<" "<<F(6, 6)<<std::endl;
+          //long long rank = compute_basis(F.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          //std::cout<<"Rank "<<rank<<std::endl;
+          DimsLr[i + ibegin] = rank;
+      }
+    }
+
+    comm.dataSizesToNeighborOffsets(Qsizes.data());
+    comm.neighbor_bcast(DimsLr.data(), neighbor_ones.data());
+    // we need to communicate S again because the order has changed in the above
+    // compute_basis() call
+    comm.neighbor_bcast(S_ind[0], Ssizes.data());
+    comm.neighbor_bcast(Q[0], Qsizes.data());
+    comm.neighbor_bcast(R[0], Qsizes.data());
+  }
+
+  if (std::reduce(DimsLr.begin(), DimsLr.end())) {
+    std::vector<long long> Csizes(CRows[nodes]);
+    for (long long i = 0; i < nodes; i++)
+      std::transform(CCols.begin() + CRows[i], CCols.begin() + CRows[i + 1], Csizes.begin() + CRows[i],
+        [&](long long col) { return DimsLr[i + ibegin] * DimsLr[col]; });
+    C.alloc(CRows[nodes], Csizes.data());
+
+    std::vector<long long> Usizes(nodes);
+    std::transform(&Dims[ibegin], &Dims[ibegin + nodes], &DimsLr[ibegin], Usizes.begin(), std::multiplies<long long>());
+    U.alloc(nodes, Usizes.data());
+    Z.alloc(xlen, DimsLr.data());
+    W.alloc(xlen, DimsLr.data());
+
+    //std::cout<<"Part2"<<std::endl;
+    for (long long i = 0; i < nodes; i++) {
+      //std::cout<<"Node "<<i<<std::endl;
+      long long y = i + ibegin;
+      long long M = DimsLr[y];
+      //std::cout<<"M "<<M<<std::endl;
+      Matrix_t Ry(R[y], M, M, Stride_t(Dims[y], 1));
+      Eigen::Map<Eigen::MatrixXcd>(U[i], Dims[y], M) = Eigen::Map<Eigen::MatrixXcd>(Q[y], Dims[y], M);
+
+      for (long long ij = CRows[i]; ij < CRows[i + 1]; ij++) {
+        long long x = CCols[ij];
+        //std::cout<<"x "<<x<<std::endl;
+        long long N = DimsLr[CCols[ij]];
+        //std::cout<<"N "<<N<<std::endl;
+        Matrix_t Rx(R[x], N, N, Stride_t(Dims[x], 1));
+
+        Eigen::Map<Eigen::MatrixXcd> Cyx(C[ij], M, N);
+        if (1. <= epi) {
+          Eigen::MatrixXcd Ayx(M, N);
+          // todo create this matrix and the one below
+          //gen_matrix(eval, M, N, S[y], S[x], Ayx.data());
+          //gen_matrix(Mat_i, M, N, S_ind[y], S_ind[x], Ayx);
+          //matgen.gen_matrix_element(Ayx.data(), S_ind[y], M, S_ind[x], N, omega, scale);
+          matgen.gen_matrix_element_from_file(Ayx.data(), S_ind[y], M, S_ind[x], N);
+          Cyx.noalias() = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
+        }
+        else
+          //matgen.gen_matrix_element(Cyx.data(), S_ind[y], M, S_ind[x], N, omega, scale);
+          matgen.gen_matrix_element_from_file(Cyx.data(), S_ind[y], M, S_ind[x], N);
+          //gen_matrix(Mat_i, M, N, S_ind[y], S_ind[x], Cyx);
+          //gen_matrix(eval, M, N, S[y], S[x], Cyx.data());
+      }
+    }
+  }
+
+  NbXoffsets.insert(NbXoffsets.begin(), Dims.begin(), Dims.end());
+  NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
+  NbZoffsets.insert(NbZoffsets.begin(), DimsLr.begin(), DimsLr.end());
+  NbZoffsets.erase(NbZoffsets.begin() + comm.dataSizesToNeighborOffsets(NbZoffsets.data()), NbZoffsets.end());
+}*/
+
+// here we always create the entire far field matrix from just the indices
+// single layer potential only
+void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, const double omega) {
+  // number of cells on this level (this process and neighbors)
+  long long xlen = comm.lenNeighbors();
+  // index of the first cell for this process on this level
+  long long ibegin = comm.oLocal();
+  // number of cells for this process on this level
+  long long nodes = comm.lenLocal();
+  // index of the first cell for this process in the global cell array
+  long long ybegin = comm.oGlobal();
+  //std::cout<<"Construct "<<xlen<<" "<<ibegin<<" "<<nodes<<" "<<ybegin<<std::endl;
+
+  // dimensions for each cell on this level
+  Dims.resize(xlen, 0);
+  // LR dimensions for each cell on this level
+  DimsLr.resize(xlen, 0);
+  // stide for what?
+  UpperStride.resize(nodes, 0);
+
+  // get the Nearfield indices CSR
+  ARows.insert(ARows.begin(), comm.ARowOffsets.begin(), comm.ARowOffsets.end());
+  ACols.insert(ACols.begin(), comm.AColumns.begin(), comm.AColumns.end());
+  // get the far-field indices CSR
+  CRows.insert(CRows.begin(), comm.CRowOffsets.begin(), comm.CRowOffsets.end());
+  CCols.insert(CCols.begin(), comm.CColumns.begin(), comm.CColumns.end());
+  // ?
+  NA.resize(ARows[nodes], -1);
+
+  // get the number of local children
+  long long localChildLen = cells[ybegin + nodes - 1].Child[1] - cells[ybegin].Child[0];
+  std::vector<long long> localChildOffsets(nodes + 1, -1);
+  
+  if (0 < localChildLen) {
+    //std::cout<<"Intermediate"<<std::endl;
+    long long lowerBegin = lowerComm.oLocal() + comm.LowerX;
+    long long localChildIndex = lowerBegin - cells[ybegin].Child[0];
+    std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
+    localChildOffsets[0] = lowerBegin;
+
+    std::vector<long long> ranks_offsets(localChildLen + 1);
+    std::inclusive_scan(lowerA.DimsLr.begin() + localChildOffsets[0], lowerA.DimsLr.begin() + localChildOffsets[nodes], ranks_offsets.begin() + 1);
+    ranks_offsets[0] = 0;
+
+    std::transform(localChildOffsets.begin(), localChildOffsets.begin() + nodes, localChildOffsets.begin() + 1, &Dims[ibegin],
+      [&](long long start, long long end) { return ranks_offsets[end - lowerBegin] - ranks_offsets[start - lowerBegin]; });
+
+    lenX = ranks_offsets.back();
+    LowerZ = std::reduce(lowerA.DimsLr.begin(), lowerA.DimsLr.begin() + lowerBegin, 0ll);
+    n_mat = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes], 0ll);
+  }
+  else {
+    //std::cout<<"Leaf"<<std::endl;
+    // only for leaf level
+    // Dims stores the number of particels for each cell (multiplied by 3)
+    std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return (c.Body[1] - c.Body[0]) * 3; });
+    // total number of particles on this process
+    lenX = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes]);
+    LowerZ = 0;
+    n_mat = matgen.get_num_elems() * 3;
+    // create the dense matrix rows on the leaf level
+    std::vector<long long> row_offsets(&Dims[ibegin], &Dims[ibegin + nodes]);
+    for (auto& offset : row_offsets)
+      offset *= n_mat;
+    Mat.alloc(nodes, row_offsets.data());
+    // I do this in a loop now, but I could also just create one big matrix
+    // in one go if I reduce the dimensions first
+    // this would however, change the data layout and I would need to account for that
+    for (long long i = 0; i < nodes; ++i) {
+      //matgen.gen_matrix_sorted(Mat[i], cells[ybegin + i].Body[0], Dims[ibegin + i] / 3, omega, scale);
+      matgen.gen_matrix_sorted_from_file_single_layer(Mat[i], cells[ybegin + i].Body[0], Dims[ibegin + i] / 3);
+    }
+    //Cols.resize(nodes, n_mat);
+     // we should also calculate the scale distributed, but lets keep that for later
+  }
+  //std::cout<<"Dims: ";
+  //for (auto& val: Dims)
+  //  std::cout<<val<<", ";
+  //std::cout<<std::endl;
+
+  std::vector<long long> neighbor_ones(xlen, 1ll);
+  comm.dataSizesToNeighborOffsets(neighbor_ones.data());
+  comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
+  X.alloc(xlen, Dims.data());
+  Y.alloc(xlen, Dims.data());
+  // S stores the indices
+  std::vector<long long> Ssizes(Dims);
+  S_ind.alloc(xlen, Ssizes.data());
+
+  std::vector<long long> Qsizes(xlen, 0);
+  // Qs and Rs are square matrices
+  std::transform(Dims.begin(), Dims.end(), Qsizes.begin(), [](const long long d) { return d * d; });
+  Q.alloc(xlen, Qsizes.data());
+  R.alloc(xlen, Qsizes.data());
+
+  // near field blocks (i.e. dense matrices on the leaf level), not necessarily square
+  std::vector<long long> Asizes(ARows[nodes]);
+  for (long long i = 0; i < nodes; i++)
+    std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
+      [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
+  A.alloc(ARows[nodes], Asizes.data());
+
+  typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
+  typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
+
+  // skip blocks that contain no points (because they are split further)
+  if (std::reduce(Dims.begin(), Dims.end())) {
+    // index of the first cell for this process on this level
+    long long pbegin = lowerComm.oLocal();
+    // number of cells for this process/level
+    long long pend = pbegin + lowerComm.lenLocal();
+
+    // loop over all nodes
+    for (long long i = 0; i < nodes; i++) {
+      //std::cout<<"Node "<<i<<std::endl;
+      // number of rows in that cell
+      long long M = Dims[i + ibegin];
+      //std::cout<<"Rows "<<M<<std::endl;
+      long long childi = localChildOffsets[i];
+      long long cendi = localChildOffsets[i + 1];
+      // get the corresponding Q matrix (as a reference)
+      Eigen::Map<Eigen::MatrixXcd> Qi(Q[i + ibegin], M, M);
+
+      // for all children (i.e. only on the intermediate levels)
+      for (long long y = childi; y < cendi; y++) {
+        //std::cout<<"Intermediate2"<<std::endl;
+        long long offset_y = std::reduce(&lowerA.DimsLr[childi], &lowerA.DimsLr[y]);
+        long long ny = lowerA.DimsLr[y];
+        // S_ind already has been broadcast on the lower level, so this is fine
+        std::copy(lowerA.S_ind[y], lowerA.S_ind[y] + ny, &(S_ind[i + ibegin])[offset_y]);
+
+        Matrix_t Ry(lowerA.R[y], ny, ny, Stride_t(lowerA.Dims[y], 1));
+        Qi.block(offset_y, offset_y, ny, ny) = Ry;
+
+        if (pbegin <= y && y < pend && 0 < M) {
+          long long py = y - pbegin;
+          lowerA.UpperStride[py] = M;
+
+          for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+            long long j_global = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+            long long childj = lowerComm.iLocal(cells[j_global].Child[0]);
+            long long cendj = (0 <= childj) ? (childj + cells[j_global].Child[1] - cells[j_global].Child[0]) : -1;
+
+            for (long long x = childj; x < cendj; x++) {
+              long long offset_x = std::reduce(&lowerA.DimsLr[childj], &lowerA.DimsLr[x]);
+              long long nx = lowerA.DimsLr[x];
+              long long lowN = lookupIJ(lowerA.ARows, lowerA.ACols, py, x);
+              long long lowC = lookupIJ(lowerA.CRows, lowerA.CCols, py, x);
+              std::complex<double>* dp = A[ij] + offset_y + offset_x * M;
+              if (0 <= lowN)
+                lowerA.NA[lowN] = std::distance(A[0], dp);
+              else if (0 <= lowC)
+                Matrix_t(dp, ny, nx, Stride_t(M, 1)) = Eigen::Map<Eigen::MatrixXcd>(lowerA.C[lowC], ny, nx);
+            }
+          }
+        }
+      }
+       
+      // leaf level (i.e. no children)
+      if (cendi <= childi) {
+        //std::cout<<"Leaf2"<<std::endl;
+        long long ci = i + ybegin;
+        // numbering the indices locally will not work for the far field
+        std::iota(S_ind[i + ibegin], S_ind[i + ibegin + 1], cells[ci].Body[0] * 3);
+        Qi = Eigen::MatrixXcd::Identity(M, M);
+
+        long long far_cols = n_mat;
+        //Eigen::Map<Eigen::MatrixXcd> Mat_i(Mat[i], M, n_mat);
+        Eigen::Map<Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> Mat_i(Mat[i], M, n_mat);
+        // generate the near field aka dense matrices in A
+        for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+          //std::cout<<"J "<<ij<<std::endl;
+          long long N = Dims[ACols[ij]];
+          far_cols -= N;
+          long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+          Eigen::Map<Eigen::MatrixXcd> A_ij(A[ij], M, N);
+          // we could optimize this, as we don't necessarily need to make a copy here
+          //std::cout<<cells[cj].Body[0] * 3<<std::endl;
+          // it seems Eigen handles the row-major to column-major conversion automatically
+          A_ij = Mat_i.block(0, cells[cj].Body[0] * 3, M, N);
+          //std::cout<<A_ij(0, 0)<<std::endl;
+        }
+        if (1. <= epi) {
+          // build an HSS basis
+          far_cols = n_mat - M;
+          Eigen::MatrixXcd far(M, far_cols);
+          long long diag = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
+          long long left = cells[ci].Body[0] * 3;
+          long long right = cells[ci].Body[1] * 3;
+          //std::cout<<"Left Cols "<<cells[ci].Body[0] * 3<<" "<<cells[ci].Body[1] * 3<<" | "<<M<<std::endl;
+          far.leftCols(left) = Mat_i.leftCols(left);
+          far.rightCols(n_mat - right) = Mat_i.rightCols(n_mat - right);
+          //std::cout<<far(0, 0)<<std::endl;
+          long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          //std::cout<<"Rank "<<rank<<std::endl;
+          DimsLr[i + ibegin] = rank;
+        } else {
+          // this should currently never be called
+          std::cout<<"Far for H2 basis"<<std::endl;
+          // build an H2 basis
+          // generate the far field only if it exists
+          if (far_cols > 0) {
+            //std::cout<<"Far"<<std::endl;
+            // not tested after transpose
+            Eigen::MatrixXcd far(M, far_cols);
+            long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
+            //std::cout<<"Current Near "<<current_near<<std::endl;
+            //std::cout<<ARows[i]<<" "<<ARows[i+1]<<std::endl;
+            long long current_cols = cells[current_near].Body[0] * 3;
+            //std::cout<<"Top Rows "<<0<<" "<<cells[ci].Body[0] * 3<<" | "<<current_rows<<" "<<M<<std::endl;
+            far.leftCols(current_cols) = Mat_i.block(cells[ci].Body[0] * 3, 0, M, current_cols);
+            //far.topRows(current_rows) = mat.block(0, cells[ci].Body[0] * 3, current_rows, M);
+            for (long long ij = ARows[i]; ij < ARows[i + 1] - 1; ij++) {
+              current_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+              //std::cout<<"Current Near "<<current_near<<std::endl;
+              long long next_near = Near.ColIndex[ij + 1 + Near.RowIndex[ybegin]];
+              //std::cout<<"Next Near "<<next_near<<std::endl;
+              long long add_cols = cells[next_near].Body[0] * 3 - cells[current_near].Body[1] * 3;
+              //std::cout<<"Middle Rows "<<current_rows<<" "<<add_rows<<std::endl;
+              //std::cout<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_rows<<" "<<M<<std::endl;
+              far.middleCols(current_cols, add_cols) = Mat_i.block(cells[current_near].Body[0] * 3, cells[ci].Body[1] * 3, M, add_cols);
+              //far.middleRows(current_rows, add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
+              current_cols += add_cols;
+            }
+            current_near = Near.ColIndex[ARows[i + 1] - 1 + Near.RowIndex[ybegin]];
+            long long add_cols = n_mat - cells[current_near].Body[1] * 3;
+            //long long add_rows = mat.rows() - cells[current_near].Body[1] * 3;
+            //std::cout<<"Bottom Rows "<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_rows<<" "<<M<<std::endl;
+            //std::cout<<"Current Near "<<current_near<<std::endl;
+            far.rightCols(add_cols) = Mat_i.block(cells[current_near].Body[0] * 3, cells[ci].Body[1] * 3, M, add_cols);
+            //far.bottomRows(add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
+            long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+            //std::cout<<"Rank "<<rank<<std::endl;
+            /*for (int c = 0; c < far.cols(); ++c) {
+              double col_norm = far.col(c).norm();
+              long long count = 0;
+              for (int r = 0; r < far.rows(); ++r)
+                if (std::abs(far(r,c)) >= threshold * col_norm)
+                  count++;
+              std::cout<<"Col "<< c <<": " << count<<", Density: "<< ((double)count)/(far.rows())<<std::endl;
+            }*/
+            DimsLr[i + ibegin] = rank;
+          }
+        }
+      }
+    }
+    // Note that this call will change the actual contents of Ssizes
+    // so I am not sure what they contain afterwards
+    comm.dataSizesToNeighborOffsets(Ssizes.data());
+    comm.neighbor_bcast(S_ind[0], Ssizes.data());
+
+    for (long long i = 0; i < nodes; i++) {
+      //std::cout<<"Node "<<i<<std::endl;
+      // Generate far field for the upper levels
+      if (localChildOffsets[i+1] <= localChildOffsets[i]) {
+        continue;
+      }
+      //std::cout<<"Intermediate3"<<std::endl;
+      long long M = Dims[i + ibegin];
+      long long idx_begin = cells[ybegin + i].Body[0];
+      long long idx_end = cells[ybegin + i].Body[1];
+      std::vector<long long> F_ind(matgen.get_num_elems() - idx_end + idx_begin);
+      // only construct the far field if it exists (i.e. skip node 0)
+      if (F_ind.size()) {
+        //std::cout<<F_ind.size()<<" far field indices"<<std::endl;
+        // only HSS basis
+        //if (1. <= epi) {
+        long long fj;
+        for (fj = 0; fj < idx_begin; ++fj)
+          F_ind[fj] = fj;
+        for (long long j = idx_end; j < matgen.get_num_elems(); ++j)
           F_ind[fj++] = j;
         //} else {
           // H2 basis
