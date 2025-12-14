@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
   long long rank = argc > 6 ? std::atoll(argv[6]) : 32;
   long long leveled_rank =  argc > 7 ? std::atoll(argv[7]) : 0;
   double epi = argc > 8 ? std::atof(argv[8]) : 1e-10;
-  long long inner_iter = argc > 9 ? std::atoll(argv[0]) : 10;
+  long long inner_iter = argc > 9 ? std::atoll(argv[9]) : 10;
   long long max_iter = argc > 10 ? std::atoll(argv[10]) : 50;
   //std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
   //const char* csv = argc > 8 ? argv[8] : nullptr;
