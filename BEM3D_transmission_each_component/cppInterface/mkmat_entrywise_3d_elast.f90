@@ -3,7 +3,7 @@ module mkmat_inclusion_entrywise_3d_mod
   implicit none
 contains
 !--------------------------------------------------
-  subroutine mkmat_entrywise_3d_elast(x_nodals, xNumNodeBasis, x_elems, xNumElemBasis, xindex, y_nodals, yNumNodeBasis, y_elems, yNumElemBasis, yindex, omega, out_in, slp_or_dlp, linear_or_const, dummat) bind(c)
+  subroutine mkmat_entrywise_3d_elast(x_nodals, xNumNodeBasis, x_elems, xNumElemBasis, xindex, y_nodals, yNumNodeBasis, y_elems, yNumElemBasis, yindex, omega, out_in, slp_or_dlp, linear_or_const, symmetry_integration, dummat) bind(c)
     use struct_type_fixed_len_node_mod
     use elast_parameter_struct_mod_global
     use galerkin_uij_3d_entrywise_mod
@@ -26,6 +26,7 @@ contains
     integer(c_int), intent(in) :: out_in ! 0==out, 1==in
     integer(c_int), intent(in) :: slp_or_dlp ! 1==slp, 2==dlp, 3==d_slp, 4==d_dlp
     integer(c_int), intent(in) :: linear_or_const ! 0==linear basis Galerkin, 1==const basis Galerkin
+    integer(c_int), intent(in) :: symmetry_integration ! 0==no (approach 1, partly using analytic integration), 1==yes (approach 2, almost all numerical integration)
     complex(c_double_complex), intent(out) :: dummat(3, 3)
 
     type(elast_parameter_struct) :: elastp
@@ -37,7 +38,6 @@ contains
 
     dummat(:, :) = 0.0d0
     zten2(:, :) = 0.0d0
-
 
     select case (out_in)
     case(0)
@@ -104,7 +104,14 @@ contains
           end if
           !--- Uij ---
           zten2(:, :) = 0.0d0
-          call constant_x_Uij_freq_nonGlobal(x_nodals, xNumNodeBasis, x_elems(ex), y_nodals, yNumNodeBasis, y_elems(ey), omega, elastp, sing, zten2)
+          if(symmetry_integration .eq. 0) then
+             call constant_x_Uij_freq_nonGlobal(x_nodals, xNumNodeBasis, x_elems(ex), y_nodals, yNumNodeBasis, y_elems(ey), omega, elastp, sing, zten2)
+          else if(symmetry_integration .eq. 1) then
+             call constant_x_Uij_freq_reg_nonGlobal(x_nodals, xNumNodeBasis, x_elems(ex), y_nodals, yNumNodeBasis, y_elems(ey), omega, elastp, sing, zten2)
+          else
+             write(*,*) "ERROR at line", __LINE__, "in file", __FILE__
+             stop
+          end if
           dummat(:, :) = dummat(:, :) + zten2(:, :)
        case(2)
           ex = xindex

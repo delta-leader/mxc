@@ -15,7 +15,7 @@ module struct_type_fixed_len_node_mod
   type, bind(c) :: nodal_point
      integer(c_int) :: ident, nel
      !integer,dimension(:,:),allocatable::iel
-     integer(c_int) :: iel(20, 2)
+     integer(c_int) :: iel(10, 2)
      real(c_double),dimension(3) :: xc,nvec,svec
      complex(c_double_complex),dimension(3) :: u
   end type nodal_point
@@ -38,6 +38,7 @@ module bem3d_small_mod
   type(infield),dimension(:),allocatable::xinf
   !   type(nodal_point),dimension(:),allocatable::node
   integer::icheck
+  integer :: ngauss_x, ngauss_y, ngauss_l
 
   interface
      subroutine out_product(xx,aa,bb)!   xx=aa cross bb

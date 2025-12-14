@@ -475,3 +475,32 @@ His suggestions:
      - too many functions, which ones should I modify?
      - I think the best way to do this is still over the file,
        so for now I only modify the file reading/writing functions
+   - seems to be working now
+
+Experiments:
+ Steps:
+   1) save the matrix to file using write.app
+     - fully parallel
+     - takes the following arguments
+       - number of nodes (the number in the filename)
+       - geometriy
+         1 - single sphere
+         2 - two spheres
+         3 - salt model
+         4 - four spheres
+         5 - torus
+         8 - eight spheres
+       - omega
+       - leaf_size (for the ordering)
+   2) run the solver (main.app)
+     - takes the following arguments
+        - number of nodes (number in the filename)
+        - geometry (see above)
+        - omega
+        - leaf-size
+        - theta (admissibility condition)
+        - rank
+        - leveled_rank
+        - accurcy until which to iterate
+        - number of inner GMRES iterations
+        - max number of outer GMRES iterations

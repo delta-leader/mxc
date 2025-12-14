@@ -180,7 +180,7 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
 }
 
 // generates the whole matrix
-void MatrixGenerator::gen_matrix(std::complex<double> cmat[], const double omega, double scale) const {
+/*void MatrixGenerator::gen_matrix(std::complex<double> cmat[], const double omega, double scale) const {
   if (!scale)
     scale = this->scale;
   long long nmat = (num_nodes + num_elems) * 3;
@@ -292,7 +292,7 @@ void MatrixGenerator::gen_matrix(std::complex<double> cmat[], const double omega
     }
   }
 }
-
+*/
 // generates the whole matrix
 // only for single layer potential
 void MatrixGenerator::gen_matrix_single_layer(std::complex<double> cmat[], const double omega) const {
@@ -309,8 +309,9 @@ void MatrixGenerator::gen_matrix_single_layer(std::complex<double> cmat[], const
       const int out_in = 0;
       const int slp_or_dlp = 1;
       const int linear_or_const = 1;
+      const int slp_symmetric = 1;
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, xindex + 1, nodes.data(), num_nodes, elems.data(), num_elems, yindex + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, xindex + 1, nodes.data(), num_nodes, elems.data(), num_elems, yindex + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
       // U1
       //const int out_in_2nd = 1;
       //std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
@@ -327,7 +328,7 @@ void MatrixGenerator::gen_matrix_single_layer(std::complex<double> cmat[], const
 
 // generates the whole matrix taking into account the reordering
 // column major
-void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], const double omega, double scale, bool cache) const {
+/*void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], const double omega, double scale, bool cache) const {
   long long nmat = (num_nodes + num_elems) * 3;
   if (A.rows() == nmat || A.cols() == nmat) {
     // matrix has been cached
@@ -456,10 +457,10 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], const doubl
         const_cast<Eigen::MatrixXcd&>(A) = A_created;
     }
   }
-}
+}*/
 
 // generates the whole matrix for caching purposes
-void MatrixGenerator::generateA(const double omega, double scale) {
+/*void MatrixGenerator::generateA(const double omega, double scale) {
   if (!scale)
     scale = this->scale;
   long long nmat = (num_nodes + num_elems) * 3;
@@ -581,11 +582,11 @@ void MatrixGenerator::generateA(const double omega, double scale) {
   //  std::cout<<solver.eigenvalues().col(0)[i]<<std::endl;
   //}
   //A.triangularView<Eigen::StrictlyLower>() = A.triangularView<Eigen::StrictlyUpper>().transpose();
-}
+}*/
 
 //generates a block of rows of the matrix, taking into account the reordering
 // this creates the matrix in row major now
-void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale, bool cache) const {
+/*void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long start, const long long num_rows, const double omega, double scale, bool cache) const {
   long long nmat = (num_nodes + num_elems) * 3;
   //if (A.rows() == nmat || A.cols() == nmat) {
   //  // matrix has been cached
@@ -723,7 +724,7 @@ void MatrixGenerator::gen_matrix_sorted(std::complex<double> cmat[], long long s
         const_cast<Eigen::MatrixXcd&>(A).middleRows(start * 3, num_rows) = A_rows;
     }
   //}
-}
+}*/
 
 // generates a block of rows of the matrix, taking into account the reordering
 // this creates the matrix in row major now
@@ -742,8 +743,9 @@ void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double> cmat[]
       const int out_in = 0;
       const int slp_or_dlp = 1;
       const int linear_or_const = 1;
+      const int slp_symmetric = 1;
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
       // U1
       // const int out_in_2nd = 1;
       // std::fill(mat3x3_2nd.begin(), mat3x3_2nd.end(), 0.0);
@@ -760,12 +762,12 @@ void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double> cmat[]
 
 //generates a block of rows of the matrix, taking into account the reordering from a file
 // this creates the matrix in row major now
-void MatrixGenerator::gen_matrix_sorted_from_file(std::complex<double> cmat[], long long start, const long long num_rows) const {
+/*void MatrixGenerator::gen_matrix_sorted_from_file(std::complex<double> cmat[], long long start, const long long num_rows) const {
   long long n_mat = (num_nodes + num_elems) * 3;
   MPI_Status status;
   MPI_Offset offset = 4 * sizeof(double) +  start * 3 * n_mat * sizeof(std::complex<double>);
   MPI_File_read_at(fh_matrix, offset, cmat, num_rows * 3 * n_mat, MPI_C_DOUBLE_COMPLEX, &status);
-}
+}*/
 
 //generates a block of rows of the matrix, taking into account the reordering from a file
 // this creates the matrix in row major now
@@ -778,7 +780,7 @@ void MatrixGenerator::gen_matrix_sorted_from_file_single_layer(std::complex<doub
 }
 
 // generates the rhs (without reordering)
-void MatrixGenerator::gen_rhs(std::complex<double> rhs[], const double omega, double scale, bool equation_type) const {
+/*void MatrixGenerator::gen_rhs(std::complex<double> rhs[], const double omega, double scale, bool equation_type) const {
   std::complex<double> alpha = elastWave3d::set_alpha(omega);
   if (!scale)
     scale = this->scale;
@@ -817,10 +819,10 @@ void MatrixGenerator::gen_rhs(std::complex<double> rhs[], const double omega, do
       }
     }
   }
-}
+}*/
 
 // generates the rhs, taking into account the reordering
-void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], const double omega, double scale, bool equation_type) const {
+/*void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], const double omega, double scale, bool equation_type) const {
   std::complex<double> alpha = elastWave3d::set_alpha(omega);
   if (!scale)
     scale = this->scale;
@@ -859,10 +861,10 @@ void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], const double om
       }
     }
   }
-}
+}*/
 
 // generates a certain number of rows of the RHS, taking into account the reordering
-void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], long long start, long long num_rows, const double omega, double scale, bool equation_type) const {
+/*void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], long long start, long long num_rows, const double omega, double scale, bool equation_type) const {
   std::complex<double> alpha = elastWave3d::set_alpha(omega);
   if (!scale)
     scale = this->scale;
@@ -896,7 +898,7 @@ void MatrixGenerator::gen_rhs_sorted(std::complex<double> rhs[], long long start
   else{
     std::cout<<"Burton Miller evaluation, but expected PMCHWT"<<std::endl;
   }
-}
+}*/
 
 // generates a certain number of rows of the RHS, taking into account the reordering
 // only for single layer potential
@@ -924,7 +926,7 @@ void MatrixGenerator::gen_rhs_sorted_from_file(std::complex<double> rhs[], long 
   MPI_File_read_at(fh_rhs, offset, rhs, num_rows, MPI_C_DOUBLE_COMPLEX, &status);
 }
 
-void MatrixGenerator::read_mat_metadata(double& mat_size, double& scale, double& omega, double& leaf_size) const {
+/*void MatrixGenerator::read_mat_metadata(double& mat_size, double& scale, double& omega, double& leaf_size) const {
   MPI_Status status;
   MPI_Offset offset = 0;
   MPI_File_read_at(fh_matrix, offset, &mat_size, 1, MPI_DOUBLE, &status);
@@ -934,7 +936,7 @@ void MatrixGenerator::read_mat_metadata(double& mat_size, double& scale, double&
   MPI_File_read_at(fh_matrix, offset, &omega, 1, MPI_DOUBLE, &status);
   offset += sizeof(double);
   MPI_File_read_at(fh_matrix, offset, &leaf_size, 1, MPI_DOUBLE, &status);
-}
+}*/
 
 void MatrixGenerator::read_mat_metadata_single_layer(double& mat_size, double& omega, double& leaf_size) const {
   MPI_Status status;
@@ -945,12 +947,12 @@ void MatrixGenerator::read_mat_metadata_single_layer(double& mat_size, double& o
   offset += sizeof(double);
   MPI_File_read_at(fh_matrix, offset, &leaf_size, 1, MPI_DOUBLE, &status);
 }
-
+/*
 double MatrixGenerator::calc_scale(const double omega) {
   scale = std::sqrt(get_max_nodes(omega) / get_max_elems(omega));
   return scale;
-}
-
+}*/
+/*
 double MatrixGenerator::get_max_elems(const double omega) const {
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
@@ -976,8 +978,8 @@ double MatrixGenerator::get_max_elems(const double omega) const {
       }
   }
   return max;
-}
-
+}*/
+/*
 double MatrixGenerator::get_max_nodes(const double omega) const {
   //long long nmat = (num_xnodes + num_xelems) * 3;
   // W0 + W1
@@ -1008,8 +1010,8 @@ double MatrixGenerator::get_max_nodes(const double omega) const {
       }
   }
   return max;
-}
-
+}*/
+/*
 // generates a block of the matrix from row and colum indices, taking into account the reordering
 // indices are actual matrix indices and not node/element indices
 void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale) const {
@@ -1099,7 +1101,7 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
       }
     }
   }
-}
+}*/
 
 // generates a block of the matrix from row and colum indices, taking into account the reordering
 // indices are actual matrix indices and not node/element indices
@@ -1120,14 +1122,9 @@ void MatrixGenerator::gen_matrix_element_from_file(std::complex<double> cmat[], 
 // generates a block of the matrix, taking into account the reordering
 // row indices are matrix indices, but column indices are node/element indices
 // this function uses the actual 3x3 indices ofr the rows, but node+element indices for the column space
-void MatrixGenerator::gen_matrix_idx_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale) const {
+/*void MatrixGenerator::gen_matrix_idx_element(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega, double scale) const {
   //std::cout<<"Matrix with "<<num_rows<<" rows and "<<num_cols*3<<" columns"<<std::endl;
-  /*long long nmat = (num_nodes + num_elems) * 3;
-  for (long long i = 0; i < num_rows; ++i)
-    for (long long j = 0; j < num_cols; ++j)
-      for (long long d = 0; d < 3; ++d)
-        cmat[i + (j * 3 + d) * num_rows] = A(row_indices[i], col_indices[j] * 3 + d);
-  */
+
   if (!scale)
     scale = this->scale;
   long long nmat = (num_nodes + num_elems) * 3;
@@ -1217,7 +1214,7 @@ void MatrixGenerator::gen_matrix_idx_element(std::complex<double> cmat[], const 
       }
     }
   }
-}
+}*/
 
 // generates a block of the matrix, taking into account the reordering
 // row indices are matrix indices, but column indices are node/element indices

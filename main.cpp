@@ -13,18 +13,21 @@ int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
   long long M = argc > 1 ? std::atoll(argv[1]) : 160;
-  double theta = argc > 2 ? std::atof(argv[2]) : 1e0;
-  long long leaf_size = argc > 3 ? std::atoll(argv[3]) : 32;
-  long long rank = argc > 4 ? std::atoll(argv[4]) : 32;
-  long long leveled_rank =  argc > 5 ? std::atoll(argv[5]) : 0;
-  double epi = argc > 6 ? std::atof(argv[6]) : 1e-10;
-  double omega = argc > 7 ? std::atof(argv[7]) : 1;
+  long long geom = argc > 2 ? std::atoll(argv[2]) : 1;
+  double omega = argc > 3 ? std::atof(argv[3]) : 1;
+  long long leaf_size = argc > 4 ? std::atoll(argv[4]) : 32;
+  double theta = argc > 5 ? std::atof(argv[5]) : 1e0;
+  long long rank = argc > 6 ? std::atoll(argv[6]) : 32;
+  long long leveled_rank =  argc > 7 ? std::atoll(argv[7]) : 0;
+  double epi = argc > 8 ? std::atof(argv[8]) : 1e-10;
+  long long inner_iter = argc > 9 ? std::atoll(argv[0]) : 10;
+  long long max_iter = argc > 10 ? std::atoll(argv[10]) : 50;
   //std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
   //const char* csv = argc > 8 ? argv[8] : nullptr;
 
   const std::string MAT = std::to_string(M);
  
-  MatrixGenerator matgen(M, 3);
+  MatrixGenerator matgen(M, geom);
   long long Nbody = matgen.get_num_elems();
   std::cout<<"Elements: "<<matgen.get_num_elems()<<std::endl;
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -37,27 +40,6 @@ int main(int argc, char* argv[]) {
   buildBinaryTreeElemsOnly(&cell[0], matgen.get_elems().data(), matgen.get_elems_idx().data(), matgen.get_num_elems(), levels);
   std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
   
-  for (size_t i = 0; i<cell.size(); ++i)
-    std::cout<<"Cell "<<i<<": "<<cell[i].Child[0]<<"-"<<cell[i].Child[1]<<std::endl;
-
-  //Eigen::MatrixXcd A_gen(n_mat, n_mat);
-  //Eigen::VectorXcd rhs_gen(n_mat);
-  //double get_scale_time = MPI_Wtime();
-  //double scale = matgen.calc_scale(omega);
-  //get_scale_time = MPI_Wtime() - get_scale_time;
-  //double gen_matrix_time = MPI_Wtime();
-  //matgen.gen_matrix_sorted(A_gen.data(), omega, scale, true);
-  //gen_matrix_time = MPI_Wtime() - gen_matrix_time;
-  //double gen_rhs_time = MPI_Wtime();
-  //matgen.gen_rhs_sorted(rhs_gen.data(), omega, scale);
-  //gen_rhs_time = MPI_Wtime() - gen_rhs_time;
-
-  //std::cout<<"MATRIX ASSEMBLY"<<std::endl;
-  //std::cout<<"Calc scale time "<<get_scale_time<<std::endl;
-  //std::cout<<"Gen matrix time "<<gen_matrix_time<<std::endl;
-  //std::cout<<"Gen rhs time "<<gen_rhs_time<<std::endl;
-
- 
   // generate random x
   std::vector<std::complex<double>> Xbody(Nbody * 3);
   std::mt19937_64 gen;
@@ -65,41 +47,41 @@ int main(int argc, char* argv[]) {
   std::generate(Xbody.begin(), Xbody.end(), 
      [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
 
-
-
   int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
-
-  matgen.open_matrix_file("../input/cache/3_1_1_32.dat");
-  matgen.open_rhs_file("../input/cache/rhs_3_1_1_32.dat");
+  std::string prefix = "../input/cache/";
+  std::string filename = std::to_string(geom) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
+  matgen.open_matrix_file(prefix + filename);
+  matgen.open_rhs_file(prefix + "rhs_" + filename);
   double nmat, omega2, lsize;
   matgen.read_mat_metadata_single_layer(nmat, omega2, lsize);
   std::cout<<nmat<<", "<<omega2<<", "<<lsize<<std::endl;
 
-  Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
-  matgen.gen_matrix_sorted_from_file_single_layer(A_gen.data(), 0, Nbody);
-  Eigen::MatrixXcd U = A_gen.triangularView<Eigen::StrictlyUpper>();
-  Eigen::MatrixXcd L = A_gen.triangularView<Eigen::StrictlyLower>();
-  double error = (U - L.transpose()).norm() / U.norm();
-  std::cout<<"Symmetry error: "<<error<<std::endl;
+  //Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
+  //matgen.gen_matrix_sorted_from_file_single_layer(A_gen.data(), 0, Nbody);
+  //Eigen::MatrixXcd U = A_gen.triangularView<Eigen::StrictlyUpper>();
+  //Eigen::MatrixXcd L = A_gen.triangularView<Eigen::StrictlyLower>();
+  //double error = (U - L.transpose()).norm() / U.norm();
+  //std::cout<<"Symmetry error: "<<error<<std::endl;
+
+  //Eigen::JacobiSVD<Eigen::MatrixXcd> svd(A_gen);
+  //double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
+  //std::cout<<"Condition number: "<<cond<<std::endl;
 
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  std::cout<<"create"<<std::endl;
   H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
-  std::cout<<"Construction Finished"<<std::endl;
 
   // multiply by 3 to get the actual length
   long long lenX = (matM.local_bodies.second - matM.local_bodies.first) * 3;
   long long offset = matM.local_bodies.first * 3;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
-  std::cout<<"offset: "<<offset<<" "<<lenX<<std::endl;
 
   // copy random x into X1, X2
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
@@ -109,12 +91,10 @@ int main(int argc, char* argv[]) {
   double refmatvec_time = MPI_Wtime();
   matM.matVecMulDense(&Xbody[0], &X2[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
-  std::cout<<"Ref Matvec finished"<<std::endl;
 
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
   matM.matVecMul(&X1[0]);
   MPI_Barrier(MPI_COMM_WORLD);
-  std::cout<<"Matvec finished"<<std::endl;
   double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) {
@@ -153,7 +133,8 @@ int main(int argc, char* argv[]) {
   matgen.gen_rhs_sorted_from_file(rhs.data(), offset, lenX);
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matM.solveGMRESDense(epi, &X1[0], &rhs[0], 10, 50);
+  matM.solveGMRESDense(epi, &X1[0], &rhs[0], inner_iter, max_iter);
+  //matM.solveGMRESDensePrecon(epi, lu, A_gen, &X1[0], &rhs[0], 10, 50);
   //matM.solveGMRESDensePrecon(epi, lu, A_gen, &X1[0], &rhs_gen[offset], 10, 50);
   //matM.solveGMRESDense(epi, A_gen, &X1[0], &rhs_gen[0], 10, 50);
   //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);

@@ -18,9 +18,9 @@ subroutine append_iel(nd,ip,ne)
 end interface
 !==============================================================
 !---------------------------------------------
-!   open(unit=10,file='mesh_sphere486.inp')
-!   open(unit=10,file='mesh_box970.inp')
-   open(unit=10,file='mesh_two_sphere_204nodes.inp')
+   open(unit=10,file='mesh_sphere486.inp')
+   !open(unit=10,file='mesh_box970.inp')
+!   open(unit=10,file='mesh_two_sphere_204nodes.inp')
 !---------------------------------------------
    read(10,*)
    read(10,*)nel

@@ -1158,7 +1158,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
 }
 
 // an attempt to construct the matrix consecutively from the lower levels
-void H2Matrix::construct_proto(const MatrixGenerator& matgen, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, const double omega, const double scale) {
+/*void H2Matrix::construct_proto(const MatrixGenerator& matgen, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, const double omega, const double scale) {
   // number of cells on this level (this process and neighbors)
   long long xlen = comm.lenNeighbors();
   // index of the first cell for this process on this level
@@ -1363,14 +1363,14 @@ void H2Matrix::construct_proto(const MatrixGenerator& matgen, double epi, const 
           far.rightCols(n_mat - right) = Mat_i.rightCols(n_mat - right);
           long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], S_ind_orig[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
           //std::cout<<"Rank "<<rank<<std::endl;
-          /*for (int c = 0; c < far.cols(); ++c) {
+          for (int c = 0; c < far.cols(); ++c) {
             double col_norm = far.col(c).norm();
             long long count = 0;
             for (int r = 0; r < far.rows(); ++r)
               if (std::abs(far(r,c)) >= threshold * col_norm)
                 count++;
             std::cout<<"Col "<< c <<": " << count<<", Density: "<< ((double)count)/(far.rows())<<std::endl;
-          }*/
+          }
           DimsLr[i + ibegin] = rank;
         } else {
           // build an H2 basis
@@ -1406,14 +1406,14 @@ void H2Matrix::construct_proto(const MatrixGenerator& matgen, double epi, const 
             //far.bottomRows(add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
             long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], S_ind_orig[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
             //std::cout<<"Rank "<<rank<<std::endl;
-            /*for (int c = 0; c < far.cols(); ++c) {
+            for (int c = 0; c < far.cols(); ++c) {
               double col_norm = far.col(c).norm();
               long long count = 0;
               for (int r = 0; r < far.rows(); ++r)
                 if (std::abs(far(r,c)) >= threshold * col_norm)
                   count++;
               std::cout<<"Col "<< c <<": " << count<<", Density: "<< ((double)count)/(far.rows())<<std::endl;
-            }*/
+            }
             DimsLr[i + ibegin] = rank;
           }
         }
@@ -1758,14 +1758,14 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
           far.rightCols(mat.cols() - right) = mat.block(left, right, M, mat.cols() - right);
           long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
           //std::cout<<"Rank "<<rank<<std::endl;
-          /*for (int c = 0; c < far.cols(); ++c) {
+          for (int c = 0; c < far.cols(); ++c) {
             double col_norm = far.col(c).norm();
             long long count = 0;
             for (int r = 0; r < far.rows(); ++r)
               if (std::abs(far(r,c)) >= threshold * col_norm)
                 count++;
             std::cout<<"Col "<< c <<": " << count<<", Density: "<< ((double)count)/(far.rows())<<std::endl;
-          }*/
+          }
           DimsLr[i + ibegin] = rank;
         } else {
           // build an H2 basis
@@ -1801,14 +1801,14 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
             //far.bottomRows(add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
             long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
             //std::cout<<"Rank "<<rank<<std::endl;
-            /*for (int c = 0; c < far.cols(); ++c) {
+            for (int c = 0; c < far.cols(); ++c) {
               double col_norm = far.col(c).norm();
               long long count = 0;
               for (int r = 0; r < far.rows(); ++r)
                 if (std::abs(far(r,c)) >= threshold * col_norm)
                   count++;
               std::cout<<"Col "<< c <<": " << count<<", Density: "<< ((double)count)/(far.rows())<<std::endl;
-            }*/
+            }
             DimsLr[i + ibegin] = rank;
           }
         }
@@ -1926,8 +1926,8 @@ void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double e
   NbXoffsets.erase(NbXoffsets.begin() + comm.dataSizesToNeighborOffsets(NbXoffsets.data()), NbXoffsets.end());
   NbZoffsets.insert(NbZoffsets.begin(), DimsLr.begin(), DimsLr.end());
   NbZoffsets.erase(NbZoffsets.begin() + comm.dataSizesToNeighborOffsets(NbZoffsets.data()), NbZoffsets.end());
-  //*/
-}
+  //
+}*/
 
 void H2Matrix::construct(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm) {
   // number of cells on this level

@@ -85,7 +85,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
 }
-
+/*
 H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, const MatrixGenerator& matgen, double omega, double scale, MPI_Comm world) : 
   levels(levels), A(levels + 1), local_bodies(0, 0) {
   
@@ -130,7 +130,7 @@ H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, do
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
-}
+}*/
 
 H2MatrixSolver::H2MatrixSolver(const Eigen::Ref<const Eigen::MatrixXcd> &mat, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, MPI_Comm world) : 
   levels(levels), A(levels + 1), local_bodies(0, 0) {
@@ -707,8 +707,8 @@ double H2MatrixSolver::solveRelErr(long long lenX, const std::complex<double> X[
     err[1] = err[1] + (ref[i].real() * ref[i].real());
     //std::cout<<X[i]<<" - "<<ref[i] << " = " << diff << std::endl;
   }
-  std::cout<<"Error local " <<err[0]<<" "<<err[1]<<std::endl;
+  //std::cout<<"Error local " <<err[0]<<" "<<err[1]<<std::endl;
   MPI_Allreduce(MPI_IN_PLACE, err, 2, MPI_DOUBLE, MPI_SUM, world);
-  std::cout<<"Error " <<err[0]<<" "<<err[1]<<std::endl;
+  //std::cout<<"Error " <<err[0]<<" "<<err[1]<<std::endl;
   return std::sqrt(err[0] / err[1]);
 }
