@@ -41,7 +41,7 @@ contains
    end if
     !write(*,*) filename
 
-    write(*,*) 'inputNonGlobal, !dbg'
+    !write(*,*) 'inputNonGlobal, !dbg'
 
     ! file read
     !---------------------------------------------
@@ -77,14 +77,14 @@ contains
     !id_bie=1:PMCHWT formulation
     !id_bie=2:Burton-Miller formulation
     read(10,*) id_bie
-    select case(id_bie)
-    case(0)
-       write(*,*) "displacement formulation"
-    case(1)
-       write(*,*) "PMCHWT formulation"
-    case(2)
-       write(*,*) "Burton-Miller formulation"
-    end select
+    !select case(id_bie)
+    !case(0)
+    !   write(*,*) "displacement formulation"
+    !case(1)
+    !   write(*,*) "PMCHWT formulation"
+    !case(2)
+    !   write(*,*) "Burton-Miller formulation"
+    !end select
     read(10,*)
     read(10,*) id_inc
     read(10,*) theta_in
@@ -161,9 +161,9 @@ contains
           ix1_0 = i
        end if
     end do
-    write(*,*) 'Min x1', nodals(ix1_min)%xc
-    write(*,*) 'Most near origin', nodals(ix1_0)%xc
-    write(*,*) 'Max x1', nodals(ix1_max)%xc
+    !write(*,*) 'Min x1', nodals(ix1_min)%xc
+    !write(*,*) 'Most near origin', nodals(ix1_0)%xc
+    !write(*,*) 'Max x1', nodals(ix1_max)%xc
 
   end subroutine input_non_global
   !--------------------------------------------

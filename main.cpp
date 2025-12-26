@@ -29,7 +29,6 @@ int main(int argc, char* argv[]) {
  
   MatrixGenerator matgen(M, geom);
   long long Nbody = matgen.get_num_elems();
-  std::cout<<"Elements: "<<matgen.get_num_elems()<<std::endl;
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
 
   std::vector<Cell> cell;
@@ -38,7 +37,6 @@ int main(int argc, char* argv[]) {
   long long ncells = Nleaf + Nleaf - 1;
   cell.resize(ncells);
   buildBinaryTreeElemsOnly(&cell[0], matgen.get_elems().data(), matgen.get_elems_idx().data(), matgen.get_num_elems(), levels);
-  std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
   
   // generate random x
   std::vector<std::complex<double>> Xbody(Nbody * 3);
@@ -53,11 +51,18 @@ int main(int argc, char* argv[]) {
 
   std::string prefix = "../input/cache/";
   std::string filename = std::to_string(geom) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
+  if (mpi_rank == 0) {
+    std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis = "<<theta<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
+    std::cout<<", epsilon = "<<epi<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter<<std::endl;
+    std::cout<<"Reading file "<<filename<<std::endl;
+    std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
+    std::cout<<"Elements per leaf: "<<(matgen.get_num_elems() >> levels)<<std::endl;
+  }
   matgen.open_matrix_file(prefix + filename);
   matgen.open_rhs_file(prefix + "rhs_" + filename);
   double nmat, omega2, lsize;
   matgen.read_mat_metadata_single_layer(nmat, omega2, lsize);
-  std::cout<<nmat<<", "<<omega2<<", "<<lsize<<std::endl;
+  //std::cout<<nmat<<", "<<omega2<<", "<<lsize<<std::endl;
 
   //Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
   //matgen.gen_matrix_sorted_from_file_single_layer(A_gen.data(), 0, Nbody);

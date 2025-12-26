@@ -72,12 +72,18 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   //  std::cout<<"Level "<<l<<std::endl;
   //  hidr[l].top_down_sweep(0, cells.data(), Far, hidr[l - 1]);
   //}
-  std::cout<<"Level "<<levels<<std::endl;
+  int mpi_rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  if (mpi_rank == 0) {
+    std::cout<<"Level "<<levels<<std::endl;
+  }
   A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
   A[levels].lowest = true;
   //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
-    std::cout<<"Level "<<l<<std::endl;
+    if (mpi_rank == 0) {
+      std::cout<<"Level "<<l<<std::endl;
+    }
     A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega);
   }
 
@@ -270,7 +276,7 @@ void H2MatrixSolver::matVecMul(std::complex<double> X[]) {
 
   A[levels].matVecUpwardPass(X, comm[levels]);
   for (long long l = levels - 1; l >= 0; l--){
-    std::cout<<"Level "<<l<<std::endl;
+    //std::cout<<"Level "<<l<<std::endl;
     A[l].matVecUpwardPass(A[l + 1].Z[0], comm[l]);
   }
 
@@ -401,11 +407,11 @@ void H2MatrixSolver::solveGMRES(double tol, H2MatrixSolver& M, std::complex<doub
 }
 
 void H2MatrixSolver::solveGMRESDense(double tol, std::complex<double> x[], const std::complex<double> b[], long long inner_iters, long long outer_iters) {
-  std::cout<<"START GMRES"<<std::endl;
+  //std::cout<<"START GMRES"<<std::endl;
   long long n_mat = A[levels].n_mat;
   long long N = A[levels].lenX;
   long long ld = inner_iters + 1;
-  std::cout<<N<<" "<<n_mat<<std::endl;
+  //std::cout<<N<<" "<<n_mat<<std::endl;
   
   int mpi_size = 1;
   //int mpi_rank = 0, mpi_size = 1;

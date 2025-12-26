@@ -163,13 +163,13 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
   }
   //std::cout<<"READ MESH SPECS"<<std::endl;
   read_mesh_specs(num_nodes, num_elems, filename);
-  std::cout<<num_nodes<<" "<<num_elems<<std::endl;
+  //std::cout<<num_nodes<<" "<<num_elems<<std::endl;
   nodes.resize(num_nodes);
   elems.resize(num_elems);
   //std::cout<<num_nodes<<" "<<num_elems<<std::endl;
   //std::cout<<"READ Fortran"<<std::endl;
   read_mesh_fortran(num_nodes, nodes, num_elems, elems, size, spheres);
-  std::cout<<num_nodes<<" "<<num_elems<<std::endl;
+  //std::cout<<num_nodes<<" "<<num_elems<<std::endl;
   nodes_idx.resize(num_nodes);
   std::iota(nodes_idx.begin(), nodes_idx.end(), 0);
   elems_idx.resize(num_elems);

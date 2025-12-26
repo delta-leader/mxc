@@ -504,3 +504,64 @@ Experiments:
         - accurcy until which to iterate
         - number of inner GMRES iterations
         - max number of outer GMRES iterations
+
+Salt model is very large, but we use unit length wavenumber -> for large mesh, this results in a high frequency problem
+ so scaling down the mesh helps with this issue
+
+ check tsubame schedule
+
+ experiments
+  - no preconditioner
+  - HSS
+  - matrices get more ill-conditioned as the size increases, so more GMRES iterations are necessary -> confirm this behavior
+  - with good preconditioner we expect almost same iteration number between small DOF and large DOF
+
+tested the 12611 file (leaf size = 32), it does not converge if we don't allow for level growth (used 16 in the end)
+
+Upscaling on Tsubame:
+- we have 10TB of storage on the HDD filesystem /gs/bs/
+- The 50034 matrix has 100 000 elements, i.e. 3e5 * 3e5 * 16 = 1.44e12, estimated 1.44 TB
+ - final filesize 1.343 TB
+ - this matrix has 300 000 degrees of freedom
+ - was able to run the solver on this matrix using 8 nodes and 40 processes per node, however, it converged very slowly
+  - settings: leaf = 128, rank=100, leveld_rank = 10, iters=10/50
+- Using the same assessment, 1M DOFs would take 1e6 * 1e6 * 16 = 16e12, estimated 16 TB, but we only have 10 TB storage
+ - what is the largest matrix I can realistically store? - 750 000 DOFs
+ - everything else I would need to calculate on-the-fly
+ - the largest file I currently have is ~600 000
+ - 
+
+Current matrices:
+         Nodes   Elements       DOFs
+sphere:    160        316        948
+           568       1132       3396
+          1489       2974       8922
+         12611      25218      75654
+         50034     100064     300192
+         77751     155498     466494
+        138201     276398     829194
+        157772     315540     946620
+        169798     339592    1018776
+        198027     396050    1188150 
+        309365     618726    1856178     
+
+salt:      334        664       1992       1k
+          3328       6652      19956      10k
+          6644      13284      39852      20k
+         16541      33078      99234      50k
+         32959      65914     197742     100k
+         65357     130710     392130     200k
+         97196     194338     583014     300k
+        130012     260020     780060     400k
+        162352     324700     974100     500k
+
+Basically I need to find settings where the salt model converges with 1M DOFs
+ - I tried to get the sphere to converge with 1M DOFs first
+   - tried to do it iteratively, but it is just too slow
+   - also, from the ISC paper, it seems there is not necessarily a correlation between
+   - rank and convergence
+ - I want to do more experiments and I want to do them faster/in parallel
+   - reduce printing of the output to only the essentials
+   - integrate all necessary information in th output to be able to reconstruct the settings
+   - also, creating the matrix first is not going to work for 1M DOFs, so I need code
+     that create the matrix from scarch again
