@@ -564,4 +564,28 @@ Basically I need to find settings where the salt model converges with 1M DOFs
    - reduce printing of the output to only the essentials
    - integrate all necessary information in th output to be able to reconstruct the settings
    - also, creating the matrix first is not going to work for 1M DOFs, so I need code
-     that create the matrix from scarch again
+     that create the matrix from scratch again
+
+Writing the paper:
+- wrote the introduction, but it is currently mostly ripped off
+- did not find much related work
+- copied the formulations from Matsumoto-sensei's notes
+- don't really know how to continue from here
+  - continue ripping off Matsumot-sensei's paper
+  - introduce H^2 matrices (reuse previous papers)
+
+#pages in previous articles
+28
+16
+18
+18
+16
+20
+28
+27
+16
+
+Frequencies in the 1
+if diameter is d and wavenumber is k we should fix k/d
+if we use a 100 times larger mesh, we use 10times the wavenumber
+keep wavenumber constant first, if it works try to increase the wavenumber

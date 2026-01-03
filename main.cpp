@@ -58,10 +58,10 @@ int main(int argc, char* argv[]) {
     std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
     std::cout<<"Elements per leaf: "<<(matgen.get_num_elems() >> levels)<<std::endl;
   }
-  matgen.open_matrix_file(prefix + filename);
-  matgen.open_rhs_file(prefix + "rhs_" + filename);
-  double nmat, omega2, lsize;
-  matgen.read_mat_metadata_single_layer(nmat, omega2, lsize);
+  //matgen.open_matrix_file(prefix + filename);
+  //matgen.open_rhs_file(prefix + "rhs_" + filename);
+  //double nmat, omega2, lsize;
+  //matgen.read_mat_metadata_single_layer(nmat, omega2, lsize);
   //std::cout<<nmat<<", "<<omega2<<", "<<lsize<<std::endl;
 
   //Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
   }
 
   std::vector<std::complex<double>> rhs(lenX);
-  matgen.gen_rhs_sorted_from_file(rhs.data(), offset, lenX);
+  matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
   matM.solveGMRESDense(epi, &X1[0], &rhs[0], inner_iter, max_iter);
