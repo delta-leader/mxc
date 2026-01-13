@@ -961,13 +961,10 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           // build an HSS basis
           far_cols = n_mat - M;
           Eigen::MatrixXcd far(M, far_cols);
-          long long diag = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
-          long long left = cells[ci].Body[0] * 3;
-          long long right = cells[ci].Body[1] * 3;
-          //std::cout<<"Left Cols "<<cells[ci].Body[0] * 3<<" "<<cells[ci].Body[1] * 3<<" | "<<M<<std::endl;
-          far.leftCols(left) = Mat_i.leftCols(left);
-          far.rightCols(n_mat - right) = Mat_i.rightCols(n_mat - right);
-          //std::cout<<far(0, 0)<<std::endl;
+          //far.leftCols(left) = Mat_i.leftCols(left);
+          matgen.gen_matrix_sorted_single_layer(far.data(), cells[ci].Body[0], M / 3, 0, cells[ci].Body[0], omega);
+          //far.rightCols(n_mat - right) = Mat_i.rightCols(n_mat - right);
+          matgen.gen_matrix_sorted_single_layer(far.data() + cells[ci].Body[0] * 3 * M, cells[ci].Body[0], M / 3, cells[ci].Body[1], n_mat / 3 - cells[ci].Body[1], omega);
           long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
           //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
