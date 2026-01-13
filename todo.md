@@ -589,3 +589,7 @@ Frequencies in the 1
 if diameter is d and wavenumber is k we should fix k/d
 if we use a 100 times larger mesh, we use 10times the wavenumber
 keep wavenumber constant first, if it works try to increase the wavenumber
+
+- check if we can get a good accuracy for the H2 on the smaller problem sizes
+- clarify the ordering in the paper (we don't exactly use the ordering from Matsumoto senseis formula)
+- use the sphere and just keep increasing the number of points

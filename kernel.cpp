@@ -766,6 +766,37 @@ void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double> cmat[]
   }
 }
 
+// generates a block of size num_rows x num_cols of the matrix, taking into account the reordering
+// the block is taken at offset row_start x cols_start
+// only creates the single layer potential
+void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double> cmat[], long long row_start, const long long num_rows, const long long col_start, const long long num_cols, const double omega) const {
+  long long nmat = num_rows * 3;
+  std::vector<std::complex<double>> mat3x3(9, 0.0);
+  //std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
+  // -(U0 + U1)
+  //rowShift = num_xelems;
+  //colShift = num_yelems;
+  const int out_in = 0;
+  const int slp_or_dlp = 1;
+  const int linear_or_const = 1;
+  const int slp_symmetric = 1;
+  //#pragma omp parallel for firstprivate(mat3x3, mat3x3_2nd) collapse(2)
+  #pragma omp parallel for firstprivate(mat3x3) collapse(2)
+  for(int xindex = 0; xindex < num_rows; xindex++){
+    for(int yindex = 0; yindex < num_cols; yindex++){
+      // U0
+      std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + row_start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex + col_start] + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
+      for(int j = 0; j < 3; j++){
+        for(int i = 0; i < 3; i++){
+          cmat[i + 3*xindex + (j + 3*yindex) * nmat] = -mat3x3.at(i + 3*j);// - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
+          //cmat[xindex + rowShift*i + 3*num_xnodes + (yindex + colShift*j + 3*num_ynodes) * nmat]= -mat3x3.at(i + 3*j) - (mu0/mu1)*mat3x3_2nd.at(i + 3*j);
+        }
+      }
+    }
+  }
+}
+
 //generates a block of rows of the matrix, taking into account the reordering from a file
 // this creates the matrix in row major now
 /*void MatrixGenerator::gen_matrix_sorted_from_file(std::complex<double> cmat[], long long start, const long long num_rows) const {
