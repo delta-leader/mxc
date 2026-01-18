@@ -77,7 +77,8 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega);
+  //H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega);
+  H2MatrixSolver matM(matgen, 1e-5, rank, leveled_rank, cell, theta, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
@@ -88,13 +89,14 @@ int main(int argc, char* argv[]) {
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
-  // copy random x into X1, X2
+  // copy random x into X1
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
-  std::copy(&Xbody[offset], &Xbody[offset + lenX], &X2[0]);
+  //std::copy(&Xbody[offset], &Xbody[offset + lenX], &X2[0]);
 
    // calculate reference into X2
   double refmatvec_time = MPI_Wtime();
-  matM.matVecMulDense(&Xbody[0], &X2[0]);
+  mat_vec_reference(matgen, lenX/3, Nbody, &X2[0], &Xbody[0], matM.local_bodies.first, omega);
+  //matM.matVecMulDense(&Xbody[0], &X2[0]);
   refmatvec_time = MPI_Wtime() - refmatvec_time;
 
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);

@@ -593,3 +593,18 @@ keep wavenumber constant first, if it works try to increase the wavenumber
 - check if we can get a good accuracy for the H2 on the smaller problem sizes
 - clarify the ordering in the paper (we don't exactly use the ordering from Matsumoto senseis formula)
 - use the sphere and just keep increasing the number of points
+
+- fixed the near field kernels to not use the dense matrix anymore
+  - still need to fix the far field on the leaf-level for H2
+- still need to H2 fr field on the upper levels
+
+TODO's
+ - check that the ranks decrease and the accuracy stays stable for H2 with strong admissibility
+   - increase admis condition DONE
+   - multi-node
+     - construction error does not seem to be exactly the same for multiple nodes, but that might be summation order
+   - completely remove the storage for the dense matrix
+     - removed from the H-matrix, however now I'm missing the dense matvec - FIXED
+     - did not remove completely (for testing reasons), but don't allocate it anymore
+ - find a way to calculate the total memory consumption
+ - test H2 with strong admis for large scale problems

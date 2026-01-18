@@ -1377,3 +1377,26 @@ void MatrixGenerator::open_rhs_file(const std::string& filename) {
   else
     rhs_from_file = true;
 }
+
+void mat_vec_reference(const MatrixGenerator& matgen, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const long long row_offset, const double omega) {
+  /*Eigen::MatrixXcd A(M * 3, N * 3);
+  matgen.gen_matrix_sorted_single_layer(A.data(), row_offset, M, 0, N, omega);
+  Eigen::Map<const Eigen::VectorXcd> x(X, N * 3);
+  Eigen::Map<Eigen::VectorXcd> b(B, M * 3);
+  b = A * x;*/
+  constexpr long long size = 128;
+  Eigen::Map<const Eigen::VectorXcd> x(X, N * 3);
+  Eigen::Map<Eigen::VectorXcd> b(B, M * 3);
+  
+  for (long long i = 0; i < M; i += size) {
+    long long m = std::min(M - i, size);
+    Eigen::MatrixXcd A(m * 3, size * 3);
+
+    for (long long j = 0; j < N; j += size) {
+      long long n = std::min(N - j, size);
+      matgen.gen_matrix_sorted_single_layer(A.data(), row_offset + i, m, j, n, omega);
+      //gen_matrix(eval, m, n, bi, bj, A.data());
+      b.segment(i * 3, m * 3) += A.leftCols(n * 3) * x.segment(j * 3, n * 3);
+    }
+  }
+}
