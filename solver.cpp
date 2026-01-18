@@ -79,13 +79,23 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   }
   A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
   A[levels].lowest = true;
+  double num_dense = A[levels].A.size();
+  comm[levels].level_sum(&num_dense, 1);
+  double num_basis = A[levels].Q.size();
+  comm[levels].level_sum(&num_basis, 1);
+  double total = num_dense + num_basis;
+  std::cout<<num_dense<<" dense elements stored"<<std::endl;
   //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
     if (mpi_rank == 0) {
       std::cout<<"Level "<<l<<std::endl;
     }
     A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega);
+    num_basis = A[l].Q.size();
+    comm[l].level_sum(&num_basis, 1);
+    total += num_basis;
   }
+  std::cout<<total<<" total elements stored"<<std::endl;
 
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();

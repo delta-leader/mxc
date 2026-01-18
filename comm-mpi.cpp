@@ -233,6 +233,10 @@ void ColCommMPI::level_sum(std::complex<double>* data, long long len) const {
   level_sum<std::complex<double>>(data, len);
 }
 
+void ColCommMPI::level_sum(double* data, long long len) const {
+  level_sum<double>(data, len);
+}
+
 void ColCommMPI::neighbor_bcast(long long data[], const long long noffsets[]) const {
   neighbor_bcast<long long>(data, noffsets);
 }

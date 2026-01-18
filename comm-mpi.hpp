@@ -42,6 +42,7 @@ public:
 
   void level_merge(std::complex<double>* data, long long len) const;
   void level_sum(std::complex<double>* data, long long len) const;
+  void level_sum(double* data, long long len) const;
 
   void neighbor_bcast(long long data[], const long long noffsets[]) const;
   void neighbor_bcast(double data[], const long long noffsets[]) const;

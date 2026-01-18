@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double m_construct_time = MPI_Wtime(), m_construct_comm_time;
   //H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega);
-  H2MatrixSolver matM(matgen, 1e-5, rank, leveled_rank, cell, theta, levels, omega);
+  H2MatrixSolver matM(matgen, 1e-8, rank, leveled_rank, cell, theta, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   m_construct_time = MPI_Wtime() - m_construct_time;
   m_construct_comm_time = ColCommMPI::get_comm_time();
