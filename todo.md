@@ -613,6 +613,9 @@ TODO's
 
  - enable the full solver with 2 Hmatrices
    - Got it working, but there seems to still be a problem when calculating the accurate H2-matrix on multiple nodes (accuracy degrades)
+   - it seems the far field on the upper levels was not calculated accurately on multiple nodes
+     - in line 1015 it did not use the correct offset into the cell array
+     - it seems I was on the right track, I managed to fix/mitigate the issue for two processes bot for more it is still off. At least I know where to look now
  - benchmark that solver
  - HiDR
  - single precision 

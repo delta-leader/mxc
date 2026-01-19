@@ -834,7 +834,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     n_mat = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes], 0ll);
   }
   else {
-//std::cout<<"Leaf"<<std::endl;
+    //std::cout<<"Leaf"<<std::endl;
     // only for leaf level
     // Dims stores the number of particels for each cell (multiplied by 3)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return (c.Body[1] - c.Body[0]) * 3; });
@@ -1009,12 +1009,10 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
       }
       //std::cout<<"Intermediate3"<<std::endl;
       long long M = Dims[i + ibegin];
-      long long idx_begin = cells[ybegin + i].Body[0];
-      long long idx_end = cells[ybegin + i].Body[1];
+      long long c_start = ybegin - ibegin;
       std::vector<long long> far_field(Dims);
       for (size_t k = 0; k < far_field.size(); ++k)
-        far_field[k] = cells[ybegin + k].Body[1] - cells[ybegin + k].Body[0];
-      std::vector<long long> F_ind(matgen.get_num_elems() - idx_end + idx_begin);
+        far_field[k] = cells[c_start + k].Body[1] - cells[c_start + k].Body[0];
       // only construct the far field if it exists (i.e. skip node 0)
       //if (F_ind.size()) {
         //std::cout<<F_ind.size()<<" far field indices"<<std::endl;
@@ -1045,7 +1043,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           //for (long long ij = 0; ij < nodes; ij++) {
             if (far_field[ij]) {
               //std::cout<<"Far field "<<ij<<" "<<cells[ybegin + ij].Body[0]<<" "<<far_field[ij]<<std::endl;
-              std::iota(&FS_ind[start], &FS_ind[start + far_field[ij]], cells[ybegin + ij].Body[0]);
+              std::iota(&FS_ind[start], &FS_ind[start + far_field[ij]], cells[c_start + ij].Body[0]);
               //std::copy(S_ind[ij], S_ind[ij] + far_field[ij], &FS_ind[start]);
               //std::copy(S_ind[ij + ibegin], S_ind[ij + ibegin] + far_field[ij], &FS_ind[start]);
               start += far_field[ij];
