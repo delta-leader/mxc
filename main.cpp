@@ -16,12 +16,13 @@ int main(int argc, char* argv[]) {
   long long geom = argc > 2 ? std::atoll(argv[2]) : 1;
   double omega = argc > 3 ? std::atof(argv[3]) : 1;
   long long leaf_size = argc > 4 ? std::atoll(argv[4]) : 32;
-  double theta = argc > 5 ? std::atof(argv[5]) : 1e0;
+  double theta_precon = argc > 5 ? std::atof(argv[5]) : 1e0;
   long long rank = argc > 6 ? std::atoll(argv[6]) : 32;
   long long leveled_rank =  argc > 7 ? std::atoll(argv[7]) : 0;
   double epi = argc > 8 ? std::atof(argv[8]) : 1e-10;
-  long long inner_iter = argc > 9 ? std::atoll(argv[9]) : 10;
-  long long max_iter = argc > 10 ? std::atoll(argv[10]) : 50;
+  double theta = argc > 9 ? std::atof(argv[9]) : 1e0;
+  long long inner_iter = argc > 10 ? std::atoll(argv[10]) : 10;
+  long long max_iter = argc > 11 ? std::atoll(argv[11]) : 50;
   //std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
   //const char* csv = argc > 8 ? argv[8] : nullptr;
 
@@ -49,12 +50,13 @@ int main(int argc, char* argv[]) {
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
-  std::string prefix = "../input/cache/";
-  std::string filename = std::to_string(geom) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
+  //std::string prefix = "../input/cache/";
+  //std::string filename = std::to_string(geom) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
   if (mpi_rank == 0) {
-    std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis = "<<theta<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
-    std::cout<<", epsilon = "<<epi<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter<<std::endl;
-    std::cout<<"Reading file "<<filename<<std::endl;
+    std::cout<<"M = "<<M<<", geom = "<<geom<<std::endl;
+    std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis_precon = "<<theta_precon<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
+    std::cout<<", epsilon = "<<epi<<", theta = "<<theta<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter<<std::endl;
+    //std::cout<<"Reading file "<<filename<<std::endl;
     std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
     std::cout<<"Elements per leaf: "<<(matgen.get_num_elems() >> levels)<<std::endl;
   }
@@ -76,16 +78,15 @@ int main(int argc, char* argv[]) {
   //std::cout<<"Condition number: "<<cond<<std::endl;
 
   MPI_Barrier(MPI_COMM_WORLD);
-  double m_construct_time = MPI_Wtime(), m_construct_comm_time;
-  //H2MatrixSolver matM(matgen, 0, rank, leveled_rank, cell, theta, levels, omega);
-  H2MatrixSolver matM(matgen, 1e-8, rank, leveled_rank, cell, theta, levels, omega);
+  double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
+  H2MatrixSolver matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
-  m_construct_time = MPI_Wtime() - m_construct_time;
-  m_construct_comm_time = ColCommMPI::get_comm_time();
+  h2_construct_time = MPI_Wtime() - h2_construct_time;
+  h2_construct_comm_time = ColCommMPI::get_comm_time();
 
   // multiply by 3 to get the actual length
-  long long lenX = (matM.local_bodies.second - matM.local_bodies.first) * 3;
-  long long offset = matM.local_bodies.first * 3;
+  long long lenX = (matA.local_bodies.second - matA.local_bodies.first) * 3;
+  long long offset = matA.local_bodies.first * 3;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
@@ -93,72 +94,118 @@ int main(int argc, char* argv[]) {
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
   //std::copy(&Xbody[offset], &Xbody[offset + lenX], &X2[0]);
 
-   // calculate reference into X2
-  double refmatvec_time = MPI_Wtime();
-  mat_vec_reference(matgen, lenX/3, Nbody, &X2[0], &Xbody[0], matM.local_bodies.first, omega);
-  //matM.matVecMulDense(&Xbody[0], &X2[0]);
-  refmatvec_time = MPI_Wtime() - refmatvec_time;
-
-  std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
-  matM.matVecMul(&X1[0]);
+  // calculate H-matvec into X1
   MPI_Barrier(MPI_COMM_WORLD);
-  double cerr_m = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
+  double matvec_time = MPI_Wtime(), matvec_comm_time;
+  matA.matVecMul(&X1[0]);
+  MPI_Barrier(MPI_COMM_WORLD);
+  matvec_time = MPI_Wtime() - matvec_time;
+  matvec_comm_time = ColCommMPI::get_comm_time();
+
+  // calculate reference into X2
+  MPI_Barrier(MPI_COMM_WORLD);
+  double refmatvec_time = MPI_Wtime(), refmatvec_comm_time;
+  mat_vec_reference(matgen, lenX/3, Nbody, &X2[0], &Xbody[0], matA.local_bodies.first, omega);
+  MPI_Barrier(MPI_COMM_WORLD);
+  refmatvec_time = MPI_Wtime() - refmatvec_time;
+  refmatvec_comm_time = ColCommMPI::get_comm_time();
+
+  double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
+  if (mpi_rank == 0) {
+    std::cout << "H^2-Matrix Construct Err: " << cerr << std::endl;
+    std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
+    std::cout << "H^2-Matvec Time: " << matvec_time << ", " << matvec_comm_time << std::endl;
+    std::cout << "Dense Matvec Time: " << refmatvec_time << ", " << refmatvec_comm_time << std::endl;
+  }
+  
+  // build preconditioner
+  MPI_Barrier(MPI_COMM_WORLD);
+  double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
+  H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
+  MPI_Barrier(MPI_COMM_WORLD);
+  precon_construct_time = MPI_Wtime() - precon_construct_time;
+  precon_construct_comm_time = ColCommMPI::get_comm_time();
+
+  // copy random x into X1
+  std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
+  // precon matvec
+  MPI_Barrier(MPI_COMM_WORLD);
+  double precon_matvec_time = MPI_Wtime(), precon_matvec_comm_time;
+  precon.matVecMul(&X1[0]);
+  MPI_Barrier(MPI_COMM_WORLD);
+  precon_matvec_time = MPI_Wtime() - precon_matvec_time;
+  precon_matvec_comm_time = ColCommMPI::get_comm_time();
+
+  cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) {
-    std::cout << "H^2-Preconditioner Construct Err: " << cerr_m << std::endl;
-    std::cout << "H^2-Preconditioner Construct Time: " << m_construct_time << std::endl;
+    std::cout << "H^2-Preconditioner Construct Err: " << cerr << std::endl;
+    std::cout << "H^2-Preconditioner Construct Time: " << precon_construct_time << ", " << precon_construct_comm_time << std::endl;
+    std::cout << "H^2-Matvec Time: " << precon_matvec_time << ", " << precon_matvec_comm_time << std::endl;
   }
 
+  // factorize preconditioner
   MPI_Barrier(MPI_COMM_WORLD);
-  double h2_factor_time = MPI_Wtime(), h2_factor_comm_time;
-
-  matM.factorizeM();
- 
+  double precon_factor_time = MPI_Wtime(), precon_factor_comm_time;
+  precon.factorizeM();
   MPI_Barrier(MPI_COMM_WORLD);
-  h2_factor_time = MPI_Wtime() - h2_factor_time;
-  h2_factor_comm_time = ColCommMPI::get_comm_time();
-  std::copy(X2.begin(), X2.end(), X1.begin());
-
-  MPI_Barrier(MPI_COMM_WORLD);
-  double h2_sub_time = MPI_Wtime(), h2_sub_comm_time;
-
-  matM.solvePrecondition(&X1[0]);
+  precon_factor_time = MPI_Wtime() - precon_factor_time;
+  precon_factor_comm_time = ColCommMPI::get_comm_time();
+  
+  // copy right hand side into X2
+  std::vector<std::complex<double>> rhs(lenX);
+  matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega);
+  std::copy(X2.begin(), X2.end(), rhs.begin());
 
   MPI_Barrier(MPI_COMM_WORLD);
-  h2_sub_time = MPI_Wtime() - h2_sub_time;
-  h2_sub_comm_time = ColCommMPI::get_comm_time();
-  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &Xbody[offset]);
-  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  double precon_sub_time = MPI_Wtime(), precon_sub_comm_time;
+  precon.solvePrecondition(&X1[0]);
+  MPI_Barrier(MPI_COMM_WORLD);
+  precon_sub_time = MPI_Wtime() - precon_sub_time;
+  precon_sub_comm_time = ColCommMPI::get_comm_time();
+  double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &rhs[0]);
 
   if (mpi_rank == 0) {
-    std::cout << "H^2-Matrix Factorization Time: " << h2_factor_time << ", " << h2_factor_comm_time << std::endl;
-    std::cout << "H^2-Matrix Substitution Time: " << h2_sub_time << ", " << h2_sub_comm_time << std::endl;
+    std::cout << "H^2-Matrix Factorization Time: " << precon_factor_time << ", " << precon_factor_comm_time << std::endl;
+    std::cout << "H^2-Matrix Substitution Time: " << precon_sub_time << ", " << precon_sub_comm_time << std::endl;
     std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
   }
 
-  std::vector<std::complex<double>> rhs(lenX);
-  matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega);
+  // iterative solver
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
   MPI_Barrier(MPI_COMM_WORLD);
   double gmres_time = MPI_Wtime(), gmres_comm_time;
-  matM.solveGMRESDense(epi, &X1[0], &rhs[0], inner_iter, max_iter);
-  //matM.solveGMRESDensePrecon(epi, lu, A_gen, &X1[0], &rhs[0], 10, 50);
-  //matM.solveGMRESDensePrecon(epi, lu, A_gen, &X1[0], &rhs_gen[offset], 10, 50);
-  //matM.solveGMRESDense(epi, A_gen, &X1[0], &rhs_gen[0], 10, 50);
-  //matA.solveGMRES(epi, matM, &X1[0], &X2[0], 10, 50);
-  //matA.solveGMRESDevice(handle, epi, matM, &X1[0], &X2[0], 10, 50, nccl_comms);
-
+  matA.solveGMRES(epi, precon, &X1[0], &rhs[0], inner_iter, max_iter);
   MPI_Barrier(MPI_COMM_WORLD);
   gmres_time = MPI_Wtime() - gmres_time;
   gmres_comm_time = ColCommMPI::get_comm_time();
 
   if (mpi_rank == 0) {
-    std::cout << "GMRES Residual: " << matM.resid[matM.iters] << ", Iters: " << matM.iters << std::endl;
+    std::cout << "GMRES Residual: " << matA.resid[matA.iters] << ", Iters: " << matA.iters << std::endl;
     std::cout << "GMRES Time: " << gmres_time << ", Comm: " << gmres_comm_time << std::endl;
-    for (long long i = 0; i <= matM.iters; i++)
-      std::cout << "iter "<< i << ": " << matM.resid[i] << std::endl;
+    for (long long i = 0; i <= matA.iters; i++)
+      std::cout << "iter "<< i << ": " << matA.resid[i] << std::endl;
+  }
+
+  // calculate residual with respect to the dense matrix
+  offset = matA.local_bodies.second * 3;
+  std::vector<long long> offsets(mpi_size+1);
+  MPI_Allgather(&offset, 1, MPI_LONG_LONG_INT, &offsets[1], 1, MPI_LONG_LONG_INT, MPI_COMM_WORLD);
+  std::vector<int> recvcounts(offsets.size() - 1), displs(offsets.size() - 1);
+  std::transform(offsets.begin() + 1, offsets.end(), offsets.begin(), recvcounts.begin(), [](long long end, long long begin) { return (int)(end - begin); });
+  std::transform(offsets.begin(), std::prev(offsets.end()), displs.begin(), [](long long begin) { return (int)begin; });
+  Eigen::VectorXcd global_x(Nbody * 3);
+  MPI_Allgatherv(&X1[0], lenX, MPI_C_DOUBLE_COMPLEX, global_x.data(), &recvcounts[0], &displs[0], MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
+
+  std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+  mat_vec_reference(matgen, lenX/3, Nbody, &X1[0], global_x.data(), matA.local_bodies.first, omega);
+  serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &rhs[0]);
+  if (mpi_rank == 0) {
+    std::cout << "Actual Residual: " << serr << std::endl;
   }
   
-  matM.free_all_comms();
+  matA.free_all_comms();
+  precon.free_all_comms();
   MPI_Finalize();
 
   return 0;

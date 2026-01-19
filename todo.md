@@ -607,4 +607,15 @@ TODO's
      - removed from the H-matrix, however now I'm missing the dense matvec - FIXED
      - did not remove completely (for testing reasons), but don't allocate it anymore
  - find a way to calculate the total memory consumption
+   - calculate the number of elements stored DONE
  - test H2 with strong admis for large scale problems
+   - currently in queue
+
+ - enable the full solver with 2 Hmatrices
+   - Got it working, but there seems to still be a problem when calculating the accurate H2-matrix on multiple nodes (accuracy degrades)
+ - benchmark that solver
+ - HiDR
+ - single precision 
+
+
+ Make the bibtex file editable!
