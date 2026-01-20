@@ -623,6 +623,7 @@ TODO's
        - just noticed that this fix never built a factorization basis, so the preconditioner was off?
          - that seems to be correct, the preconditioner with the factorization basis has a larger construction error, but a smaller factorization error
         - made a stupid mistake when fixing this, the first near field cell != diagonal cell
+          - cleaned up the code for the leaf-level too
  - benchmark that solver
  - HiDR
  - single precision 

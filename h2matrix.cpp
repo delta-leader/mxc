@@ -954,40 +954,26 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
         } else {
-          //std::cout<<"Far for H2 basis"<<std::endl;
           // build an H2 basis
+          //std::cout<<"Far for H2 basis"<<std::endl;
           // generate the far field only if it exists
           if (far_cols > 0) {
             //std::cout<<"Far "<<far_cols<<std::endl;
-            // not tested after transpose
             Eigen::MatrixXcd far(M, far_cols);
             long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
             //std::cout<<"Current Near "<<current_near<<std::endl;
-            //std::cout<<ARows[i]<<" "<<ARows[i+1]<<std::endl;
-            long long current_cols = cells[current_near].Body[0] * 3;
-            //std::cout<<"Left Cols "<<M<<" "<<current_cols<<std::endl;
             matgen.gen_matrix_sorted_single_layer(far.data(), cells[ci].Body[0], M_elem, 0, cells[current_near].Body[0], omega);
-            //far.leftCols(current_cols) = Mat_i.block(0, 0, M, current_cols);
-            for (long long ij = ARows[i]; ij < ARows[i + 1] - 1; ij++) {
-              current_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+            long long start_cols = cells[current_near].Body[0] * 3;
+            for (long long ij = ARows[i] + 1; ij < ARows[i + 1]; ij++) {
               //std::cout<<"Current Near "<<current_near<<std::endl;
-              long long next_near = Near.ColIndex[ij + 1 + Near.RowIndex[ybegin]];
+              long long next_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
               //std::cout<<"Next Near "<<next_near<<std::endl;
               long long add_cols = cells[next_near].Body[0] - cells[current_near].Body[1];
-              //std::cout<<"Middle Rows "<<current_cols<<" "<<add_cols<<std::endl;
-              //std::cout<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_cols<<" "<<M<<std::endl;
-              matgen.gen_matrix_sorted_single_layer(far.data() + current_cols * M, cells[ci].Body[0], M_elem, cells[current_near].Body[1], add_cols, omega);
-              //far.middleCols(current_cols, add_cols) = Mat_i.block(0, cells[current_near].Body[1] * 3, M, add_cols);
-              //far.middleRows(current_rows, add_rows) = mat.block(cells[current_near].Body[1] * 3, cells[ci].Body[0] * 3, add_rows, M);
-              current_cols += add_cols * 3;
+              matgen.gen_matrix_sorted_single_layer(far.data() + start_cols * M, cells[ci].Body[0], M_elem, cells[current_near].Body[1], add_cols, omega);
+              start_cols += add_cols * 3;
+              current_near = next_near;
             }
-            current_near = Near.ColIndex[ARows[i + 1] - 1 + Near.RowIndex[ybegin]];
-            //long long add_rows = mat.rows() - cells[current_near].Body[1] * 3;
-            //std::cout<<"Bottom Rows "<<cells[current_near].Body[1] * 3<<" "<<cells[ci].Body[0] * 3<<" | "<<add_cols<<" "<<M<<std::endl;
-            //std::cout<<"Current Near "<<current_near<<std::endl;
-            matgen.gen_matrix_sorted_single_layer(far.data() + current_cols * M, cells[ci].Body[0], M_elem, cells[current_near].Body[1], n_mat / 3 - cells[current_near].Body[1], omega);
-            //long long add_cols = n_mat - cells[current_near].Body[1] * 3;
-            //far.rightCols(add_cols) = Mat_i.block(0, cells[current_near].Body[1] * 3, M, add_cols);
+            matgen.gen_matrix_sorted_single_layer(far.data() + start_cols * M, cells[ci].Body[0], M_elem, cells[current_near].Body[1], n_mat / 3 - cells[current_near].Body[1], omega);
             long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
             //std::cout<<"Rank "<<rank<<std::endl;
             DimsLr[i + ibegin] = rank;
