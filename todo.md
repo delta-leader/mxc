@@ -616,6 +616,10 @@ TODO's
    - it seems the far field on the upper levels was not calculated accurately on multiple nodes
      - in line 1015 it did not use the correct offset into the cell array
      - it seems I was on the right track, I managed to fix/mitigate the issue for two processes bot for more it is still off. At least I know where to look now
+     - the HSS also seemed to be off
+     - it seems it is impossible to know the entire far field on a node (since the tree might be split further up)
+       - maybe I can construct the far field by excluding the near field (just like I did in the leaf level case)
+       this seems to have worked!
  - benchmark that solver
  - HiDR
  - single precision 

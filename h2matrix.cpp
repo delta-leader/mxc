@@ -1007,37 +1007,61 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
       if (localChildOffsets[i+1] <= localChildOffsets[i]) {
         continue;
       }
+      // we need to count the #elements in the far field
+      // w do this bu subtracting the near field elements
+      long long far_elems = matgen.get_num_elems();
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        // near field cell
+        long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+        far_elems -= (cells[cj].Body[1] - cells[cj].Body[0]);
+      }
       //std::cout<<"Intermediate3"<<std::endl;
-      long long M = Dims[i + ibegin];
+      /*long long M = Dims[i + ibegin];
       long long c_start = ybegin - ibegin;
       std::vector<long long> far_field(Dims);
+      std::cout<<"Intermediate start: "<<c_start<<", "<<far_field.size()<<std::endl;
+      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        long long current_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+        std::cout<<current_near<<", ";
+      }
+      std::cout<<std::endl;
       for (size_t k = 0; k < far_field.size(); ++k)
-        far_field[k] = cells[c_start + k].Body[1] - cells[c_start + k].Body[0];
+        far_field[k] = cells[c_start + k].Body[1] - cells[c_start + k].Body[0];*/
       // only construct the far field if it exists (i.e. skip node 0)
-      //if (F_ind.size()) {
-        //std::cout<<F_ind.size()<<" far field indices"<<std::endl;
-        // TODO the if branch here needs to be enabled again
-        // only HSS basis
-      if (1. <= epi) {
+      // no need to differentiate between HSS and H2
+      /*if (1. <= epi) {
         // HSS basis
         far_field[i] = 0;
-        /*long long fj;
-        for (fj = 0; fj < idx_begin; ++fj)
-          F_ind[fj] = fj;
-        for (long long j = idx_end; j < matgen.get_num_elems(); ++j)
-          F_ind[fj++] = j;*/
         } else {
           // H2 basis
           for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
             far_field[ACols[ij]] = 0;
           }
+        }*/
+      // only compute the far field if it exists
+      if (far_elems) {
+        //std::cout<<"Far intermediate "<<far_elems<<std::endl;
+        std::vector<long long> FS_ind(far_elems);
+        // first near field cell (there has to be at least one)
+        long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
+        long long num_elems = cells[current_near].Body[0];
+        long long far_start = 0;
+        // add all elements until the first near field cell
+        std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], 0);
+        far_start += num_elems;
+        // loop through the near field
+        for (long long ij = ARows[i] + 1; ij < ARows[i + 1]; ij++) {
+          long long next_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+          // add the elements between the two near field cells
+          num_elems = cells[next_near].Body[0] - cells[current_near].Body[1];
+          std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], cells[current_near].Body[1]);
+          far_start += num_elems;
+          current_near = next_near;
         }
-        auto far_cols = std::reduce(far_field.begin(), far_field.end());
-        // only compute the far field if it exists
-        if (far_cols) {
-          //std::cout<<"Far intermediate "<<far_cols<<std::endl;
-          std::vector<long long> FS_ind(far_cols);
-          long long start = 0;
+        // add the elements between the last near field cell and the end of the far field
+        num_elems = matgen.get_num_elems() - cells[current_near].Body[1];
+        std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], cells[current_near].Body[1]);
+        /*          
           //long long corr_start;
           for (size_t ij = 0; ij < far_field.size(); ij++) {
           //for (long long ij = 0; ij < nodes; ij++) {
@@ -1048,28 +1072,20 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
               //std::copy(S_ind[ij + ibegin], S_ind[ij + ibegin] + far_field[ij], &FS_ind[start]);
               start += far_field[ij];
             }
-          }
-          /*std::cout<<FS_ind.size()<<std::endl;
-          for (auto& val : FS_ind)
-            std::cout<<val<<", ";
-          std::cout<<std::endl;
-          std::cout<<F_ind.size()<<std::endl;
-          for (auto& val : F_ind)
-            std::cout<<val<<", ";
-          std::cout<<std::endl;*/
-
-          // now we have the indices for the far field columns
-          // and create the far field matrix F
-          // compute F transpose directly
-          //Eigen::MatrixXcd F(M, F_ind.size() * 3);
-          Eigen::MatrixXcd F(FS_ind.size() * 3, M);
-          matgen.gen_matrix_idx_element_single_layer(F.data(), S_ind[i + ibegin], M, FS_ind.data(), FS_ind.size(), omega);
-          //matgen.gen_matrix_idx_element(F.data(), S_ind[i + ibegin], M, F_ind.data(), F_ind.size(), omega, scale);
-          //std::cout<<F(0,0)<<" "<<F(3, 3)<<" "<<F(6, 6)<<std::endl;
-          //long long rank = compute_basis(F.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-          long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-          //std::cout<<"Rank "<<rank<<std::endl;
-          DimsLr[i + ibegin] = rank;
+          }*/
+        /*std::cout<<FS_ind.size()<<std::endl;
+        for (auto& val : FS_ind)
+          std::cout<<val<<", ";
+        std::cout<<std::endl;*/
+        // now we have all the elements of the far field
+        // and create the far field matrix F
+        // compute F transpose directly
+        long long M = Dims[i + ibegin];
+        Eigen::MatrixXcd F(FS_ind.size() * 3, M);
+        matgen.gen_matrix_idx_element_single_layer(F.data(), S_ind[i + ibegin], M, FS_ind.data(), FS_ind.size(), omega);
+        long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+        //std::cout<<"Rank "<<rank<<std::endl;
+        DimsLr[i + ibegin] = rank;
       }
     }
 
