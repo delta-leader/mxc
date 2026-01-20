@@ -786,6 +786,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
 // we don't store the distributed dense matrix
 void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell cells[], const CSR& Near, const ColCommMPI& comm, H2Matrix& lowerA, const ColCommMPI& lowerComm, const double omega) {
   // number of cells on this level (this process and neighbors)
+  // note that the tree might have beens split into subtrees further up
   long long xlen = comm.lenNeighbors();
   // index of the first cell for this process on this level
   long long ibegin = comm.oLocal();
@@ -849,7 +850,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
   X.alloc(xlen, Dims.data());
   Y.alloc(xlen, Dims.data());
-  // S stores the indices
+  // S stores the indices of the elements
   std::vector<long long> Ssizes(Dims);
   S_ind.alloc(xlen, Ssizes.data());
 
@@ -932,8 +933,6 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
 
         long long far_cols = n_mat;
         const long long M_elem = M / 3;
-        //Eigen::Map<Eigen::Matrix<std::complex<double>, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> Mat_i(Mat[i], M, n_mat);
-        //std::cout<<"Mat_i: "<<M<< " x "<<n_mat<<std::endl;
         // generate the near field aka dense matrices in A
         for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
           //std::cout<<"J "<<ij<<std::endl;
@@ -1007,85 +1006,89 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
       if (localChildOffsets[i+1] <= localChildOffsets[i]) {
         continue;
       }
+      //std::cout<<"Intermediate3"<<std::endl;
       // we need to count the #elements in the far field
       // w do this bu subtracting the near field elements
       long long far_elems = matgen.get_num_elems();
-      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        // near field cell
-        long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-        far_elems -= (cells[cj].Body[1] - cells[cj].Body[0]);
-      }
-      //std::cout<<"Intermediate3"<<std::endl;
-      /*long long M = Dims[i + ibegin];
-      long long c_start = ybegin - ibegin;
-      std::vector<long long> far_field(Dims);
-      std::cout<<"Intermediate start: "<<c_start<<", "<<far_field.size()<<std::endl;
-      for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-        long long current_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-        std::cout<<current_near<<", ";
-      }
-      std::cout<<std::endl;
-      for (size_t k = 0; k < far_field.size(); ++k)
-        far_field[k] = cells[c_start + k].Body[1] - cells[c_start + k].Body[0];*/
-      // only construct the far field if it exists (i.e. skip node 0)
-      // no need to differentiate between HSS and H2
-      /*if (1. <= epi) {
-        // HSS basis
-        far_field[i] = 0;
-        } else {
-          // H2 basis
-          for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
-            far_field[ACols[ij]] = 0;
-          }
-        }*/
-      // only compute the far field if it exists
-      if (far_elems) {
-        //std::cout<<"Far intermediate "<<far_elems<<std::endl;
-        std::vector<long long> FS_ind(far_elems);
-        // first near field cell (there has to be at least one)
-        long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
-        long long num_elems = cells[current_near].Body[0];
-        long long far_start = 0;
-        // add all elements until the first near field cell
-        std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], 0);
-        far_start += num_elems;
-        // loop through the near field
-        for (long long ij = ARows[i] + 1; ij < ARows[i + 1]; ij++) {
-          long long next_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
-          // add the elements between the two near field cells
-          num_elems = cells[next_near].Body[0] - cells[current_near].Body[1];
-          std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], cells[current_near].Body[1]);
-          far_start += num_elems;
-          current_near = next_near;
-        }
-        // add the elements between the last near field cell and the end of the far field
-        num_elems = matgen.get_num_elems() - cells[current_near].Body[1];
-        std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], cells[current_near].Body[1]);
-        /*          
-          //long long corr_start;
-          for (size_t ij = 0; ij < far_field.size(); ij++) {
-          //for (long long ij = 0; ij < nodes; ij++) {
-            if (far_field[ij]) {
-              //std::cout<<"Far field "<<ij<<" "<<cells[ybegin + ij].Body[0]<<" "<<far_field[ij]<<std::endl;
-              std::iota(&FS_ind[start], &FS_ind[start + far_field[ij]], cells[c_start + ij].Body[0]);
-              //std::copy(S_ind[ij], S_ind[ij] + far_field[ij], &FS_ind[start]);
-              //std::copy(S_ind[ij + ibegin], S_ind[ij + ibegin] + far_field[ij], &FS_ind[start]);
-              start += far_field[ij];
-            }
-          }*/
-        /*std::cout<<FS_ind.size()<<std::endl;
-        for (auto& val : FS_ind)
+      std::vector<long long> FS_ind;
+      // either build a factorization aka HSS basis or a regular H2 basis
+      if (1. <= epi) {
+        // HSS basis only excludes the self interactions
+        long long ci = i + ybegin;
+        far_elems -= (cells[ci].Body[1] - cells[ci].Body[0]);
+        if (far_elems) {
+          //std::cout<<"Far intermediate "<<far_elems<<std::endl;
+          FS_ind.resize(far_elems);
+          long long num_elems = cells[ci].Body[0];
+          long long far_start = 0;
+          // add all elements until the the diagonal block
+          std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], 0);
+          far_start += num_elems;    
+          // add the elements after the diagonal block
+          num_elems = matgen.get_num_elems() - cells[ci].Body[1];
+          std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], cells[ci].Body[1]);
+          /*     
+          std::cout<<FS_ind.size()<<std::endl;
+          for (auto& val : FS_ind)
           std::cout<<val<<", ";
-        std::cout<<std::endl;*/
-        // now we have all the elements of the far field
-        // and create the far field matrix F
-        // compute F transpose directly
-        long long M = Dims[i + ibegin];
-        Eigen::MatrixXcd F(FS_ind.size() * 3, M);
-        matgen.gen_matrix_idx_element_single_layer(F.data(), S_ind[i + ibegin], M, FS_ind.data(), FS_ind.size(), omega);
-        long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-        //std::cout<<"Rank "<<rank<<std::endl;
-        DimsLr[i + ibegin] = rank;
+          std::cout<<std::endl;
+          */
+          // now we have all the elements of the far field
+          // and create the far field matrix F
+          // compute F transpose directly
+          long long M = Dims[i + ibegin];
+          Eigen::MatrixXcd F(FS_ind.size() * 3, M);
+          matgen.gen_matrix_idx_element_single_layer(F.data(), S_ind[i + ibegin], M, FS_ind.data(), FS_ind.size(), omega);
+          long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          //std::cout<<"Rank "<<rank<<std::endl;
+          DimsLr[i + ibegin] = rank;
+        }
+      } else {
+        // H2 excludes the entire far field
+        for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+          // near field cell
+          long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+          far_elems -= (cells[cj].Body[1] - cells[cj].Body[0]);
+        }
+        if (far_elems) {
+          //std::cout<<"Far intermediate "<<far_elems<<std::endl;
+          FS_ind.resize(far_elems);
+          // first near field cell (there has to be at least one)
+          long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
+          long long num_elems = cells[current_near].Body[0];
+          long long far_start = 0;
+          // add all elements until the first near field cell
+          std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], 0);
+          far_start += num_elems;
+          // loop through the near field
+          for (long long ij = ARows[i] + 1; ij < ARows[i + 1]; ij++) {
+            long long next_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
+            // add the elements between the two near field cells
+            num_elems = cells[next_near].Body[0] - cells[current_near].Body[1];
+            std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], cells[current_near].Body[1]);
+            far_start += num_elems;
+            current_near = next_near;
+          }
+          // add the elements between the last near field cell and the end of the far field
+          num_elems = matgen.get_num_elems() - cells[current_near].Body[1];
+          //std::cout<<far_start<<", "<<num_elems<<", "<<cells[current_near].Body[1]<<" - "<<matgen.get_num_elems()<<std::endl;
+          std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], cells[current_near].Body[1]);
+          /*     
+          std::cout<<FS_ind.size()<<std::endl;
+          for (auto& val : FS_ind)
+            std::cout<<val<<", ";
+          std::cout<<std::endl;
+          */
+          // now we have all the elements of the far field
+          // and create the far field matrix F
+          // compute F transpose directly
+          long long M = Dims[i + ibegin];
+          Eigen::MatrixXcd F(FS_ind.size() * 3, M);
+          matgen.gen_matrix_idx_element_single_layer(F.data(), S_ind[i + ibegin], M, FS_ind.data(), FS_ind.size(), omega);
+          long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          //std::cout<<"Rank "<<rank<<std::endl;
+          DimsLr[i + ibegin] = rank;
+        }  
       }
     }
 

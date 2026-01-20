@@ -620,6 +620,9 @@ TODO's
      - it seems it is impossible to know the entire far field on a node (since the tree might be split further up)
        - maybe I can construct the far field by excluding the near field (just like I did in the leaf level case)
        this seems to have worked!
+       - just noticed that this fix never built a factorization basis, so the preconditioner was off?
+         - that seems to be correct, the preconditioner with the factorization basis has a larger construction error, but a smaller factorization error
+        - made a stupid mistake when fixing this, the first near field cell != diagonal cell
  - benchmark that solver
  - HiDR
  - single precision 
