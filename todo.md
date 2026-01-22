@@ -591,7 +591,7 @@ if we use a 100 times larger mesh, we use 10times the wavenumber
 keep wavenumber constant first, if it works try to increase the wavenumber
 
 - check if we can get a good accuracy for the H2 on the smaller problem sizes
-- clarify the ordering in the paper (we don't exactly use the ordering from Matsumoto senseis formula)
+- clarify the ordering in the paper (we don't exactly use the ordering from Matsumoto senseis formula) -> still needs to be done, but I want to wait for results first
 - use the sphere and just keep increasing the number of points
 
 - fixed the near field kernels to not use the dense matrix anymore
@@ -624,9 +624,56 @@ TODO's
          - that seems to be correct, the preconditioner with the factorization basis has a larger construction error, but a smaller factorization error
         - made a stupid mistake when fixing this, the first near field cell != diagonal cell
           - cleaned up the code for the leaf-level too
+          - after that the results for N=160 were slightly better?
+          - on multi-nodes, now I get different storage but identical results?
+            - the storage for the bases is not accurate, since it does not account for splitting of the tree, in which case not all the levels are stored on a node, should probably use a neighbor communication instead
+          - turns out I stored the wrong results, so everything was alright
+
+
  - benchmark that solver
  - HiDR
  - single precision 
 
+ Writing the paper:
+   - Ma said to aim for 20 pages
+   - should we add th ULV factorization algorithm
+     - I kind of don't want to repeat it
+     - we could explain the factorization basis in more detail than
+       in the last paper, along with solves and matvecs
+       - I want to introduce the notation and do a very quick rundown of the ULV-algorithm and explain it's problems with strong admissibility
+       - or maybe give the rundown of the factorization basis directly
 
- Make the bibtex file editable!
+       - try to summarize notation and dense block break down into a single picture and add to background DONE
+       - then in methods, explain the factorization basis with a picture o f both HSS and H2 - made the graphic, still need the text
+   - Methods
+     - how do we deal with matrix valued functions
+       - creation
+       - factorization
+       - solves
+       - GMRES
+     - how to distribute
+
+Next meeting:
+  - confirm with Ma if we use ID or rank revealing QR
+  - get Ma to give me an explanation of the factorization algorithm
+
+
+my current idea is to see how far I can go with a single node on tsubame and
+then slowely increase the node count from there to find the optimal setting
+  Current matrices:
+         Nodes   Elements       DOFs
+sphere:    160        316        948
+           568       1132       3396
+          1489       2974       8922
+         12611      25218      75654 DONE
+         50034     100064     300192 -> currently trying this 
+         77751     155498     466494
+        138201     276398     829194
+        157772     315540     946620
+        169798     339592    1018776
+        198027     396050    1188150 
+        309365     618726    1856178     
+
+IMPORTANT:
+ - before I touch the implementation again, I want to be able
+   to run a large scale problem

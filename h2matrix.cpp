@@ -812,12 +812,13 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   // ?
   NA.resize(ARows[nodes], -1);
 
+  std::cout<<"Precalculations"<<std::endl;
   // get the number of local children
   long long localChildLen = cells[ybegin + nodes - 1].Child[1] - cells[ybegin].Child[0];
   std::vector<long long> localChildOffsets(nodes + 1, -1);
   
   if (0 < localChildLen) {
-    //std::cout<<"Intermediate"<<std::endl;
+    std::cout<<"Intermediate"<<std::endl;
     long long lowerBegin = lowerComm.oLocal() + comm.LowerX;
     long long localChildIndex = lowerBegin - cells[ybegin].Child[0];
     std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
@@ -835,7 +836,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     n_mat = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes], 0ll);
   }
   else {
-    //std::cout<<"Leaf"<<std::endl;
+    std::cout<<"Leaf"<<std::endl;
     // only for leaf level
     // Dims stores the number of particels for each cell (multiplied by 3)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return (c.Body[1] - c.Body[0]) * 3; });
@@ -848,6 +849,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   std::vector<long long> neighbor_ones(xlen, 1ll);
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
   comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
+  std::cout<<"Start alloc"<<std::endl;
   X.alloc(xlen, Dims.data());
   Y.alloc(xlen, Dims.data());
   // S stores the indices of the elements
@@ -866,6 +868,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   A.alloc(ARows[nodes], Asizes.data());
+  std::cout<<"Finish alloc"<<std::endl;
 
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
   typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
@@ -878,6 +881,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     long long pend = pbegin + lowerComm.lenLocal();
 
     // loop over all nodes
+    std::cout<<"Fist node loop"<<std::endl;
     for (long long i = 0; i < nodes; i++) {
       //std::cout<<"Node "<<i<<std::endl;
       // number of rows in that cell
@@ -986,6 +990,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     comm.dataSizesToNeighborOffsets(Ssizes.data());
     comm.neighbor_bcast(S_ind[0], Ssizes.data());
 
+    std::cout<<"Second node loop"<<std::endl;
     for (long long i = 0; i < nodes; i++) {
       //std::cout<<"Node "<<i<<std::endl;
       // Generate far field for the upper levels
@@ -1086,7 +1091,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     comm.neighbor_bcast(Q[0], Qsizes.data());
     comm.neighbor_bcast(R[0], Qsizes.data());
   }
-
+  std::cout<<"Postcalc"<<std::endl;
   if (std::reduce(DimsLr.begin(), DimsLr.end())) {
     std::vector<long long> Csizes(CRows[nodes]);
     for (long long i = 0; i < nodes; i++)
@@ -3411,7 +3416,7 @@ void H2Matrix::matVecUpwardPass(const std::complex<double>* X_in, const ColCommM
   //std::cout<<"lenX "<<lenX<<std::endl;
   //std::cout<<"LowerZ "<<LowerZ<<std::endl;
 
-  int mpi_rank = 0, mpi_size = 1;
+  /*int mpi_rank = 0, mpi_size = 1;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   std::string fname = "matvec";
   fname += std::to_string(mpi_rank) + ".txt";
@@ -3419,25 +3424,24 @@ void H2Matrix::matVecUpwardPass(const std::complex<double>* X_in, const ColCommM
   myfile.open(fname, std::ios::app);
   if (!myfile)
     std::cout<<"Could not open file"<<std::endl;
-  myfile<<"Loop over "<<nodes<<" Nodes\n";
+  myfile<<"Loop over "<<nodes<<" Nodes\n";*/
 
   for (long long i = 0; i < nodes; i++) {
     long long M = Dims[i + ibegin];
     long long N = DimsLr[i + ibegin];
-    //std::cout<<"Node "<<i<<" "<<M<<" x "<<N<<std::endl;
     Vector_t x(X[i + ibegin], M);
     if (0 < N) {
       Vector_t z(Z[i + ibegin], N);
       Matrix_t q(Q[i + ibegin], M, N);
       z = q.transpose() * x;
-      for (long long j = 0; j < M; ++j) {
+      /*for (long long j = 0; j < M; ++j) {
         myfile<<q(j, 0)<<"\n";
       }
-      myfile<<"\n";
+      myfile<<"\n";*/
     }
   }
-  myfile<<"\n\n\n"<<std::endl;
-  myfile.close();
+  //myfile<<"\n\n\n"<<std::endl;
+  //myfile.close();
 
   comm.neighbor_bcast(Z[0], NbZoffsets.data());
 }
