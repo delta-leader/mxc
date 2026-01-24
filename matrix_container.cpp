@@ -32,7 +32,9 @@ const T* MatrixDataContainer<T>::operator[](long long index) const {
 
 template <class T>
 long long MatrixDataContainer<T>::size() const {
-  return offsets.back();
+  if (data)
+    return offsets.back();
+  return 0;
 }
 
 template class MatrixDataContainer<long long>;
