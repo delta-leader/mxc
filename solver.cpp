@@ -74,29 +74,76 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   //}
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-  if (mpi_rank == 0) {
-    std::cout<<"Level "<<levels<<std::endl;
-  }
+  
   A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
   A[levels].lowest = true;
-  double num_dense = A[levels].A.size();
-  comm[levels].level_sum(&num_dense, 1);
-  double num_basis = A[levels].Q.size();
-  //comm[levels].level_sum(&num_basis, 1);
-  double total = num_dense + num_basis;
+  double Qsize = A[levels].Q.size() * sizeof(std::complex<double>);
+  double Rsize = A[levels].R.size() * sizeof(std::complex<double>);
+  double Asize = A[levels].A.size() * sizeof(std::complex<double>);
+  double Csize = A[levels].C.size() * sizeof(std::complex<double>);
+  double Usize = A[levels].U.size() * sizeof(std::complex<double>);
+  double Xsize = A[levels].X.size() * sizeof(std::complex<double>);
+  double Ysize = A[levels].Y.size() * sizeof(std::complex<double>);
+  double Zsize = A[levels].Z.size() * sizeof(std::complex<double>);
+  double Wsize = A[levels].W.size() * sizeof(std::complex<double>);
+  double total_size = Qsize + Rsize + Asize + Csize + Usize + Xsize + Ysize + Zsize + Wsize;
+  for (int i = 0; i < mpi_size; i++) {
+    if (mpi_rank == i) {
+      std::cout<<"MPI rank "<<i<<std::endl;
+      std::cout<<"  Total size on level "<<levels<<": "<<total_size<<" bytes"<<std::endl;
+      std::cout<<"  Qsize: "<<Qsize<<std::endl;
+      std::cout<<"  Rsize: "<<Rsize<<std::endl;
+      std::cout<<"  Asize: "<<Asize<<std::endl;
+      std::cout<<"  Csize: "<<Csize<<std::endl;
+      std::cout<<"  Usize: "<<Usize<<std::endl;
+      std::cout<<"  Xsize: "<<Xsize<<std::endl;
+      std::cout<<"  Ysize: "<<Ysize<<std::endl;
+      std::cout<<"  Zsize: "<<Zsize<<std::endl;
+      std::cout<<"  Wsize: "<<Wsize<<std::endl;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+  comm[levels].level_sum(&total_size, 1);
   if (mpi_rank == 0) {
-    std::cout<<num_dense<<" dense elements stored"<<std::endl;
+    std::cout<<"Total size (all processes) on level "<<levels<<": "<<total_size<<" bytes"<<std::endl;
   }
   //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
   for (long long l = levels - 1; l >= 0; l--) {
-    if (mpi_rank == 0) {
+    /*if (mpi_rank == 0) {
       std::cout<<"Level "<<l<<std::endl;
-    }
+    }*/
     A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega);
-    total += A[l].Q.size();
-  }
-  if (mpi_rank == 0) {
-    std::cout<<total<<" total elements stored"<<std::endl;
+    Qsize = A[l].Q.size() * sizeof(std::complex<double>);
+    Rsize = A[l].R.size() * sizeof(std::complex<double>);
+    Asize = A[l].A.size() * sizeof(std::complex<double>);
+    Csize = A[l].C.size() * sizeof(std::complex<double>);
+    Usize = A[l].U.size() * sizeof(std::complex<double>);
+    Xsize = A[l].X.size() * sizeof(std::complex<double>);
+    Ysize = A[l].Y.size() * sizeof(std::complex<double>);
+    Zsize = A[l].Z.size() * sizeof(std::complex<double>);
+    Wsize = A[l].W.size() * sizeof(std::complex<double>);
+    total_size = Qsize + Rsize + Asize + Csize + Usize + Xsize + Ysize + Zsize + Wsize;
+    for (int i = 0; i < mpi_size; i++) {
+     if (mpi_rank == i) {
+        std::cout<<"MPI rank "<<i<<std::endl;
+        std::cout<<"  Total size on level "<<l<<": "<<total_size<<" bytes"<<std::endl;
+        std::cout<<"  Qsize: "<<Qsize<<std::endl;
+        std::cout<<"  Rsize: "<<Rsize<<std::endl;
+        std::cout<<"  Asize: "<<Asize<<std::endl;
+        std::cout<<"  Csize: "<<Csize<<std::endl;
+        std::cout<<"  Usize: "<<Usize<<std::endl;
+        std::cout<<"  Xsize: "<<Xsize<<std::endl;
+        std::cout<<"  Ysize: "<<Ysize<<std::endl;
+        std::cout<<"  Zsize: "<<Zsize<<std::endl;
+        std::cout<<"  Wsize: "<<Wsize<<std::endl;
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+    }
+    comm[levels].level_sum(&total_size, 1);
+    if (mpi_rank == 0) {
+      std::cout<<"Total size (all processes) on level "<<l<<": "<<total_size<<" bytes"<<std::endl;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
   }
 
   long long llen = comm[levels].lenLocal();

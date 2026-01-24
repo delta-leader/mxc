@@ -48,6 +48,8 @@ Level 8
 Level 7
 ERROR (out of memory?) did not run on two nodes either (exact same place)
 It did not run with five nodes either
+It seems the problem is indeed the memory on a single node, even though I don't understand it fully. Keeping the number of total processes constant, I was able
+to get to level 6 on two nodes (50 processes per node)
 
 77751 did not run on 5 processes
 node_f=5

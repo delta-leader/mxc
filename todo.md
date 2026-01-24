@@ -677,3 +677,10 @@ sphere:    160        316        948
 IMPORTANT:
  - before I touch the implementation again, I want to be able
    to run a large scale problem
+ - Maybe I can reduce the memory consumption by deleting things that are only used on GPU?
+   - thinking mainly about the sparse matrix stuff
+     - NbXoffsets and NbZoffsets are used ruing substitution
+     - didn't find anything to delete
+   - find out if the problem it the fixed storage per node or the far field size
+   - other options would be to use shared memory on a single node
+   - or something like HiDR to reduce the size of the far field

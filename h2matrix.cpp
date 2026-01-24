@@ -812,13 +812,13 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   // ?
   NA.resize(ARows[nodes], -1);
 
-  std::cout<<"Precalculations"<<std::endl;
+  //std::cout<<"Precalculations"<<std::endl;
   // get the number of local children
   long long localChildLen = cells[ybegin + nodes - 1].Child[1] - cells[ybegin].Child[0];
   std::vector<long long> localChildOffsets(nodes + 1, -1);
   
   if (0 < localChildLen) {
-    std::cout<<"Intermediate"<<std::endl;
+    //std::cout<<"Intermediate"<<std::endl;
     long long lowerBegin = lowerComm.oLocal() + comm.LowerX;
     long long localChildIndex = lowerBegin - cells[ybegin].Child[0];
     std::transform(&cells[ybegin], &cells[ybegin + nodes], localChildOffsets.begin() + 1, [=](const Cell& c) { return localChildIndex + c.Child[1]; });
@@ -836,7 +836,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     n_mat = std::reduce(&Dims[ibegin], &Dims[ibegin + nodes], 0ll);
   }
   else {
-    std::cout<<"Leaf"<<std::endl;
+    //std::cout<<"Leaf"<<std::endl;
     // only for leaf level
     // Dims stores the number of particels for each cell (multiplied by 3)
     std::transform(&cells[ybegin], &cells[ybegin + nodes], &Dims[ibegin], [](const Cell& c) { return (c.Body[1] - c.Body[0]) * 3; });
@@ -849,7 +849,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
   std::vector<long long> neighbor_ones(xlen, 1ll);
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
   comm.neighbor_bcast(Dims.data(), neighbor_ones.data());
-  std::cout<<"Start alloc"<<std::endl;
+  //std::cout<<"Start alloc"<<std::endl;
   X.alloc(xlen, Dims.data());
   Y.alloc(xlen, Dims.data());
   // S stores the indices of the elements
@@ -868,7 +868,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     std::transform(ACols.begin() + ARows[i], ACols.begin() + ARows[i + 1], Asizes.begin() + ARows[i],
       [&](long long col) { return Dims[i + ibegin] * Dims[col]; });
   A.alloc(ARows[nodes], Asizes.data());
-  std::cout<<"Finish alloc"<<std::endl;
+  //std::cout<<"Finish alloc"<<std::endl;
 
   typedef Eigen::Stride<Eigen::Dynamic, 1> Stride_t;
   typedef Eigen::Map<Eigen::MatrixXcd, Eigen::Unaligned, Stride_t> Matrix_t; 
@@ -881,7 +881,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     long long pend = pbegin + lowerComm.lenLocal();
 
     // loop over all nodes
-    std::cout<<"Fist node loop"<<std::endl;
+    //std::cout<<"Fist node loop"<<std::endl;
     for (long long i = 0; i < nodes; i++) {
       //std::cout<<"Node "<<i<<std::endl;
       // number of rows in that cell
@@ -990,7 +990,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     comm.dataSizesToNeighborOffsets(Ssizes.data());
     comm.neighbor_bcast(S_ind[0], Ssizes.data());
 
-    std::cout<<"Second node loop"<<std::endl;
+    //std::cout<<"Second node loop"<<std::endl;
     for (long long i = 0; i < nodes; i++) {
       //std::cout<<"Node "<<i<<std::endl;
       // Generate far field for the upper levels
@@ -1035,7 +1035,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           DimsLr[i + ibegin] = rank;
         }
       } else {
-        // H2 excludes the entire far field
+        // H2 excludes the entire near field
         for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
           // near field cell
           long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
@@ -1091,7 +1091,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     comm.neighbor_bcast(Q[0], Qsizes.data());
     comm.neighbor_bcast(R[0], Qsizes.data());
   }
-  std::cout<<"Postcalc"<<std::endl;
+  //std::cout<<"Postcalc"<<std::endl;
   if (std::reduce(DimsLr.begin(), DimsLr.end())) {
     std::vector<long long> Csizes(CRows[nodes]);
     for (long long i = 0; i < nodes; i++)
