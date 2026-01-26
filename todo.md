@@ -654,7 +654,7 @@ TODO's
      - how to distribute
 
 Next meeting:
-  - confirm with Ma if we use ID or rank revealing QR
+  - confirm with Ma if we use ID (implemented by rank-revealing QR)
   - get Ma to give me an explanation of the factorization algorithm
 
 

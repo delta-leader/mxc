@@ -7,8 +7,17 @@
 module load intel/2022/mkl cuda/12.4 nccl/cuda-11.7/2.14.3 eigen/3.4 openmpi/4.0.5
 cd build
 
-MAT=2530
-export OMP_NUM_THREADS=64
-#for i in {1..50}; do
-mpirun -n 1 ./main.app ${MAT} 2 32 32 16 1e-12 fused2 1 > "../output/MAT_${MAT}/omega_1_a2_16.txt"
-#done
+#export OMP_NUM_THREADS=64
+M=50034
+geom=1
+omega=1
+leaf=128
+padmis=1
+rank=128
+leveled_rank=10
+acc=1e-8
+admis=1
+iters=10
+max_iters=50
+
+mpirun -n 8 ./main.app $M $geom $omega $leaf $padmis $rank $leveled_rank $acc $admis $iters $max_iters

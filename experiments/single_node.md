@@ -50,6 +50,24 @@ ERROR (out of memory?) did not run on two nodes either (exact same place)
 It did not run with five nodes either
 It seems the problem is indeed the memory on a single node, even though I don't understand it fully. Keeping the number of total processes constant, I was able
 to get to level 6 on two nodes (50 processes per node)
+Increasing the admissibility to two, it worked for the 3 different settings below on a single node:
+f_node=1
+50 processes, 50 per node
+M = 50034, geom = 1
+Omega = 1, Leaf-size = 128, admis_precon = 2, rank = 128, leveled rank = 20, epsilon = 1e-08, theta = 2, inner iter = 10, max iter = 50
+N = 100064, Leaf = 128, Levels = 10, #Leafs = 1024, #Cells = 2047
+Elements per leaf: 97
+50 processes, 50 per node
+M = 50034, geom = 1
+Omega = 1, Leaf-size = 64, admis_precon = 2, rank = 64, leveled rank = 10, epsilon = 1e-08, theta = 2, inner iter = 10, max iter = 50
+N = 100064, Leaf = 64, Levels = 11, #Leafs = 2048, #Cells = 4095
+Elements per leaf: 48
+50 processes, 50 per node
+M = 50034, geom = 1
+Omega = 1, Leaf-size = 64, admis_precon = 3, rank = 64, leveled rank = 10, epsilon = 1e-08, theta = 3, inner iter = 10, max iter = 50
+N = 100064, Leaf = 64, Levels = 11, #Leafs = 2048, #Cells = 4095
+Elements per leaf: 48
+
 
 77751 did not run on 5 processes
 node_f=5
@@ -79,3 +97,41 @@ Level 10
 1.68271e+09 dense elements stored
 Level 9
 Level 8
+
+
+M = 12611, geom = 1
+Omega = 1, Leaf-size = 128, admis_precon = 1, rank = 128, leveled rank = 0, epsilon = 1e-08, theta = 1, inner iter = 10, max iter = 50
+N = 25218, Leaf = 128, Levels = 8, #Leafs = 256, #Cells = 511
+Elements per leaf: 98
+Total size (all processes) on level 8: 4.20849e+09 bytes   
+Total size (all processes) on level 7: 8.75392e+09 bytes
+Total size (all processes) on level 6: 1.08866e+10 bytes
+Total size (all processes) on level 5: 8.91413e+09 bytes
+Total size (all processes) on level 4: 3.6741e+09 bytes
+Total size (all processes) on level 3: 2.26154e+09 bytes
+Total size (all processes) on level 2: 1.16954e+09 bytes
+Total size (all processes) on level 1: 0 bytes   
+precon:
+Total size (all processes) on level 8: 3.20978e+09 bytes
+Total size (all processes) on level 7: 1.573e+09 bytes
+Total size (all processes) on level 6: 8.96532e+08 bytes
+Total size (all processes) on level 5: 4.88112e+08 bytes
+Total size (all processes) on level 4: 2.38289e+08 bytes
+Total size (all processes) on level 3: 1.81142e+08 bytes
+Total size (all processes) on level 2: 1.05251e+08 bytes
+Total size (all processes) on level 1: 5.47226e+07 bytes
+Total size (all processes) on level 0: 2.52314e+07 bytes
+
+
+M = 50034, geom = 1
+Omega = 1, Leaf-size = 128, admis_precon = 1, rank = 128, leveled rank = 10, epsilon = 1e-08, theta = 1, inner iter = 10, max iter = 50
+N = 100064, Leaf = 128, Levels = 10, #Leafs = 1024, #Cells = 2047
+Elements per leaf: 97
+Total size (all processes) on level 10: 1.38984e+10 bytes
+Total size (all processes) on level 8: 3.04934e+10 bytes
+Total size (all processes) on level 7: 3.58518e+10 bytes
+Total size (all processes) on level 6: 3.74175e+10 bytes
+Total size (all processes) on level 5: 2.76993e+10 bytes
+Total size (all processes) on level 4: 8.93933e+09 bytes
+Total size (all processes) on level 3: 3.55095e+09 bytes
+Total size (all processes) on level 2: 1.63147e+09 bytes

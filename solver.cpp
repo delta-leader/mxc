@@ -77,7 +77,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   
   A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
   A[levels].lowest = true;
-  double Qsize = A[levels].Q.size() * sizeof(std::complex<double>);
+  /*double Qsize = A[levels].Q.size() * sizeof(std::complex<double>);
   double Rsize = A[levels].R.size() * sizeof(std::complex<double>);
   double Asize = A[levels].A.size() * sizeof(std::complex<double>);
   double Csize = A[levels].C.size() * sizeof(std::complex<double>);
@@ -106,14 +106,13 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   comm[levels].level_sum(&total_size, 1);
   if (mpi_rank == 0) {
     std::cout<<"Total size (all processes) on level "<<levels<<": "<<total_size<<" bytes"<<std::endl;
-  }
-  //A[levels].constructBLR(mat, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels]);
+  }*/
   for (long long l = levels - 1; l >= 0; l--) {
-    /*if (mpi_rank == 0) {
+    if (mpi_rank == 0) {
       std::cout<<"Level "<<l<<std::endl;
-    }*/
+    }
     A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega);
-    Qsize = A[l].Q.size() * sizeof(std::complex<double>);
+    /*Qsize = A[l].Q.size() * sizeof(std::complex<double>);
     Rsize = A[l].R.size() * sizeof(std::complex<double>);
     Asize = A[l].A.size() * sizeof(std::complex<double>);
     Csize = A[l].C.size() * sizeof(std::complex<double>);
@@ -124,7 +123,8 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
     Wsize = A[l].W.size() * sizeof(std::complex<double>);
     total_size = Qsize + Rsize + Asize + Csize + Usize + Xsize + Ysize + Zsize + Wsize;
     for (int i = 0; i < mpi_size; i++) {
-     if (mpi_rank == i) {
+      MPI_Barrier(MPI_COMM_WORLD);
+      if (mpi_rank == i) {
         std::cout<<"MPI rank "<<i<<std::endl;
         std::cout<<"  Total size on level "<<l<<": "<<total_size<<" bytes"<<std::endl;
         std::cout<<"  Qsize: "<<Qsize<<std::endl;
@@ -143,7 +143,7 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
     if (mpi_rank == 0) {
       std::cout<<"Total size (all processes) on level "<<l<<": "<<total_size<<" bytes"<<std::endl;
     }
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);*/
   }
 
   long long llen = comm[levels].lenLocal();
