@@ -241,7 +241,7 @@ std::vector<long long> uniform_sampling(std::vector<long long>& points, long lon
     }
   }
 
-  void HiDR::initialize(long long r1, long long cell_begin, long long ncells, const Cell cells[], const std::vector<double>& pts) {
+  void HiDR::initialize_f(long long r1, long long cell_begin, long long ncells, const Cell cells[], const std::vector<double>& pts) {
     this->lbegin = cell_begin;
     this->lend = lbegin + ncells;
     xbodies.resize(ncells);
@@ -487,6 +487,8 @@ std::vector<long long> uniform_sampling(std::vector<long long>& points, long lon
       // for each cell in the far field
       // TODO is this equivalent to the interaction list?
       //std::cout<<"Far RowIndex "<<Far.RowIndex[c]<<"-"<<Far.RowIndex[c+1]<<std::endl;
+      // to get a HSS sample, we would neet to loop over all off-diagonal cells
+      // so, similar to above, but exclude idx?
       for (long long i = Far.RowIndex[c]; i < Far.RowIndex[c + 1]; ++i) {
         //std::cout<<"Far ColIndex " <<Far.ColIndex[i]<<std::endl;
         long long j = Far.ColIndex[i] - lbegin;
@@ -506,7 +508,8 @@ std::vector<long long> uniform_sampling(std::vector<long long>& points, long lon
       }
       std::cout<<std::endl;*/
       // DATA REDUCT
-      if (r2) {
+      // only if far field is not empty
+      if (Far.RowIndex[c] < Far.RowIndex[c + 1] && r2) {
         fbodies[idx].resize(r2 * 3);
         fbodies_indices[idx] = farthest_point_sampling(tmp_indices.size(), tmp_indices.data(), tmp_points.data(), fbodies[idx].data(), r2);
         // sorting?

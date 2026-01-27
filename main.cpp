@@ -79,10 +79,11 @@ int main(int argc, char* argv[]) {
 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-  H2MatrixSolver matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega);
+  H2MatrixSolver matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, matgen.get_elems());
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
+  std::cout<<"Construction finished"<<std::endl;
 
   // multiply by 3 to get the actual length
   long long lenX = (matA.local_bodies.second - matA.local_bodies.first) * 3;
@@ -93,7 +94,7 @@ int main(int argc, char* argv[]) {
   // copy random x into X1
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
   //std::copy(&Xbody[offset], &Xbody[offset + lenX], &X2[0]);
-
+  std::cout<<"Matvec start"<<std::endl;
   // calculate H-matvec into X1
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
@@ -101,6 +102,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
   matvec_comm_time = ColCommMPI::get_comm_time();
+  std::cout<<"Matvec finished"<<std::endl;
 
   // calculate reference into X2
   MPI_Barrier(MPI_COMM_WORLD);
