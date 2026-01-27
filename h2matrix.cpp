@@ -3423,19 +3423,21 @@ void H2Matrix::construct_hidr(const MatrixGenerator& matgen, double epi, const C
           // build an H2 basis
           // generate the far field only if it exists
           // todo this is superficial no?
-          //far_rows = hidr.fbodies_size_at_i(i);
-          /*if (far_rows > 0) {
-            Eigen::MatrixXcd far(far_rows * 3, M);
+          far_cols = hidr.fbodies_size_at_i(i + ibegin]);
+          if (far_cols > 0) {
+            //Eigen::MatrixXcd far(far_rows * 3, M);
+            Eigen::MatrixXcd far(M, far_cols * 3);
             //std::cout<<"Far frows "<< far_rows<<" vs "<<hidr.fbodies_size_at_i(i) * 3 <<std::endl;
-            gen_matrix_hidr(mat, far_rows, M, hidr.fbodies_at_i(i), S_ind[i + ibegin], far);
-            long long rank = compute_basis(far, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-            std::cout<<"Rank "<<rank<<std::endl;
+            //gen_matrix_hidr(mat, far_rows, M, hidr.fbodies_at_i(i), S_ind[i + ibegin], far);
+            matgen.gen_matrix_hidr_sorted_single_layer(far.data(), cells[ci].Body[0], M_elem, hidr.fbodies_at_i(i + ibegin]), far_cols, omega); 
+            long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+            //std::cout<<"Rank "<<rank<<std::endl;
             DimsLr[i + ibegin] = rank;
-          }*/
-         // build an H2 basis
+          }
+          // build an H2 basis
           //std::cout<<"Far for H2 basis"<<std::endl;
           // generate the far field only if it exists
-          if (far_cols > 0) {
+          /*if (far_cols > 0) {
             //std::cout<<"Far "<<far_cols<<std::endl;
             Eigen::MatrixXcd far(M, far_cols);
             long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
@@ -3455,7 +3457,7 @@ void H2Matrix::construct_hidr(const MatrixGenerator& matgen, double epi, const C
             long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
             //std::cout<<"Rank "<<rank<<std::endl;
             DimsLr[i + ibegin] = rank;
-          }
+          }*/
         }
       }
     }
