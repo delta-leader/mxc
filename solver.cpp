@@ -325,17 +325,21 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
 
   std::vector<HiDR> hidr(levels + 1);
-  const long long r1 = 10;
+  const long long r1 = 10; // 20;
   auto pts = extract_coords(elems);
   //hidr[levels].initialize_grid(r1, comm[levels].oGlobal(), comm[levels].lenLocal(), cells.data(), pts, true);
-  hidr[levels].initialize_f(r1, comm[levels].oGlobal(), comm[levels].lenLocal(), cells.data(), pts);
+  //hidr[levels].initialize_f(r1, comm[levels].oGlobal(), comm[levels].lenLocal(), cells.data(), pts);
+  // currently HiDR does not work distributed so we just re-create it on each process
+  long long Nleaf = (long long)1 << levels;
+  hidr[levels].initialize_f(r1, Nleaf - 1, Nleaf, cells.data(), pts);
   // I don't think I need to do anything for node 0
   for (long long l = levels - 1; l > 0; l--) {
     std::cout<<"Level "<<l<<std::endl;
-    hidr[l].bottom_up_sweep_f(r1, comm[l].oGlobal(), comm[l].lenLocal(), cells.data(), hidr[l + 1]);
+    Nleaf >>= 1;
+    hidr[l].bottom_up_sweep_f(r1, Nleaf - 1, Nleaf, cells.data(), hidr[l + 1]);
   }
   for (long long l = 1; l <= levels; l++) {
-    long long r2 = rank_func(l) / 3 + 6;
+    long long r2 = 32; //80; //rank_func(l) / 3 + 6;
     std::cout<<"Level "<<l<<" r2 = " << r2<<std::endl;
     hidr[l].top_down_sweep_f(r2, cells.data(), Far, hidr[l - 1]);
   }

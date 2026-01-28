@@ -1343,7 +1343,7 @@ void MatrixGenerator::gen_matrix_hidr_sorted_single_layer(std::complex<double> c
       elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + row_start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
-          cmat[i + 3*xindex + (j + 3*y * nmat] = -mat3x3.at(i + 3*j);
+          cmat[i + 3*xindex + (j + 3*y) * nmat] = -mat3x3.at(i + 3*j);
         }
       }
     }

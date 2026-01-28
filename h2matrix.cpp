@@ -3423,13 +3423,19 @@ void H2Matrix::construct_hidr(const MatrixGenerator& matgen, double epi, const C
           // build an H2 basis
           // generate the far field only if it exists
           // todo this is superficial no?
-          far_cols = hidr.fbodies_size_at_i(i + ibegin]);
+          //std::cout<<"Far cols "<<i<<" "<<ibegin<<": "<<far_cols<<" vs "<<hidr.fbodies_size_at_i(i + ibegin) * 3<<std::endl;
+          far_cols = hidr.fbodies_size_at_i(i + ibegin);
+          /*auto f = hidr.fbodies_at_i(i + ibegin);
+          for (long long i = 0; i < far_cols; ++i)
+            std::cout<<f[i]<<", ";
+          std::cout<<std::endl;*/
+            
           if (far_cols > 0) {
             //Eigen::MatrixXcd far(far_rows * 3, M);
             Eigen::MatrixXcd far(M, far_cols * 3);
             //std::cout<<"Far frows "<< far_rows<<" vs "<<hidr.fbodies_size_at_i(i) * 3 <<std::endl;
             //gen_matrix_hidr(mat, far_rows, M, hidr.fbodies_at_i(i), S_ind[i + ibegin], far);
-            matgen.gen_matrix_hidr_sorted_single_layer(far.data(), cells[ci].Body[0], M_elem, hidr.fbodies_at_i(i + ibegin]), far_cols, omega); 
+            matgen.gen_matrix_hidr_sorted_single_layer(far.data(), cells[ci].Body[0], M_elem, hidr.fbodies_at_i(i + ibegin), far_cols, omega); 
             long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
             //std::cout<<"Rank "<<rank<<std::endl;
             DimsLr[i + ibegin] = rank;
@@ -3455,7 +3461,7 @@ void H2Matrix::construct_hidr(const MatrixGenerator& matgen, double epi, const C
             }
             matgen.gen_matrix_sorted_single_layer(far.data() + start_cols * M, cells[ci].Body[0], M_elem, cells[current_near].Body[1], n_mat / 3 - cells[current_near].Body[1], omega);
             long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
-            //std::cout<<"Rank "<<rank<<std::endl;
+            std::cout<<"Rank "<<rank<<std::endl;
             DimsLr[i + ibegin] = rank;
           }*/
         }
@@ -3463,7 +3469,7 @@ void H2Matrix::construct_hidr(const MatrixGenerator& matgen, double epi, const C
     }
 
     comm.dataSizesToNeighborOffsets(Ssizes.data());
-    comm.neighbor_bcast(S[0], Ssizes.data());
+    comm.neighbor_bcast(S_ind[0], Ssizes.data());
 
     for (long long i = 0; i < nodes; i++) {
       // Generate far field for the upper levels
