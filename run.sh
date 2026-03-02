@@ -19,5 +19,9 @@ acc=1e-8
 admis=1
 iters=10
 max_iters=50
+r1=0 #60
+leveled_r1=0 #20
+r2=0 #120
+leveled_r2=0 #20
 
-mpirun -n 8 ./main.app $M $geom $omega $leaf $padmis $rank $leveled_rank $acc $admis $iters $max_iters
+mpirun -n 32 ./main.app $M $geom $omega $leaf $padmis $rank $leveled_rank $acc $admis $iters $max_iters $r1 $leveled_r1 $r2 $leveled_r2

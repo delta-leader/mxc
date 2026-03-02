@@ -50,8 +50,10 @@ void ball_grid(double* bodies, long long nbodies, unsigned int seed=999) {
 
 
 std::vector<long long> farthest_point_sampling(long long num_points, long long* const points_indices, double* points, double* selected_points, long long num_samples) {
-  if (num_samples > num_points)
+  if (num_samples > num_points) {
     std::cout<<"Number of samples is large than the number of points ("<<num_samples<<" > "<<num_points<<")"<<std::endl;
+    num_samples = num_points;
+  }
 
   /*for (long long k = 0; k < num_points; ++k)
     std::cout<<points_indices[k]<<" ";
@@ -263,7 +265,7 @@ std::vector<long long> uniform_sampling(std::vector<long long>& points, long lon
         xbodies[idx].resize(r1 * 3);
         // I had a bug here passing &pts[cells[i].Body[1]] instead of the correct value
         xbodies_indices[idx] = farthest_point_sampling(tmp_indices.size(), tmp_indices.data(), tmp_points.data(), xbodies[idx].data(), r1);
-        //std::cout<<"After reduction: "<<xbodies_indices[idx].size() <<" points"<<std::endl;
+        //std::cout<<tmp_indices.size()<<" before and After reduction: "<<xbodies_indices[idx].size() <<" points"<<std::endl;
       } else {
         xbodies_indices[idx] = tmp_indices;
         xbodies[idx] = tmp_points;
@@ -369,6 +371,7 @@ std::vector<long long> uniform_sampling(std::vector<long long>& points, long lon
         xbodies_indices[idx] = tmp_indices;
         xbodies[idx] = tmp_points;
       }
+      //std::cout<<tmp_indices.size()<<" before and After reduction: "<<xbodies_indices[idx].size() <<" points"<<std::endl;
       //std::cout<<xbodies_indices[idx][0]<<"-"<<xbodies_indices[idx][tmp_indices.size()-1]<<std::endl;
       //std::cout<<"After reduction: "<<xbodies_indices[idx].size() <<" points"<<std::endl;
     }

@@ -104,6 +104,7 @@ namespace elastWave3d{
     void inc_trac(const struct nodal_point nodals[], const int &numNodeBasis, const int &xnode, const struct element elems[], const int &numElemBasis, const double &omega, std::complex<double> uout[]);
     std::complex<double> set_alpha(const double &omega);
     double get_mu(const int &out_in, const int &index);
+    double set_theta(const double &theta);
     void mkmat_entrywise_3d_elast(const struct nodal_point x_nodals[], const int &xNumNodeBasis, const struct element x_elems[], const int &xNumElemBasis, const int &xindex, const struct nodal_point y_nodals[], const int &yNumNodeBasis, const struct element y_elems[], const int &yNumElemBasis, const int &yindex, const double &omega, const int &out_in, const int &slp_or_dlp, const int &linear_or_const, const int &symmetric_integration, std::complex<double> dummat[]);
 //    void cpp_interface_entry_base_elast_wave_2d(const int &equation_type, const int &num_of_unkw, const int &num_basis, const int &mat_size, double &om, std::complex<double> &alpha, std::complex<double> cmat[], std::complex<double> rhs[], std::complex<double> kairef[], struct nodal_point nodals[], struct element elems[]);
 //    void mkmat_cavity_node_base_entrywise(const double &om, const std::complex<double> &alpha, const int &xnode, const int &xNumBasis, const struct nodal_point x_nodals[], const struct element x_elems[], const int &ynode, const int &yNumBasis, const struct nodal_point y_nodals[], const struct element y_elems[], std::complex<double> cmat[]);

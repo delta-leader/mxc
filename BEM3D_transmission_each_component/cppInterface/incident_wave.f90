@@ -35,6 +35,19 @@ contains
 
   end function get_mu
 !-------------------------------------------------
+  real(c_double) function set_theta(theta) result(res) bind(c)
+    use iso_c_binding
+    use math_cst
+    use BEM3d_small_mod
+    implicit none
+
+    real(c_double), intent(in) :: theta
+    theta_in = theta*pi/180.0d0
+
+    res = theta_in
+
+  end function set_theta
+!-------------------------------------------------
   subroutine inc_disp(nodals, nnode, ix, elems, nel, om, uout) bind(c)
     use BEM3d_small_mod
     use math_cst
@@ -141,6 +154,8 @@ contains
          real(kind(0d0)),dimension(:),allocatable,intent(inout)::gzi1,gzi2,gzi3,wi
        end subroutine Gauss_tri
     end interface
+
+    !write(*,*) theta_in
 
     integ=3
     call Gauss_tri(integ,gzi1,gzi2,gzi3,wi)

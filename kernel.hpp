@@ -41,7 +41,7 @@ public:
   //void gen_rhs(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
   //void gen_rhs_sorted(std::complex<double> rhs[], const double omega, double scale = 0, bool equation_type = true) const;
   //void gen_rhs_sorted(std::complex<double> rhs[], long long start, long long num_rows, const double omega, double scale, bool equation_type = true) const;
-  void gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, bool equation_type = true) const;
+  void gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, const double theta_in = 0, bool equation_type = true) const;
   void gen_rhs_sorted_from_file(std::complex<double> rhs[], long long start, long long num_rows) const;
   //double get_max_nodes(const double omega) const;
   //double get_max_elems(const double omega) const;

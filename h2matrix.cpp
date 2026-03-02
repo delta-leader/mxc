@@ -845,6 +845,7 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
     LowerZ = 0;
     n_mat = matgen.get_num_elems() * 3;
   }
+  double time_gen = 0, time_comp = 0, start;
 
   std::vector<long long> neighbor_ones(xlen, 1ll);
   comm.dataSizesToNeighborOffsets(neighbor_ones.data());
@@ -944,17 +945,25 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           far_cols -= N;
           long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
           Eigen::Map<Eigen::MatrixXcd> A_ij(A[ij], M, N);
+          start = MPI_Wtime();
           matgen.gen_matrix_sorted_single_layer(A_ij.data(), cells[ci].Body[0], M_elem, cells[cj].Body[0], N / 3, omega);
+          time_gen += MPI_Wtime() - start;
         }
         if (1. <= epi) {
           // build an HSS basis
           far_cols = n_mat - M;
           Eigen::MatrixXcd far(M, far_cols);
           //far.leftCols(left) = Mat_i.leftCols(left);
+          start = MPI_Wtime();
           matgen.gen_matrix_sorted_single_layer(far.data(), cells[ci].Body[0], M_elem, 0, cells[ci].Body[0], omega);
+          time_gen += MPI_Wtime() - start;
           //far.rightCols(n_mat - right) = Mat_i.rightCols(n_mat - right);
+          start = MPI_Wtime();
           matgen.gen_matrix_sorted_single_layer(far.data() + cells[ci].Body[0] * 3 * M, cells[ci].Body[0], M_elem, cells[ci].Body[1], n_mat / 3 - cells[ci].Body[1], omega);
+          time_gen += MPI_Wtime() - start;
+          start = MPI_Wtime();
           long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          time_comp += MPI_Wtime() - start;
           //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
         } else {
@@ -966,19 +975,27 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
             Eigen::MatrixXcd far(M, far_cols);
             long long current_near = Near.ColIndex[ARows[i] + Near.RowIndex[ybegin]];
             //std::cout<<"Current Near "<<current_near<<std::endl;
+            start = MPI_Wtime();
             matgen.gen_matrix_sorted_single_layer(far.data(), cells[ci].Body[0], M_elem, 0, cells[current_near].Body[0], omega);
+            time_gen += MPI_Wtime() - start;
             long long start_cols = cells[current_near].Body[0] * 3;
             for (long long ij = ARows[i] + 1; ij < ARows[i + 1]; ij++) {
               //std::cout<<"Current Near "<<current_near<<std::endl;
               long long next_near = Near.ColIndex[ij + Near.RowIndex[ybegin]];
               //std::cout<<"Next Near "<<next_near<<std::endl;
               long long add_cols = cells[next_near].Body[0] - cells[current_near].Body[1];
+              start = MPI_Wtime();
               matgen.gen_matrix_sorted_single_layer(far.data() + start_cols * M, cells[ci].Body[0], M_elem, cells[current_near].Body[1], add_cols, omega);
+              time_gen += MPI_Wtime() - start;
               start_cols += add_cols * 3;
               current_near = next_near;
             }
+            start = MPI_Wtime();
             matgen.gen_matrix_sorted_single_layer(far.data() + start_cols * M, cells[ci].Body[0], M_elem, cells[current_near].Body[1], n_mat / 3 - cells[current_near].Body[1], omega);
+            time_gen += MPI_Wtime() - start;
+            start = MPI_Wtime();
             long long rank = compute_basis(far.transpose(), epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+            time_comp += MPI_Wtime() - start;
             //std::cout<<"Rank "<<rank<<std::endl;
             DimsLr[i + ibegin] = rank;
           }
@@ -1029,8 +1046,12 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           // compute F transpose directly
           long long M = Dims[i + ibegin];
           Eigen::MatrixXcd F(FS_ind.size() * 3, M);
+          start = MPI_Wtime();
           matgen.gen_matrix_idx_element_single_layer(F.data(), S_ind[i + ibegin], M, FS_ind.data(), FS_ind.size(), omega);
+          time_gen += MPI_Wtime() - start;
+          start = MPI_Wtime();
           long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          time_comp += MPI_Wtime() - start;
           //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
         }
@@ -1075,8 +1096,12 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
           // compute F transpose directly
           long long M = Dims[i + ibegin];
           Eigen::MatrixXcd F(FS_ind.size() * 3, M);
+          start = MPI_Wtime();
           matgen.gen_matrix_idx_element_single_layer(F.data(), S_ind[i + ibegin], M, FS_ind.data(), FS_ind.size(), omega);
+          time_gen += MPI_Wtime() - start;
+          start = MPI_Wtime();
           long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          time_comp += MPI_Wtime() - start;
           //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
         }  
@@ -1124,13 +1149,26 @@ void H2Matrix::construct(const MatrixGenerator& matgen, double epi, const Cell c
         Eigen::Map<Eigen::MatrixXcd> Cyx(C[ij], M, N);
         if (1. <= epi) {
           Eigen::MatrixXcd Ayx(M, N);
+          start = MPI_Wtime();
           matgen.gen_matrix_element_single_layer(Ayx.data(), S_ind[y], M, S_ind[x], N, omega);
           Cyx.noalias() = Ry.triangularView<Eigen::Upper>() * Ayx * Rx.transpose().triangularView<Eigen::Lower>();
+          time_gen += MPI_Wtime() - start;
         }
-        else
+        else {
+          start = MPI_Wtime();
           matgen.gen_matrix_element_single_layer(Cyx.data(), S_ind[y], M, S_ind[x], N, omega);
+          time_gen += MPI_Wtime() - start;
+        }
       }
     }
+  }
+  int mpi_rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  comm.level_sum(&time_gen, 1);
+  comm.level_sum(&time_comp, 1);
+  if (mpi_rank == 0) {
+    std::cout<<"Matgen time: "<<time_gen<<std::endl;
+    std::cout<<"Compress time: "<<time_comp<<std::endl;
   }
 
   NbXoffsets.insert(NbXoffsets.begin(), Dims.begin(), Dims.end());
@@ -3513,8 +3551,25 @@ void H2Matrix::construct_hidr(const MatrixGenerator& matgen, double epi, const C
           DimsLr[i + ibegin] = rank;
         }
       } else {
+        // H2 basis
+        long long M = Dims[i + ibegin];
+        long long far_cols = hidr.fbodies_size_at_i(i + ibegin);
+        /*auto f = hidr.fbodies_at_i(i + ibegin);
+        for (long long i = 0; i < far_cols; ++i)
+          std::cout<<f[i]<<", ";
+        std::cout<<std::endl;*/
+            
+        if (far_cols > 0) {
+          // compute F transpose directly
+          Eigen::MatrixXcd F(far_cols * 3, M);
+          //std::cout<<"Far frows "<< far_cols<<" vs "<<hidr.fbodies_size_at_i(i) * 3 <<std::endl;
+          matgen.gen_matrix_idx_element_single_layer(F.data(), S_ind[i + ibegin], M, hidr.fbodies_at_i(i + ibegin), far_cols, omega);
+          long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
+          //std::cout<<"Rank "<<rank<<std::endl;
+          DimsLr[i + ibegin] = rank;
+        }
         // H2 excludes the entire near field
-        for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
+        /* for (long long ij = ARows[i]; ij < ARows[i + 1]; ij++) {
           // near field cell
           long long cj = Near.ColIndex[ij + Near.RowIndex[ybegin]];
           far_elems -= (cells[cj].Body[1] - cells[cj].Body[0]);
@@ -3542,12 +3597,12 @@ void H2Matrix::construct_hidr(const MatrixGenerator& matgen, double epi, const C
           num_elems = matgen.get_num_elems() - cells[current_near].Body[1];
           //std::cout<<far_start<<", "<<num_elems<<", "<<cells[current_near].Body[1]<<" - "<<matgen.get_num_elems()<<std::endl;
           std::iota(&FS_ind[far_start], &FS_ind[far_start + num_elems], cells[current_near].Body[1]);
-          /*     
+               
           std::cout<<FS_ind.size()<<std::endl;
-          for (auto& val : FS_ind)
-            std::cout<<val<<", ";
-          std::cout<<std::endl;
-          */
+          //for (auto& val : FS_ind)
+          //  std::cout<<val<<", ";
+          //std::cout<<std::endl;
+          
           // now we have all the elements of the far field
           // and create the far field matrix F
           // compute F transpose directly
@@ -3557,7 +3612,7 @@ void H2Matrix::construct_hidr(const MatrixGenerator& matgen, double epi, const C
           long long rank = compute_basis(F, epi, S_ind[i + ibegin], Q[i + ibegin], R[i + ibegin], 1. <= epi);
           //std::cout<<"Rank "<<rank<<std::endl;
           DimsLr[i + ibegin] = rank;
-        }  
+        }*/
       }
     }
 

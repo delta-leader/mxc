@@ -684,3 +684,14 @@ IMPORTANT:
    - find out if the problem it the fixed storage per node or the far field size
    - other options would be to use shared memory on a single node
    - or something like HiDR to reduce the size of the far field
+
+TODO:
+  - determine where the majority of the time is spent - matrix construction or compression?
+  - stronger admissibility for H2-matvec
+  - salt model
+
+  - get multiple right hand sides to work (theta in)
+  - loop factorization/solve multiple times
+    - copy precon
+  - test different parameters
+  - adjust diameter of the sphere/salt model

@@ -939,11 +939,12 @@ void MatrixGenerator::gen_matrix_sorted_from_file_single_layer(std::complex<doub
 
 // generates a certain number of rows of the RHS, taking into account the reordering
 // only for single layer potential
-void MatrixGenerator::gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, bool equation_type) const {
-  if (rhs_from_file) {
-    gen_rhs_sorted_from_file(rhs, start, num_rows);
-    return;
-  }
+void MatrixGenerator::gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, const double theta_in, bool equation_type) const {
+  //if (rhs_from_file) {
+  //  gen_rhs_sorted_from_file(rhs, start, num_rows);
+  //  return;
+  //}
+  double theta = elastWave3d::set_theta(theta_in);
   std::complex<double> alpha = elastWave3d::set_alpha(omega);
   if (equation_type){
     // PMCHWT

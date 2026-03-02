@@ -305,12 +305,12 @@ std::vector<double> extract_coords(const std::vector<elastWave3d::element>& elem
   return pts;
 }
 
-H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, double omega, const std::vector<elastWave3d::element>& elems, MPI_Comm world) : 
+H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, double omega, const std::vector<elastWave3d::element>& elems, long long r1, long long leveled_r1, long long r2, long long leveled_r2, MPI_Comm world) : 
   levels(levels), A(levels + 1), local_bodies(0, 0) {
   
-  std::cout<<"START"<<std::endl;
   CSR Near('N', cells, cells, theta);
   CSR Far('F', cells, cells, theta);
+  
   int mpi_size = 1;
   MPI_Comm_size(world, &mpi_size);
 
@@ -323,9 +323,12 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
 
   bool fix_rank = (epi == 0.);
   auto rank_func = [=](long long l) { return (levels - l) * leveled_rank + rank; };
+  if (fix_rank)
+   Far = CSR('F', cells, cells, 0);
+  
 
   std::vector<HiDR> hidr(levels + 1);
-  const long long r1 = 10; // 20;
+  //long long r1 = 10; // 20;
   auto pts = extract_coords(elems);
   //hidr[levels].initialize_grid(r1, comm[levels].oGlobal(), comm[levels].lenLocal(), cells.data(), pts, true);
   //hidr[levels].initialize_f(r1, comm[levels].oGlobal(), comm[levels].lenLocal(), cells.data(), pts);
@@ -334,16 +337,18 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   hidr[levels].initialize_f(r1, Nleaf - 1, Nleaf, cells.data(), pts);
   // I don't think I need to do anything for node 0
   for (long long l = levels - 1; l > 0; l--) {
-    std::cout<<"Level "<<l<<std::endl;
+    //std::cout<<"Level "<<l<<std::endl;
+    //r1 = 18;
+    r1 *= leveled_r1;
     Nleaf >>= 1;
     hidr[l].bottom_up_sweep_f(r1, Nleaf - 1, Nleaf, cells.data(), hidr[l + 1]);
   }
   for (long long l = 1; l <= levels; l++) {
-    long long r2 = 32; //80; //rank_func(l) / 3 + 6;
-    std::cout<<"Level "<<l<<" r2 = " << r2<<std::endl;
-    hidr[l].top_down_sweep_f(r2, cells.data(), Far, hidr[l - 1]);
+    //long long r2 = 10; //75;//32; //80; //rank_func(l) / 3 + 6;
+    //std::cout<<"Level "<<l<<" r2 = " << r2<<std::endl;
+    hidr[l].top_down_sweep_f((levels - l) * leveled_r2 + r2, cells.data(), Far, hidr[l - 1]);
   }
-  std::cout<<"Levelx "<<levels<<std::endl;
+  //std::cout<<"Levelx "<<levels<<std::endl;
   A[levels].construct_hidr(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, hidr[levels], comm[levels], A[levels], comm[levels], omega);
   for (long long l = levels - 1; l >= 0; l--) {
     std::cout<<"Level "<<l<<std::endl;
