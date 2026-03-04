@@ -241,6 +241,13 @@ long long compute_basis_rid(const Eigen::MatrixXcd& mat, double epi, long long s
   return rank;
 }
 
+H2Matrix::H2Matrix(const H2Matrix& h2matrix) : UpperStride(h2matrix.UpperStride), S(h2matrix.S), S_ind(h2matrix.S_ind),
+  CRows(h2matrix.CRows), CCols(h2matrix.CCols), NA(h2matrix.NA), NbXoffsets(h2matrix.NbXoffsets), NbZoffsets(h2matrix.NbZoffsets),
+  lenX(h2matrix.lenX), LowerZ(h2matrix.LowerZ), n_mat(h2matrix.n_mat),
+  Dims(h2matrix.Dims), DimsLr(h2matrix.DimsLr), dim_offsets(h2matrix.dim_offsets), ARows(h2matrix.ARows), ACols(h2matrix.ACols),
+  Q(h2matrix.Q), R(h2matrix.R), A(h2matrix.A), C(h2matrix.C), U(h2matrix.U),
+  X(h2matrix.X), Y(h2matrix.Y), Z(h2matrix.Z), W(h2matrix.W), Mat(h2matrix.Mat), Cols(h2matrix.Cols) {}
+
 inline long long lookupIJ(const std::vector<long long>& RowIndex, const std::vector<long long>& ColIndex, long long i, long long j) {
   if (i < 0 || RowIndex.size() <= (1ull + i))
     return -1;
@@ -3962,7 +3969,6 @@ void H2Matrix::factorize(const ColCommMPI& comm) {
 
   if (nodes == 1)
     comm.level_merge(A[0], A.size());
-
   for (long long i = 0; i < nodes; i++) {
     long long diag = lookupIJ(ARows, ACols, i, i + ibegin);
     long long M = Dims[i + ibegin];

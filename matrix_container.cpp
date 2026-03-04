@@ -1,6 +1,35 @@
 
 #include <matrix_container.hpp>
+#include <algorithm>
 #include <numeric>
+#include <cstring>
+
+template <class T>
+MatrixDataContainer<T>::MatrixDataContainer(const MatrixDataContainer& container) : offsets(container.offsets) {
+  if (0 < offsets.size()){
+    long long data_len = offsets.back();
+    data = (T*)std::malloc(data_len * sizeof(T));
+    memcpy(data, container.data, data_len * sizeof(T));
+  } else {
+    data = nullptr;
+  }
+}
+
+template <class T>
+MatrixDataContainer<T>& MatrixDataContainer<T>::operator=(const MatrixDataContainer<T>& container) {
+  MatrixDataContainer<T> tmp(container);
+  offsets = container.offsets;
+  if (data) {
+    delete data;
+    data = nullptr;
+  }
+  if (0 < offsets.size()){
+    long long data_len = offsets.back();
+    data = (T*)std::malloc(data_len * sizeof(T));
+    memcpy(data, container.data, data_len * sizeof(T));
+  }
+  return *this;
+}
 
 template <class T>
 void MatrixDataContainer<T>::alloc(long long len, const long long* dims) {

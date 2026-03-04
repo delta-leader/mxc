@@ -145,7 +145,6 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
     }
     MPI_Barrier(MPI_COMM_WORLD);*/
   }
-
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
@@ -357,6 +356,23 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);
+}
+
+H2MatrixSolver::H2MatrixSolver(const H2MatrixSolver& solver) :
+  levels(solver.levels), local_bodies(solver.local_bodies) {
+  // this should duplicate all the allocated communicators
+  for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
+    MPI_Comm mpi_comm = MPI_COMM_NULL;
+    MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
+    allocedComm.emplace_back(mpi_comm);
+  }
+  for (size_t i = 0; i < solver.comm.size(); ++i) {
+    comm.emplace_back(ColCommMPI(solver.comm[i], allocedComm));
+  }
+  A.reserve(solver.A.size());
+  for (size_t i = 0; i < solver.A.size(); ++i) {
+    A.emplace_back(H2Matrix(solver.A[i]));
+  }
 }
 
 void H2MatrixSolver::init_gpu_handles(const ncclComms nccl_comms) {

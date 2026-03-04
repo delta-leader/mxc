@@ -690,8 +690,9 @@ TODO:
   - stronger admissibility for H2-matvec
   - salt model
 
-  - get multiple right hand sides to work (theta in)
+  - get multiple right hand sides to work (theta in) DONE
   - loop factorization/solve multiple times
     - copy precon
+      - seems to not work right yet
   - test different parameters
   - adjust diameter of the sphere/salt model

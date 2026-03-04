@@ -28,6 +28,13 @@ public:
 
   ColCommMPI(const std::pair<long long, long long> Tree[], std::pair<long long, long long> Mapping[], const long long ARows[], const long long ACols[], const long long CRows[], const long long CCols[], std::vector<MPI_Comm>& allocedComm, MPI_Comm world = MPI_COMM_WORLD);
   
+  /* Copy constructor
+  comm: the communicator to be copied
+  allocedComm: a list of already allocated communicators
+               used to populate this communicator
+  */
+  ColCommMPI(const ColCommMPI& comm, const std::vector<MPI_Comm>& allocedComm);
+
   long long iLocal(long long iglobal) const;
   long long iGlobal(long long ilocal) const;
   long long oLocal() const;

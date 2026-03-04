@@ -16,7 +16,7 @@ private:
   std::vector<long long> UpperStride;
   MatrixDataContainer<double> S;
   MatrixDataContainer<long long> S_ind;
-  MatrixDataContainer<long long> S_ind_orig;
+  //MatrixDataContainer<long long> S_ind_orig;
 
   std::vector<long long> CRows;
   std::vector<long long> CCols;
@@ -54,6 +54,9 @@ public:
   MatrixDataContainer<std::complex<double>> Mat;
   // for storing #columns in Mat
   std::vector<long long> Cols;
+
+  H2Matrix() = default;
+  H2Matrix(const H2Matrix& h2matrix);
 
   void constructSharedHMatrix(double epi, long long rank, const Cell cells[], const CSR& Far, const Hmatrix& hA, const ColCommMPI& comm, const H2Matrix& Aupper);
   
