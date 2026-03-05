@@ -35,7 +35,7 @@ contains
 
   end function get_mu
 !-------------------------------------------------
-  real(c_double) function set_theta(theta) result(res) bind(c)
+  subroutine set_theta(theta) bind(c)
     use iso_c_binding
     use math_cst
     use BEM3d_small_mod
@@ -44,9 +44,7 @@ contains
     real(c_double), intent(in) :: theta
     theta_in = theta*pi/180.0d0
 
-    res = theta_in
-
-  end function set_theta
+  end subroutine set_theta
 !-------------------------------------------------
   subroutine inc_disp(nodals, nnode, ix, elems, nel, om, uout) bind(c)
     use BEM3d_small_mod
