@@ -584,6 +584,7 @@ Writing the paper:
 28
 27
 16
+aim for ~20
 
 Frequencies in the 1
 if diameter is d and wavenumber is k we should fix k/d
@@ -692,7 +693,28 @@ TODO:
 
   - get multiple right hand sides to work (theta in) DONE
   - loop factorization/solve multiple times
-    - copy precon
-      - seems to not work right yet
+    - copy precon DONE
   - test different parameters
-  - adjust diameter of the sphere/salt model
+  - adjust diameter of the sphere/salt model HIGH PRIORITY
+    - start the smaller ones first (more ranks/admis is okay)
+  - separate factorization and solve loop
+  - try higher admis on the lab server and compare time
+  - consider saving the rhs to file (if needed)
+
+Find good params for the salt model
+  - lab_server currently does not have the diam=1 model
+
+Find good params for the sphere model
+sphere:    160        316        948
+           568       1132       3396
+          1489       2974       8922
+         12611      25218      75654 DONE
+         50034     100064     300192 -> currently trying this 
+         77751     155498     466494
+        138201     276398     829194
+        157772     315540     946620
+        169798     339592    1018776
+        198027     396050    1188150 
+        309365     618726    1856178    
+
+account for mixed precision?
