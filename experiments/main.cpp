@@ -130,8 +130,7 @@ int main(int argc, char* argv[]) {
   }
 
   for (long long lrank = leveled_rank; leveled_rank < rank; lrank += 20) {
-  if (mpi_rank == 0)
-    std::cout<<"leveled rank = "<<lrank<<std::endl;
+  
   // build preconditioner
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
@@ -230,6 +229,7 @@ int main(int argc, char* argv[]) {
   }
   precon.free_all_comms();}
   matA.free_all_comms();
+ 
   MPI_Finalize();
 
   return 0;

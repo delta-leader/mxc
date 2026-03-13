@@ -709,7 +709,7 @@ sphere:    160        316        948
            568       1132       3396
           1489       2974       8922
          12611      25218      75654 DONE
-         50034     100064     300192 -> currently trying this 
+         50034     100064     300192 -> currently trying this 2, 2, 128 seemed to work well
          77751     155498     466494
         138201     276398     829194
         157772     315540     946620
@@ -718,3 +718,11 @@ sphere:    160        316        948
         309365     618726    1856178    
 
 account for mixed precision?
+
+check input for NaN
+  - checked and found the fortran output to already contain NaNs
+  - not sure why this happens though
+check if there is a norm = 0 block passed to ID
+two sphere case - increase complexity of the mesh step by step
+ - diameter of bounding box should be same
+ - place them not close too close to each other
