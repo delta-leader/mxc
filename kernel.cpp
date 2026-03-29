@@ -957,6 +957,7 @@ void MatrixGenerator::gen_rhs_sorted_single_layer(std::complex<double> rhs[], lo
     std::complex<double> uout[3];
     // divide by 3 to get element indices
     start /= 3;
+    #pragma omp parallel for firstprivate(uout)
     for(int i = 0; i < num_rows / 3; i++){
       elastWave3d::inc_disp_const_x(nodes.data(), num_nodes, elems[elems_idx[start + i]], omega, uout);
       for(int j = 0; j < 3; j++){
@@ -1167,10 +1168,10 @@ void MatrixGenerator::gen_matrix_element_single_layer(std::complex<double> cmat[
   const int slp_or_dlp = 1;
   const int linear_or_const = 1;
   const int slp_symmetric = 1;
-  #pragma omp parallel for firstprivate(mat3x3)
+  #pragma omp parallel for firstprivate(mat3x3)  collapse(2)
   for (long long i = 0; i < num_rows; ++i) {
-    long long row_idx = row_indices[i] / 3;
     for (long long j = 0; j < num_cols; ++j) {
+      long long row_idx = row_indices[i] / 3;
       long long col_idx = col_indices[j] / 3;
       // -(U0)
       // U0
@@ -1308,10 +1309,10 @@ void MatrixGenerator::gen_matrix_idx_element_single_layer(std::complex<double> c
   const int slp_or_dlp = 1;
   const int linear_or_const = 1;
   const int slp_symmetric = 1;
-  #pragma omp parallel for firstprivate(mat3x3)
+  #pragma omp parallel for firstprivate(mat3x3) collapse(2)
   for (long long i = 0; i < num_rows; ++i) {
-    long long row_idx = row_indices[i] / 3;
     for (long long j = 0; j < num_cols; ++j) {
+      long long row_idx = row_indices[i] / 3;
       long long col_idx = col_indices[j];
       // -U0
       // U0
