@@ -741,3 +741,12 @@ new 8 sphere files that are within a unit cube
 - I wonder if using a too large rank (compared to the average elements per leaf) is derimental
 
 - I found some alternatives for the salt model, now I should make a plan for experiments
+
+Tsubame experiments:
+- do we conerge for large scale salt model?
+- how long does each step of the algorithm take?
+
+
+Lab server:
+- HiDR
+- mixed precision
