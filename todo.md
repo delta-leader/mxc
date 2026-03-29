@@ -719,10 +719,25 @@ sphere:    160        316        948
 
 account for mixed precision?
 
-check input for NaN
-  - checked and found the fortran output to already contain NaNs
-  - not sure why this happens though
-check if there is a norm = 0 block passed to ID
+check input for NaN - RESOLVED
 two sphere case - increase complexity of the mesh step by step
  - diameter of bounding box should be same
  - place them not close too close to each other
+
+It seems we still do not converge for many elements with the salt model
+ - try MN5 to speed up experiments
+ - look for a different geometry
+
+ multi-sphere, donut
+  - only closed surface geometries
+
+T4 available until 23rd
+
+new 8 sphere files that are within a unit cube 
+16896 converges
+177658
+33251 does not converge
+65105 converges
+- I wonder if using a too large rank (compared to the average elements per leaf) is derimental
+
+- I found some alternatives for the salt model, now I should make a plan for experiments

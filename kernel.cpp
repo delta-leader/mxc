@@ -142,6 +142,12 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
     case 8:
       filename = "../input/new/eight_spheres_" + std::to_string(size) + ".inp";
       break;
+    case 7:
+      filename = "../input/nut/nut_" + std::to_string(size) + "k.inp";
+      break;
+    case 6:
+      filename = "../input/new/warped_sphere_" + std::to_string(size) + "k.inp";
+      break;
     case 5:
       filename = "../input/torus/torus_" + std::to_string(size) + ".inp";
       break;
