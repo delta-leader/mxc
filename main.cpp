@@ -129,13 +129,10 @@ int main(int argc, char* argv[]) {
     std::cout << "Dense Matvec Time: " << refmatvec_time << ", " << refmatvec_comm_time << std::endl;
   }
 
-  for (long long lrank = leveled_rank; leveled_rank < rank; lrank += 20) {
-  if (mpi_rank == 0)
-    std::cout<<"leveled rank = "<<lrank<<std::endl;
   // build preconditioner
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
-  H2MatrixSolver precon(matgen, 0, rank, lrank, cell, theta_precon, levels, omega);
+  H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
   //H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
   //H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems());
   MPI_Barrier(MPI_COMM_WORLD);
@@ -228,7 +225,7 @@ int main(int argc, char* argv[]) {
       std::cout << "  Actual Residual: " << serr << std::endl;
     }
   }
-  precon.free_all_comms();}
+  precon.free_all_comms();
   matA.free_all_comms();
   MPI_Finalize();
 
