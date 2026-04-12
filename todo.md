@@ -750,3 +750,16 @@ Tsubame experiments:
 Lab server:
 - HiDR
 - mixed precision
+
+Rotation of the Mesh
+- rotate the mesh so that the longest dimension aligns with one axis
+- we might get better cuts in the ORB
+
+- add multiple scatterers (i.e 8 spheres - 64)
+- try to increase to number to 64
+  - large number leads to slow convergence, so if we able to converge fast wven with a large number (e.g. 1000) its a great work
+
+- GMRES residual
+- actual residual
+- number of iterations
+- timings factorization, substitution, GMRES
