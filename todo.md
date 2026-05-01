@@ -763,3 +763,44 @@ Rotation of the Mesh
 - actual residual
 - number of iterations
 - timings factorization, substitution, GMRES
+
+TODO
+ - do smaller test runs first to check that everything still works (sphere/salt)
+ - check that we are using openmp for creation - this seems to work
+ - if everything works, request one more node
+   - try to report on the rank behavior
+     - admis 2 might not be be low rank enough (try 3 or 4)
+     - try to profile the memory usuage
+     - backup data from the old group(jh2400021)
+
+Metrics:
+  - iterations numbers (check when HSS fails to converge)
+    - iteration number vs residual (or just cite ISC paper to claim that H2 is better)
+  - residuals
+
+Sphere:
+  - multiple scatterers up to 64 (more is better)
+  - scaling experiments 
+    - same computational resource with increasing problem size
+    - if the strong scaling looks good enough, we can skip the weak scaling
+
+Get HiDR to work:
+ - currently takes the same admis condition as the matrix, but for the factorization basis,
+   we actually want theta = 0 -> NOT TRUE and already RESOLVED
+ - currently not implemented for factorization basis DONE
+   - there was a bug since the level 0 hidr was not initialized but it is resolved now
+   - it seems to work for the small sphere case
+   - also works for the 25k salt model
+
+It seems the Hmatrix creation just takes too long on tsubame.
+ - either use more processes
+ - seerialize the accurate h2matrix?
+ - increase the level?
+
+ Goal for today, template the preconditioner to fp32
+ - [ ] matgen
+ - [ ] matrix container
+ - [ ] comm-mpi?
+ - [ ] h2matrix
+ - [ ] solver
+ - [ ] mixed precision gmres

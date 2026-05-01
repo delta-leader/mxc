@@ -53,6 +53,6 @@ _deps
 *.fatbin
 
 # input files
-#input/
+input/
 output/
 build/

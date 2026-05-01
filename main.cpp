@@ -23,9 +23,9 @@ int main(int argc, char* argv[]) {
   double theta = argc > 9 ? std::atof(argv[9]) : 1e0;
   long long inner_iter = argc > 10 ? std::atoll(argv[10]) : 10;
   long long max_iter = argc > 11 ? std::atoll(argv[11]) : 50;
-  //long long r1 = argc > 12 ? std::atoll(argv[12]) : 0;
+  long long r1 = argc > 12 ? std::atoll(argv[12]) : 0;
   //long long leveled_r1 = argc > 13 ? std::atoll(argv[13]) : 0;
-  //long long r2 = argc > 14 ? std::atoll(argv[14]) : 0;
+  long long r2 = argc > 13 ? std::atoll(argv[13]) : 0;
   //long long leveled_r2 = argc > 15 ? std::atoll(argv[15]) : 0;
   //std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
   //const char* csv = argc > 8 ? argv[8] : nullptr;
@@ -59,7 +59,8 @@ int main(int argc, char* argv[]) {
   if (mpi_rank == 0) {
     std::cout<<"M = "<<M<<", geom = "<<geom<<std::endl;
     std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis_precon = "<<theta_precon<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
-    std::cout<<", epsilon = "<<epi<<", theta = "<<theta<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter<<std::endl;
+    std::cout<<", epsilon = "<<epi<<", theta = "<<theta<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter;
+    std::cout<<", r1 = "<<r1<<", r2 = "<<r2<<std::endl;
     //std::cout<<", r1 = "<<r1<<", leveled_r1 = "<<leveled_r1<<", r2 = "<<r2<<", leveled_r2 = "<<leveled_r2<<std::endl; 
     //std::cout<<"Reading file "<<filename<<std::endl;
     std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
@@ -132,8 +133,9 @@ int main(int argc, char* argv[]) {
   // build preconditioner
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
-  H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
-  //H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems());
+  // testing hidr for the salt model? might be better to do it for the sphere first
+  H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems(), r1, 1, r2, 0);
+  //H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   precon_construct_time = MPI_Wtime() - precon_construct_time;
   precon_construct_comm_time = ColCommMPI::get_comm_time();
@@ -159,10 +161,12 @@ int main(int argc, char* argv[]) {
   std::vector<double> fact_time;
   std::vector<double> subst_time;
   std::vector<double> gm_time;
-  const int RUNS = 10;
+  const int RUNS = 1;
 
   for (int i = 0; i < RUNS; ++i) {
-    std::cout<<"Run "<<i<<std::endl;
+    if (mpi_rank == 0) {
+      std::cout<<"Run "<<i<<std::endl;
+    }
     H2MatrixSolver precon_tmp(precon);
  
     // factorize preconditioner
@@ -190,7 +194,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<std::complex<double>> rhs(lenX);
-    std::vector<double> incident = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
+    //std::vector<double> incident = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
+    std::vector<double> incident = {0, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
     double gmres_time, gmres_comm_time;
     for (size_t w = 0; w < incident.size(); w++) {
       //std::cout<<"Incident wave: "<<incident[w]<<std::endl;
@@ -231,18 +236,20 @@ int main(int argc, char* argv[]) {
       }*/
     }
   }
-  std::cout<<"Factorization time: ";
-  for (size_t i = 0; i < fact_time.size(); ++i)
-    std::cout<<fact_time[i]<<", ";
-  std::cout<<std::endl;
-  std::cout<<"Substitution time: ";
-  for (size_t i = 0; i < subst_time.size(); ++i)
-    std::cout<<subst_time[i]<<", ";
-  std::cout<<std::endl;
-  std::cout<<"GMRES time: ";
-  for (size_t i = 0; i < gm_time.size(); ++i)
-    std::cout<<gm_time[i]<<", ";
-  std::cout<<std::endl;
+  if (mpi_rank == 0) {
+    std::cout<<"Factorization time: ";
+    for (size_t i = 0; i < fact_time.size(); ++i)
+      std::cout<<fact_time[i]<<", ";
+    std::cout<<std::endl;
+    std::cout<<"Substitution time: ";
+    for (size_t i = 0; i < subst_time.size(); ++i)
+      std::cout<<subst_time[i]<<", ";
+    std::cout<<std::endl;
+    std::cout<<"GMRES time: ";
+    for (size_t i = 0; i < gm_time.size(); ++i)
+      std::cout<<gm_time[i]<<", ";
+    std::cout<<std::endl;
+  }
   
   matA.free_all_comms();
   precon.free_all_comms();

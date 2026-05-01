@@ -611,7 +611,8 @@ std::vector<long long> uniform_sampling(std::vector<long long>& points, long lon
 
   // returns the number of sampled bodies for the cell with index i
   long long HiDR::fbodies_size_at_i(const long long i) const {
-    return fbodies_indices[i].size();
+    // return zero if empty
+    return fbodies_indices.size() > i ? fbodies_indices[i].size() : 0;
   }
   // returns a pointer to the sampled bodies for the cell with index i
   const long long* HiDR::fbodies_at_i(const long long i) const {

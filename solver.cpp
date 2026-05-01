@@ -347,10 +347,15 @@ H2MatrixSolver::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long l
     //std::cout<<"Level "<<l<<" r2 = " << r2<<std::endl;
     hidr[l].top_down_sweep_f((levels - l) * leveled_r2 + r2, cells.data(), Far, hidr[l - 1]);
   }
+
+  int mpi_rank = 0;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
   //std::cout<<"Levelx "<<levels<<std::endl;
   A[levels].construct_hidr(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, hidr[levels], comm[levels], A[levels], comm[levels], omega);
   for (long long l = levels - 1; l >= 0; l--) {
-    std::cout<<"Level "<<l<<std::endl;
+    if (mpi_rank == 0) {
+      std::cout<<"Level "<<l<<std::endl;
+    }
     A[l].construct_hidr(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, hidr[l], comm[l], A[l + 1], comm[l + 1], omega);
   }
   long long llen = comm[levels].lenLocal();
