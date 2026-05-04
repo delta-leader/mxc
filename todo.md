@@ -798,9 +798,9 @@ It seems the Hmatrix creation just takes too long on tsubame.
  - increase the level?
 
  Goal for today, template the preconditioner to fp32
- - [ ] matgen
- - [ ] matrix container
- - [ ] comm-mpi?
- - [ ] h2matrix
+ - [x] matgen
+ - [x] matrix container
+ - [x] comm-mpi?
+ - [x] h2matrix
  - [ ] solver
  - [ ] mixed precision gmres

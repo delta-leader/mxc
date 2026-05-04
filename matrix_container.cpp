@@ -69,3 +69,4 @@ long long MatrixDataContainer<T>::size() const {
 template class MatrixDataContainer<long long>;
 template class MatrixDataContainer<double>;
 template class MatrixDataContainer<std::complex<double>>;
+template class MatrixDataContainer<std::complex<float>>;

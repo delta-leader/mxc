@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
   //if (r1)
   //  matA = H2MatrixSolver(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, matgen.get_elems(), r1, leveled_r1, r2, leveled_r2);
   //else
-  H2MatrixSolver matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega);
+  H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
@@ -99,6 +99,7 @@ int main(int argc, char* argv[]) {
   long long lenX = (matA.local_bodies.second - matA.local_bodies.first) * 3;
   long long offset = matA.local_bodies.first * 3;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
+  std::vector<std::complex<float>> X1_low(lenX, std::complex<float>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
   // copy random x into X1
@@ -122,7 +123,7 @@ int main(int argc, char* argv[]) {
   refmatvec_time = MPI_Wtime() - refmatvec_time;
   refmatvec_comm_time = ColCommMPI::get_comm_time();
 
-  double cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
+  double cerr = solveRelErr(lenX, &X1[0], &X2[0]);
   if (mpi_rank == 0) {
     std::cout << "H^2-Matrix Construct Err: " << cerr << std::endl;
     std::cout << "H^2-Matrix Construct Time: " << h2_construct_time << ", " << h2_construct_comm_time << std::endl;
@@ -134,23 +135,27 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
   // testing hidr for the salt model? might be better to do it for the sphere first
-  H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems(), r1, 1, r2, 0);
-  //H2MatrixSolver precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
+  H2MatrixSolver<std::complex<float>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems(), r1, 1, r2, 0);
+  //H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   precon_construct_time = MPI_Wtime() - precon_construct_time;
   precon_construct_comm_time = ColCommMPI::get_comm_time();
 
   // copy random x into X1
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
+  for (long long i = 0; i<lenX; ++i)
+    X1_low[i] = X1[i];
   // precon matvec
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_matvec_time = MPI_Wtime(), precon_matvec_comm_time;
-  precon.matVecMul(&X1[0]);
+  precon.matVecMul(&X1_low[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   precon_matvec_time = MPI_Wtime() - precon_matvec_time;
   precon_matvec_comm_time = ColCommMPI::get_comm_time();
 
-  cerr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
+  for (long long i = 0; i<lenX; ++i)
+    X1[i] = X1_low[i];
+  cerr = solveRelErr(lenX, &X1[0], &X2[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) {
     std::cout << "H^2-Preconditioner Construct Err: " << cerr << std::endl;
@@ -164,10 +169,11 @@ int main(int argc, char* argv[]) {
   const int RUNS = 1;
 
   for (int i = 0; i < RUNS; ++i) {
+    // we would need to initialize X1 and X1_low here
     if (mpi_rank == 0) {
       std::cout<<"Run "<<i<<std::endl;
     }
-    H2MatrixSolver precon_tmp(precon);
+    H2MatrixSolver<std::complex<float>> precon_tmp(precon);
  
     // factorize preconditioner
     MPI_Barrier(MPI_COMM_WORLD);
@@ -180,12 +186,15 @@ int main(int argc, char* argv[]) {
   
     MPI_Barrier(MPI_COMM_WORLD);
     double precon_sub_time = MPI_Wtime(), precon_sub_comm_time;
-    precon_tmp.solvePrecondition(&X1[0]);
+    precon_tmp.solvePrecondition(&X1_low[0]);
     MPI_Barrier(MPI_COMM_WORLD);
     precon_sub_time = MPI_Wtime() - precon_sub_time;
     precon_sub_comm_time = ColCommMPI::get_comm_time();
-    double serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &X2[0]);
+    for (long long i = 0; i<lenX; ++i)
+     X1[i] = X1_low[i];
+    double serr = solveRelErr(lenX, &X1[0], &X2[0]);
     subst_time.push_back(precon_sub_time);
+
 
     if (!i &&mpi_rank == 0) {
       std::cout << "H^2-Matrix Factorization Time: " << precon_factor_time << ", " << precon_factor_comm_time << std::endl;
@@ -230,7 +239,7 @@ int main(int argc, char* argv[]) {
 
       std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
       mat_vec_reference(matgen, lenX/3, Nbody, &X1[0], global_x.data(), matA.local_bodies.first, omega);
-      serr = H2MatrixSolver::solveRelErr(lenX, &X1[0], &rhs[0]);
+      serr = solveRelErr(lenX, &X1[0], &rhs[0]);
       if (mpi_rank == 0) {
         std::cout << "  Actual Residual: " << serr << std::endl;
       }*/

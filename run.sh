@@ -24,4 +24,4 @@ r1=128 #60
 r2=128 #120
 #leveled_r2=0 #20
 
-mpirun -n 32 ./main.app $M $geom $omega $leaf $padmis $rank $leveled_rank $acc $admis $iters $max_iters $r1 $r2 &> ../output/salt/hidr/${M}_omega_${omega}_leaf_${leaf}_padmis_${padmis}_rank_${rank}_lrank_${leveled_rank}_admis_${admis}_r1_${r1}_r2_${r2}.txt
+mpirun -n 32 ./main.app $M $geom $omega $leaf $padmis $rank $leveled_rank $acc $admis $iters $max_iters $r1 $r2 &> ../output/salt/single/${M}_omega_${omega}_leaf_${leaf}_padmis_${padmis}_rank_${rank}_lrank_${leveled_rank}_admis_${admis}_r1_${r1}_r2_${r2}.txt

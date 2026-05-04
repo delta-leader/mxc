@@ -15,6 +15,20 @@
 
 #include <test_funcs.hpp>
 
+// complex double
+template void MatrixGenerator::gen_matrix_single_layer(std::complex<double>[], const double) const;
+template void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double>[], long long start, const long long num_rows, const double omega) const;
+template void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double>[], long long row_start, const long long num_rows, const long long col_start, const long long num_cols, const double omega) const;
+template void MatrixGenerator::gen_matrix_element_single_layer(std::complex<double>[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
+template void MatrixGenerator::gen_matrix_idx_element_single_layer(std::complex<double>[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
+template void MatrixGenerator::gen_matrix_hidr_sorted_single_layer(std::complex<double>[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
+// complex float
+template void MatrixGenerator::gen_matrix_single_layer(std::complex<float> cmat[], const double omega) const;
+template void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<float>[], long long start, const long long num_rows, const double omega) const;
+template void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<float>[], long long row_start, const long long num_rows, const long long col_start, const long long num_cols, const double omega) const;
+template void MatrixGenerator::gen_matrix_element_single_layer(std::complex<float>[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
+template void MatrixGenerator::gen_matrix_idx_element_single_layer(std::complex<float>[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
+template void MatrixGenerator::gen_matrix_hidr_sorted_single_layer(std::complex<float>[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
 
 DenseZMat::DenseZMat(long long M, long long N) : Accessor(M, N), A(nullptr) {
   if (0 < M && 0 < N) {
@@ -301,7 +315,8 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
 */
 // generates the whole matrix
 // only for single layer potential
-void MatrixGenerator::gen_matrix_single_layer(std::complex<double> cmat[], const double omega) const {
+template <typename DT>
+void MatrixGenerator::gen_matrix_single_layer(DT cmat[], const double omega) const {
   long long nmat = num_elems * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
@@ -735,11 +750,12 @@ void MatrixGenerator::gen_matrix_single_layer(std::complex<double> cmat[], const
 // generates a block of rows of the matrix, taking into account the reordering
 // this creates the matrix in row major now
 // only creates the single layer potential
-void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double> cmat[], long long start, const long long num_rows, const double omega) const {
-  if (matrix_from_file) {
-    gen_matrix_sorted_from_file_single_layer(cmat, start, num_rows);
-    return;
-  }
+template <typename DT>
+void MatrixGenerator::gen_matrix_sorted_single_layer(DT cmat[], long long start, const long long num_rows, const double omega) const {
+  //if (matrix_from_file) {
+  //  gen_matrix_sorted_from_file_single_layer(cmat, start, num_rows);
+  //  return;
+  //}
   long long nmat = num_elems * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   //std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
@@ -775,7 +791,8 @@ void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double> cmat[]
 // generates a block of size num_rows x num_cols of the matrix, taking into account the reordering
 // the block is taken at offset row_start x cols_start
 // only creates the single layer potential
-void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<double> cmat[], long long row_start, const long long num_rows, const long long col_start, const long long num_cols, const double omega) const {
+template <typename DT>
+void MatrixGenerator::gen_matrix_sorted_single_layer(DT cmat[], long long row_start, const long long num_rows, const long long col_start, const long long num_cols, const double omega) const {
   long long nmat = num_rows * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   //std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
@@ -1158,11 +1175,12 @@ void MatrixGenerator::gen_matrix_element(std::complex<double> cmat[], const long
 // generates a block of the matrix from row and colum indices, taking into account the reordering
 // indices are actual matrix indices and not node/element indices
 // only for single layer potential
-void MatrixGenerator::gen_matrix_element_single_layer(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
-  if (matrix_from_file) {
-    gen_matrix_element_from_file(cmat, row_indices, num_rows, col_indices, num_cols);
-    return;
-  }
+template <typename DT>
+void MatrixGenerator::gen_matrix_element_single_layer(DT cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
+  //if (matrix_from_file) {
+  //  gen_matrix_element_from_file(cmat, row_indices, num_rows, col_indices, num_cols);
+  //  return;
+  //}
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   const int out_in = 0;
   const int slp_or_dlp = 1;
@@ -1299,11 +1317,12 @@ void MatrixGenerator::gen_matrix_element_from_file(std::complex<double> cmat[], 
 // row indices are matrix indices, but column indices are element indices
 // this function uses the actual 3x3 indices ofr the rows, but node+element indices for the column space
 // only for single layer potential
-void MatrixGenerator::gen_matrix_idx_element_single_layer(std::complex<double> cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
-  if (matrix_from_file) {
-    gen_matrix_idx_element_from_file(cmat, row_indices, num_rows, col_indices, num_cols);
-    return;
-  }
+template <typename DT>
+void MatrixGenerator::gen_matrix_idx_element_single_layer(DT cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
+  //if (matrix_from_file) {
+    //gen_matrix_idx_element_from_file(cmat, row_indices, num_rows, col_indices, num_cols);
+  //  return;
+  //}
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   const int out_in = 0;
   const int slp_or_dlp = 1;
@@ -1330,7 +1349,8 @@ void MatrixGenerator::gen_matrix_idx_element_single_layer(std::complex<double> c
 // column indices are element indices
 // only creates the single layer potential
 // used if far field indices are available via HiDR
-void MatrixGenerator::gen_matrix_hidr_sorted_single_layer(std::complex<double> cmat[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
+template <typename DT>
+void MatrixGenerator::gen_matrix_hidr_sorted_single_layer(DT cmat[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
   long long nmat = num_rows * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
   //std::vector<std::complex<double>> mat3x3_2nd(9, 0.0);
