@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
   long long lenX = (matA.local_bodies.second - matA.local_bodies.first) * 3;
   long long offset = matA.local_bodies.first * 3;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
-  std::vector<std::complex<float>> X1_low(lenX, std::complex<float>(0., 0.));
+  //std::vector<std::complex<float>> X1_low(lenX, std::complex<float>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
   // copy random x into X1
@@ -135,7 +135,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
   // testing hidr for the salt model? might be better to do it for the sphere first
-  H2MatrixSolver<std::complex<float>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems(), r1, 1, r2, 0);
+  H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems(), r1, 1, r2, 0);
   //H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   precon_construct_time = MPI_Wtime() - precon_construct_time;
@@ -143,18 +143,18 @@ int main(int argc, char* argv[]) {
 
   // copy random x into X1
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
-  for (long long i = 0; i<lenX; ++i)
-    X1_low[i] = X1[i];
+  //for (long long i = 0; i<lenX; ++i)
+  //  X1_low[i] = X1[i];
   // precon matvec
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_matvec_time = MPI_Wtime(), precon_matvec_comm_time;
-  precon.matVecMul(&X1_low[0]);
+  precon.matVecMul(&X1[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   precon_matvec_time = MPI_Wtime() - precon_matvec_time;
   precon_matvec_comm_time = ColCommMPI::get_comm_time();
 
-  for (long long i = 0; i<lenX; ++i)
-    X1[i] = X1_low[i];
+  //for (long long i = 0; i<lenX; ++i)
+  //  X1[i] = X1_low[i];
   cerr = solveRelErr(lenX, &X1[0], &X2[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) {
@@ -173,7 +173,7 @@ int main(int argc, char* argv[]) {
     if (mpi_rank == 0) {
       std::cout<<"Run "<<i<<std::endl;
     }
-    H2MatrixSolver<std::complex<float>> precon_tmp(precon);
+    H2MatrixSolver<std::complex<double>> precon_tmp(precon);
  
     // factorize preconditioner
     MPI_Barrier(MPI_COMM_WORLD);
@@ -186,12 +186,12 @@ int main(int argc, char* argv[]) {
   
     MPI_Barrier(MPI_COMM_WORLD);
     double precon_sub_time = MPI_Wtime(), precon_sub_comm_time;
-    precon_tmp.solvePrecondition(&X1_low[0]);
+    precon_tmp.solvePrecondition(&X1[0]);
     MPI_Barrier(MPI_COMM_WORLD);
     precon_sub_time = MPI_Wtime() - precon_sub_time;
     precon_sub_comm_time = ColCommMPI::get_comm_time();
-    for (long long i = 0; i<lenX; ++i)
-     X1[i] = X1_low[i];
+    //for (long long i = 0; i<lenX; ++i)
+    // X1[i] = X1_low[i];
     double serr = solveRelErr(lenX, &X1[0], &X2[0]);
     subst_time.push_back(precon_sub_time);
 

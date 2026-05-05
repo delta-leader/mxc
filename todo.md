@@ -812,6 +812,8 @@ It seems the Hmatrix creation just takes too long on tsubame.
    - run large scale experiments on tsubame
      - more nodes
      - serialization?
+       - updated on tsubame and created a directory for storage at 
+         /gs/fs/jh240035/thomas/salt
    - determine if there is a bug in HiDR + low precision
    - more meshes/experiments
      - make a list of experiments
