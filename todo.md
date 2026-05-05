@@ -796,11 +796,37 @@ It seems the Hmatrix creation just takes too long on tsubame.
  - either use more processes
  - seerialize the accurate h2matrix?
  - increase the level?
+   - this failed immediately, without processing even a single level
+   - it seems the only available option is to use more threads per process
+   - and/or serialization of the matrix
 
  Goal for today, template the preconditioner to fp32
  - [x] matgen
  - [x] matrix container
  - [x] comm-mpi?
  - [x] h2matrix
- - [ ] solver
- - [ ] mixed precision gmres
+ - [x] solver
+ - [x] mixed precision gmres
+
+ TODO
+   - run large scale experiments on tsubame
+     - more nodes
+     - serialization?
+   - determine if there is a bug in HiDR + low precision
+   - more meshes/experiments
+     - make a list of experiments
+
+Experiments
+ - everything that is not too large and reports only accuracy/iterations can be run on the lab server
+ - variables
+   - salt
+     - number of elements
+     - wavenumber
+  - sphere
+    - number of scatterers
+    - number of elements
+    - wavenumber
+ - all the scaling/timing results should probably be done for the sphere, so I don't need to run the large experiments too often..
+
+ being able to run the salt model is most important
+ still should run as much as possible on tsubame now

@@ -1184,8 +1184,8 @@ void H2Matrix<DT>::construct(const MatrixGenerator& matgen, double epi, const Ce
   }
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-  comm.level_sum(&time_gen, 1);
-  comm.level_sum(&time_comp, 1);
+  //comm.level_sum(&time_gen, 1);
+  //comm.level_sum(&time_comp, 1);
   if (mpi_rank == 0) {
     std::cout<<"Matgen time: "<<time_gen<<std::endl;
     std::cout<<"Compress time: "<<time_comp<<std::endl;
@@ -3622,8 +3622,8 @@ void H2Matrix<DT>::construct_hidr(const MatrixGenerator& matgen, double epi, con
   }
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-  comm.level_sum(&time_gen, 1);
-  comm.level_sum(&time_comp, 1);
+  //comm.level_sum(&time_gen, 1);
+  //comm.level_sum(&time_comp, 1);
   if (mpi_rank == 0) {
     std::cout<<"Matgen time: "<<time_gen<<std::endl;
     std::cout<<"Compress time: "<<time_comp<<std::endl;
@@ -4116,3 +4116,201 @@ void H2Matrix<DT>::backwardSubstitute(DT* Y_out, const ColCommMPI& comm) {
 
   std::copy(Y[ibegin], Y[ibegin + nodes], &Y_out[LowerZ]);
 }
+
+void check_mpi_status(int error) {
+  if (error != MPI_SUCCESS)
+    std::cout<<"Something went wrong in IO "<<error<<std::endl;
+}
+
+template <typename DT>
+void H2Matrix<DT>::write(long long level, std::string& basename) const {
+  int mpi_rank = 0, mpi_size = 1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  MPI_File fh;
+
+  std::string filename = basename + std::to_string(level) + "_" + std::to_string(mpi_rank) + ".dat";
+  //std::cout<<"writing to "<<filename<<std::endl;
+  MPI_File_open(MPI_COMM_SELF, filename.c_str(), MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
+  MPI_Offset offset = 0;
+  MPI_Status status;
+
+  MPI_File_write_at(fh, offset, &lenX, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, &LowerZ, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, &n_mat, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+
+  long long size = Dims.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, Dims.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+  size = DimsLr.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, DimsLr.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+  size = dim_offsets.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, dim_offsets.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+
+  size = ARows.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, ARows.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+  size = ACols.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, ACols.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+  size = CRows.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, CRows.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+  size = CCols.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, CCols.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+
+  size = NA.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, NA.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+  size = NbXoffsets.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, NbXoffsets.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+  size = NbZoffsets.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, NbZoffsets.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+  size = UpperStride.size();
+  MPI_File_write_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status);
+  offset += sizeof(long long);
+  MPI_File_write_at(fh, offset, UpperStride.data(), size, MPI_LONG_LONG_INT, &status);
+  offset += size * sizeof(long long);
+
+  std::cout<<"Block 4 "<<std::endl;
+  //S.write(fh, offset, status);
+  S_ind.write(fh, offset, status);
+  Q.write(fh, offset, status);
+  R.write(fh, offset, status);
+  A.write(fh, offset, status);
+  C.write(fh, offset, status);
+  U.write(fh, offset, status);
+
+  X.write(fh, offset, status);
+  Y.write(fh, offset, status);
+  Z.write(fh, offset, status);
+  W.write(fh, offset, status);
+
+  MPI_File_close(&fh);
+}
+
+template <typename DT>
+bool H2Matrix<DT>::read(long long level, std::string& basename) {
+  int mpi_rank = 0, mpi_size = 1;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  MPI_File fh;
+  std::string filename = basename + std::to_string(level) + "_" + std::to_string(mpi_rank) + ".dat";
+  //std::cout<<"reading from "<<filename<<std::endl;
+  if (MPI_File_open(MPI_COMM_SELF, filename.c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fh) != MPI_SUCCESS) {
+    return false;
+  }
+  MPI_Offset offset = 0;
+  MPI_Status status;
+
+  check_mpi_status(MPI_File_read_at(fh, offset, &lenX, 1, MPI_LONG_LONG_INT, &status));
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &LowerZ, 1, MPI_LONG_LONG_INT, &status));
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &n_mat, 1, MPI_LONG_LONG_INT, &status));
+  offset += sizeof(long long);
+
+  long long size;
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  Dims.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, Dims.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  DimsLr.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, DimsLr.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  dim_offsets.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, dim_offsets.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  ARows.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, ARows.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  ACols.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, ACols.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  CRows.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, CRows.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  CCols.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, CCols.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  NA.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, NA.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  NbXoffsets.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, NbXoffsets.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  NbZoffsets.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, NbZoffsets.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, &size, 1, MPI_LONG_LONG_INT, &status));
+  UpperStride.resize(size);
+  offset += sizeof(long long);
+  check_mpi_status(MPI_File_read_at(fh, offset, UpperStride.data(), size, MPI_LONG_LONG_INT, &status));
+  offset += size * sizeof(long long);
+
+  //S.read(fh, offset, status);
+  S_ind.read(fh, offset, status);
+  Q.read(fh, offset, status);
+  R.read(fh, offset, status);
+  A.read(fh, offset, status);
+  C.read(fh, offset, status);
+  U.read(fh, offset, status);
+
+  X.read(fh, offset, status);
+  Y.read(fh, offset, status);
+  Z.read(fh, offset, status);
+  W.read(fh, offset, status);
+ 
+  MPI_File_close(&fh);
+  return true;
+}
+

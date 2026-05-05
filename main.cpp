@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
   //if (r1)
   //  matA = H2MatrixSolver(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, matgen.get_elems(), r1, leveled_r1, r2, leveled_r2);
   //else
-  H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega);
+  H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, true);
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();

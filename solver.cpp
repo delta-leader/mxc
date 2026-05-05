@@ -52,7 +52,7 @@ H2MatrixSolver::H2MatrixSolver(const Accessor& eval_d, const MatrixAccessor& eva
 }*/
 
 template <typename DT>
-H2MatrixSolver<DT>::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, double omega, MPI_Comm world) : 
+H2MatrixSolver<DT>::H2MatrixSolver(const MatrixGenerator& matgen, double epi, long long rank, long long leveled_rank, const std::vector<Cell>& cells, double theta, long long levels, double omega, bool io, MPI_Comm world) : 
   levels(levels), A(levels + 1), local_bodies(0, 0) {
   
   CSR Near('N', cells, cells, theta);
@@ -84,8 +84,27 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixGenerator& matgen, double epi, lo
   //}
   int mpi_rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
-  
-  A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
+
+  // read and write from file
+  std::string filename = "../tmp/";
+  if (io) {
+    MPI_Barrier(MPI_COMM_WORLD);
+    double read_time = MPI_Wtime();
+    if (!A[levels].read(levels, filename)) {
+      //std::cout<<"construct"<<std::endl;
+      A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
+      //std::cout<<"write"<<std::endl;
+      A[levels].write(levels, filename);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    read_time = MPI_Wtime() - read_time;
+    if (mpi_rank == 0) {
+      std::cout<<"Read time "<<read_time<<std::endl;
+    }
+  } else {
+    //std::cout<<"construct"<<std::endl;
+    A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
+  }
   A[levels].lowest = true;
   /*double Qsize = A[levels].Q.size() * sizeof(std::complex<double>);
   double Rsize = A[levels].R.size() * sizeof(std::complex<double>);
@@ -121,7 +140,24 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixGenerator& matgen, double epi, lo
     if (mpi_rank == 0) {
       std::cout<<"Level "<<l<<std::endl;
     }
-    A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega);
+    if (io) {
+      MPI_Barrier(MPI_COMM_WORLD);
+      double read_time = MPI_Wtime();
+      if (!A[l].read(l, filename)) {
+        //std::cout<<"construct"<<std::endl;
+        A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega);
+        //std::cout<<"write"<<std::endl;
+        A[l].write(l, filename);
+      }
+      MPI_Barrier(MPI_COMM_WORLD);
+      read_time = MPI_Wtime() - read_time;
+      if (mpi_rank == 0) {
+        std::cout<<"Read time "<<read_time<<std::endl;
+      }
+    } else {
+      //std::cout<<"construct"<<std::endl;
+      A[l].construct(matgen, fix_rank ? (double)rank_func(l) : epi, cells.data(), Near, comm[l], A[l + 1], comm[l + 1], omega);
+    }
     /*Qsize = A[l].Q.size() * sizeof(std::complex<double>);
     Rsize = A[l].R.size() * sizeof(std::complex<double>);
     Asize = A[l].A.size() * sizeof(std::complex<double>);
@@ -155,6 +191,7 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixGenerator& matgen, double epi, lo
     }
     MPI_Barrier(MPI_COMM_WORLD);*/
   }
+  //std::cout<<"Finished Writing"<<std::endl;
   long long llen = comm[levels].lenLocal();
   long long gbegin = comm[levels].oGlobal();
   local_bodies = std::make_pair(cells[gbegin].Body[0], cells[gbegin + llen - 1].Body[1]);

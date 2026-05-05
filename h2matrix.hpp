@@ -82,5 +82,7 @@ public:
   void factorizeCopyNext(const H2Matrix& lowerA, const ColCommMPI& lowerComm);
   void forwardSubstitute(const DT* X_in, const ColCommMPI& comm);
   void backwardSubstitute(DT* Y_out, const ColCommMPI& comm);
+  void write(long long level, std::string& file) const;
+  bool read(long long level, std::string& file);
 };
 

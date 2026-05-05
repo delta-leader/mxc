@@ -3,6 +3,8 @@
 #include <complex>
 #include <vector>
 
+#include <mpi.h>
+
 template<class T> class MatrixDataContainer {
 private:
   std::vector<long long> offsets;
@@ -16,5 +18,7 @@ public:
   T* operator[](long long index);
   const T* operator[](long long index) const;
   long long size() const;
+  void write(MPI_File& fh, MPI_Offset& offset, MPI_Status& status) const;
+  void read(MPI_File& fh, MPI_Offset& offset, MPI_Status& status);
 };
 
