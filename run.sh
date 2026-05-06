@@ -10,7 +10,7 @@ cd build
 #export OMP_NUM_THREADS=64
 M=25
 geom=3
-omega=1
+omega=50
 leaf=128
 padmis=2
 rank=128

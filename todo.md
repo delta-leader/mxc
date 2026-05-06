@@ -832,3 +832,16 @@ Experiments
 
  being able to run the salt model is most important
  still should run as much as possible on tsubame now
+
+ sphere:
+          5697      11453      34359
+         12611      25218      75654
+         25606      51340     154020
+         50034     100064     300192
+        101814     203886     611658
+        # 77751     155498     466494
+      #138201     276398     829194
+        #157772     315540     946620
+        169798     339592    1018776
+        #198027     396050    1188150 
+        #309365     618726    1856178    

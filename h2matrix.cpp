@@ -4200,7 +4200,7 @@ void H2Matrix<DT>::write(long long level, std::string& basename) const {
   MPI_File_write_at(fh, offset, UpperStride.data(), size, MPI_LONG_LONG_INT, &status);
   offset += size * sizeof(long long);
 
-  std::cout<<"Block 4 "<<std::endl;
+  //std::cout<<"Block 4 "<<std::endl;
   //S.write(fh, offset, status);
   S_ind.write(fh, offset, status);
   Q.write(fh, offset, status);
