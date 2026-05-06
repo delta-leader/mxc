@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
   std::vector<double> fact_time;
   std::vector<double> subst_time;
   std::vector<double> gm_time;
-  const int RUNS = 1;
+  const int RUNS = 5;
 
   for (int i = 0; i < RUNS; ++i) {
     // we would need to initialize X1 and X1_low here
@@ -205,8 +205,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<std::complex<double>> rhs(lenX);
-    //std::vector<double> incident = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
-    std::vector<double> incident = {0, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
+    std::vector<double> incident = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
+    //std::vector<double> incident = {0, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
     double gmres_time, gmres_comm_time;
     for (size_t w = 0; w < incident.size(); w++) {
       //std::cout<<"Incident wave: "<<incident[w]<<std::endl;
