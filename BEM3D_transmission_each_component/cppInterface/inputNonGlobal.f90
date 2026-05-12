@@ -23,7 +23,13 @@ contains
     character(len=10) :: mat_num_char     ! use your maximum expected len
     character(len=50) :: filename
     write(mat_num_char , '(I10)') mat_num        ! convert integer to char
-    if (sphere_num == 8) then
+    if (sphere_num == 64) then
+      write(filename, '("../input/new/64_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+    else if (sphere_num == 32) then
+      write(filename, '("../input/new/32_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+    else if (sphere_num == 16) then
+      write(filename, '("../input/new/16_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+    else if (sphere_num == 8) then
       write(filename, '("../input/new/eight_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 7) then
       write(filename, '("../input/nut/nut_", A, "k.inp")') trim(adjustl(mat_num_char)) 

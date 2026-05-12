@@ -153,6 +153,15 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
   //std::cout<<"GENERATING"<<std::endl;
   std::string filename;
   switch (spheres) {
+    case 64:
+      filename = "../input/new/64_spheres_" + std::to_string(size) + ".inp";
+      break;
+    case 32:
+      filename = "../input/new/32_spheres_" + std::to_string(size) + ".inp";
+      break;
+    case 16:
+      filename = "../input/new/16_spheres_" + std::to_string(size) + ".inp";
+      break;
     case 8:
       filename = "../input/new/eight_spheres_" + std::to_string(size) + ".inp";
       break;
