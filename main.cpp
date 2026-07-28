@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
   std::vector<double> fact_time;
   std::vector<double> subst_time;
   std::vector<double> gm_time;
-  const int RUNS = 5;
+  const int RUNS = 1;
 
   for (int i = 0; i < RUNS; ++i) {
     // we would need to initialize X1 and X1_low here
@@ -205,8 +205,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<std::complex<double>> rhs(lenX);
-    std::vector<double> incident = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
-    //std::vector<double> incident = {0, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
+    //std::vector<double> incident = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
+    std::vector<double> incident = {0};//, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
     double gmres_time, gmres_comm_time;
     for (size_t w = 0; w < incident.size(); w++) {
       //std::cout<<"Incident wave: "<<incident[w]<<std::endl;
@@ -245,10 +245,17 @@ int main(int argc, char* argv[]) {
       if (mpi_rank == 0) {
         std::cout << "  Actual Residual: " << serr << std::endl;
       }*/
+      MPI_File fh;
+      std::string filename = "test2/data8_" + std::to_string(mpi_rank) + ".bin";
+      MPI_File_open(MPI_COMM_SELF, filename.c_str(), MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
+      MPI_Offset offset = 0;
+      MPI_Status status;
+      MPI_File_write_at(fh, offset, X1.data(), lenX, MPI_C_DOUBLE_COMPLEX, &status);
+      MPI_File_close(&fh);
     }
   }
   if (mpi_rank == 0) {
-    std::cout<<"Factorization time: ";
+    std::cout<<std::endl<<"Factorization time: ";
     for (size_t i = 0; i < fact_time.size(); ++i)
       std::cout<<fact_time[i]<<", ";
     std::cout<<std::endl;
@@ -261,7 +268,7 @@ int main(int argc, char* argv[]) {
       std::cout<<gm_time[i]<<", ";
     std::cout<<std::endl;
   }
-  
+
   matA.free_all_comms();
   precon.free_all_comms();
   MPI_Finalize();
