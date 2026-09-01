@@ -1,5 +1,4 @@
 #include <h2matrix.hpp>
-#include <h-matrix.hpp>
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
 #include <kernel.hpp>
@@ -21,57 +20,6 @@ template class H2Matrix<std::complex<double>>;
 // complex float
 template class H2Matrix<std::complex<float>>;
 
-long long compute_basis(const MatrixAccessor& eval, double epi, long long M, long long N, double Xbodies[], const double Fbodies[], std::complex<double> a[], std::complex<double> c[], bool orth) {
-  long long K = std::min(M, N), rank = 0;
-  if (0 < K) {
-    Eigen::MatrixXcd RX = Eigen::MatrixXcd::Zero(K, M);
-
-    if (K < N) {
-      Eigen::MatrixXcd XF(N, M);
-      gen_matrix(eval, N, M, Fbodies, Xbodies, XF.data());
-      Eigen::HouseholderQR<Eigen::MatrixXcd> qr(XF);
-      RX = qr.matrixQR().topRows(K).triangularView<Eigen::Upper>();
-    }
-    else
-      gen_matrix(eval, N, M, Fbodies, Xbodies, RX.data());
-
-    Eigen::ColPivHouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> rrqr(RX);
-    rank = std::min(K, (long long)std::floor(epi));
-    if (epi < 1.) {
-      rrqr.setThreshold(epi);
-      rank = rrqr.rank();
-    }
-
-    Eigen::Map<Eigen::MatrixXcd> A(a, M, M), C(c, M, M);
-    if (0 < rank && rank < M) {
-      C.topRows(rank) = rrqr.matrixR().topRows(rank);
-      C.topLeftCorner(rank, rank).triangularView<Eigen::Upper>().solveInPlace(C.topRightCorner(rank, M - rank));
-      C.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
-
-      Eigen::Map<Eigen::MatrixXd> body(Xbodies, 3, M);
-      body = body * rrqr.colsPermutation();
-
-      if (orth) {
-        RX = A.triangularView<Eigen::Upper>() * (rrqr.colsPermutation() * C.topRows(rank).transpose());
-        Eigen::HouseholderQR<Eigen::Ref<Eigen::MatrixXcd>> qr(RX);
-        A = qr.householderQ();
-        C.setZero();
-        C.topLeftCorner(rank, rank) = qr.matrixQR().topRows(rank).triangularView<Eigen::Upper>();
-      }
-      else {
-        A.setZero();
-        A.leftCols(rank) = rrqr.colsPermutation() * C.topRows(rank).transpose();
-        C.setZero();
-        C.topLeftCorner(rank, rank) = Eigen::MatrixXcd::Identity(rank, rank);
-      }
-    }
-    else {
-      C = A.triangularView<Eigen::Upper>();
-      A = Eigen::MatrixXcd::Identity(M, M);
-    }
-  }
-  return rank;
-}
 
 template<typename MDT, typename DT>
 long long compute_basis(const Eigen::DenseBase<MDT>& mat, double epi, long long s[], DT q[], DT r[], bool orth) {
