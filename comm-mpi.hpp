@@ -1,10 +1,11 @@
 
 #pragma once
 
-#include <mpi.h>
 #include <vector>
-#include <complex>
 #include <tuple>
+
+#include <mpi.h>
+
 
 class ColCommMPI {
 public:

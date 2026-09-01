@@ -1,10 +1,11 @@
-
 #include <comm-mpi.hpp>
 
 #include <algorithm>
-#include <set>
-#include <numeric>
+#include <complex>
 #include <iostream>
+#include <numeric>
+#include <set>
+
 
 // complex double
 template void ColCommMPI::level_merge(std::complex<double>*, long long) const;
@@ -46,7 +47,7 @@ MPI_Comm find_same(const MPI_Comm& comm, const std::vector<MPI_Comm>& allocedCom
     auto iter = std::find_if(allocedComm.begin(), allocedComm.end(), [comm](MPI_Comm c) -> bool { 
       int result; MPI_Comm_compare(comm, c, &result); return result == MPI_CONGRUENT; });
     if (iter == allocedComm.end()) {
-      std::cerr<<"Could not find congruent communicator!"<<std::endl;
+      std::cerr << "Could not find congruent communicator!" <<std::endl;
       std::abort();
     }
   return *iter;
