@@ -1,12 +1,12 @@
 #pragma once
 
+#include <string>
+
 #include <build_tree.hpp>
 #include <comm-mpi.hpp>
 #include <h2matrix.hpp>
-#include <h-matrix.hpp>
 #include <kernel.hpp>
-#include <Eigen/Dense>
-#include <string>
+
 
 template <typename DT>
 class H2MatrixSolver {
