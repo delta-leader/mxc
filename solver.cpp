@@ -1,12 +1,11 @@
 
 #include <solver.hpp>
 
+#include <Eigen/Dense>
+#include <iostream>
+
 #include <hidr.hpp>
 
-#include <Eigen/Dense>
-#include <algorithm>
-#include <cmath>
-#include <iostream>
 
 // complex double
 template class H2MatrixSolver<std::complex<double>>;
@@ -137,7 +136,7 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixGenerator& matgen, double epi, lo
 template <typename DT>
 H2MatrixSolver<DT>::H2MatrixSolver(const H2MatrixSolver& solver) :
   levels(solver.levels), local_bodies(solver.local_bodies) {
-  // this should duplicate all the allocated communicators
+  // duplicate all the allocated communicators
   for (size_t i = 0; i < solver.allocedComm.size(); ++i) {
     MPI_Comm mpi_comm = MPI_COMM_NULL;
     MPI_Comm_dup(solver.allocedComm[i], &mpi_comm);
@@ -258,6 +257,7 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver& M, DT x[], const
   }
 }
 
+// no preconditioner
 template <typename DT>
 void H2MatrixSolver<DT>::solveGMRES(double tol, DT x[], const DT b[], long long inner_iters, long long outer_iters) {
   typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
