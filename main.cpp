@@ -89,9 +89,9 @@ int main(int argc, char* argv[]) {
  
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-  bool io = false;
-  std::cout<<"Reading: "<<io<<std::endl;
-  H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, io);
+  std::string filename = "../tmp/";
+  std::cout<<"Reading: "<<filename<<std::endl;
+  H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, filename, true);
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();

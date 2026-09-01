@@ -23,11 +23,11 @@ inline void read_mesh_data(long long& num_nodes, std::vector<struct elastWave3d:
   int numElemBasis = num_elems;
   elastWave3d::input_non_global(nodes.data(), numNodeBasis, elems.data(), numElemBasis, sphere_num, mat_num);
   // If duplicate nodes/elements are found, remove them
-  if (numNodeBasis < nodes.size()){
+  if ((size_t)numNodeBasis < nodes.size()){
     std::cerr << "Warning: Duplicate nodes encountered and removed." << std::endl;
     nodes.resize(numNodeBasis);
   }
-  if (numElemBasis < elems.size()){
+  if ((size_t)numElemBasis < elems.size()){
     std::cerr << "Warning: Duplicate elements encountered and removed." << std::endl;
     elems.resize(numElemBasis);
   }
