@@ -1,9 +1,10 @@
-
+#include <complex>
 #include <solver.hpp>
 #include <test_funcs.hpp>
 #include <include/elast3d.hpp>
 #include <kernel.hpp>
 #include <string>
+#include <random>
 
 #include <Eigen/Dense>
 
@@ -12,23 +13,30 @@
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
 
-  long long M = argc > 1 ? std::atoll(argv[1]) : 160;
+  /* identifies which source file to read */
+  // M corresponds to the number of Nodes (not elements)
+  long long M = argc > 1 ? std::atoll(argv[1]) : 5697;
+  // the geometry
   long long geom = argc > 2 ? std::atoll(argv[2]) : 1;
+  // TODO check where this is used and fix if needed
   double omega = argc > 3 ? std::atof(argv[3]) : 1;
+  // The maximum number of elements contained in each leaf-level node
   long long leaf_size = argc > 4 ? std::atoll(argv[4]) : 32;
+  // admisibility of the preconditioner
   double theta_precon = argc > 5 ? std::atof(argv[5]) : 1e0;
+  // fixed rank
   long long rank = argc > 6 ? std::atoll(argv[6]) : 32;
+  // leveled rank
   long long leveled_rank =  argc > 7 ? std::atoll(argv[7]) : 0;
+  // accuracy
   double epi = argc > 8 ? std::atof(argv[8]) : 1e-10;
+  // admisibility of the Hmatrix
   double theta = argc > 9 ? std::atof(argv[9]) : 1e0;
   long long inner_iter = argc > 10 ? std::atoll(argv[10]) : 10;
   long long max_iter = argc > 11 ? std::atoll(argv[11]) : 50;
+  // HiDR parameters
   long long r1 = argc > 12 ? std::atoll(argv[12]) : 0;
-  //long long leveled_r1 = argc > 13 ? std::atoll(argv[13]) : 0;
   long long r2 = argc > 13 ? std::atoll(argv[13]) : 0;
-  //long long leveled_r2 = argc > 15 ? std::atoll(argv[15]) : 0;
-  //std::string mode = argc > 7 ? std::string(argv[7]) : "h2";
-  //const char* csv = argc > 8 ? argv[8] : nullptr;
 
   const std::string MAT = std::to_string(M);
  
@@ -48,23 +56,17 @@ int main(int argc, char* argv[]) {
   MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
   auto elems = matgen.get_elems();
   auto idx = matgen.get_elems_idx();
+
+  // enable to write the new element order to a file
+  /*
   if (mpi_rank == 0) {
-    /*std::string filename = "test2/data_centroid.dat";
-    std::ofstream mf(filename);
-    
-    for (long long i = 0; i < matgen.get_num_elems(); ++i) {
-      mf <<"[";
-      for (long long d=0; d<3;++d)
-        mf <<elems[i].xc[d]<<",";
-      mf << "],"<<std::endl;
-    }*/
     std::string filename2 = "test2/salt_idx.dat";
     std::ofstream mf2(filename2);
     
     for (long long i = 0; i < matgen.get_num_elems(); ++i) {
       mf2 <<idx[i]<<std::endl;
     }
-  }
+  }*/
 
   
   // generate random x
@@ -74,10 +76,6 @@ int main(int argc, char* argv[]) {
   std::generate(Xbody.begin(), Xbody.end(), 
      [&]() { return std::complex<double>(uniform_dist(gen), 0.); });
 
-
-
-  //std::string prefix = "../input/cache/";
-  //std::string filename = std::to_string(geom) + "_" + MAT + "_" + std::to_string((int)omega) + "_" + std::to_string(leaf_size) + ".dat";
   if (mpi_rank == 0) {
     std::cout<<"M = "<<M<<", geom = "<<geom<<std::endl;
     std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis_precon = "<<theta_precon<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
@@ -88,48 +86,24 @@ int main(int argc, char* argv[]) {
     std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
     std::cout<<"Elements per leaf: "<<(matgen.get_num_elems() >> levels)<<std::endl;
   }
-  //matgen.open_matrix_file(prefix + filename);
-  //matgen.open_rhs_file(prefix + "rhs_" + filename);
-  //double nmat, omega2, lsize;
-  //matgen.read_mat_metadata_single_layer(nmat, omega2, lsize);
-  //std::cout<<nmat<<", "<<omega2<<", "<<lsize<<std::endl;
-
-  //Eigen::MatrixXcd A_gen(Nbody * 3, Nbody * 3);
-  //matgen.gen_matrix_sorted_from_file_single_layer(A_gen.data(), 0, Nbody);
-  //Eigen::MatrixXcd U = A_gen.triangularView<Eigen::StrictlyUpper>();
-  //Eigen::MatrixXcd L = A_gen.triangularView<Eigen::StrictlyLower>();
-  //double error = (U - L.transpose()).norm() / U.norm();
-  //std::cout<<"Symmetry error: "<<error<<std::endl;
-
-  //Eigen::JacobiSVD<Eigen::MatrixXcd> svd(A_gen);
-  //double cond = svd.singularValues()(0) / svd.singularValues()(svd.singularValues().size()-1);
-  //std::cout<<"Condition number: "<<cond<<std::endl;
-
+ 
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-  //H2MatrixSolver matA;
-  //if (r1)
-  //  matA = H2MatrixSolver(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, matgen.get_elems(), r1, leveled_r1, r2, leveled_r2);
-  //else
   bool io = false;
   std::cout<<"Reading: "<<io<<std::endl;
   H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, io);
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
-  //std::cout<<"Construction finished"<<std::endl;
 
   // multiply by 3 to get the actual length
   long long lenX = (matA.local_bodies.second - matA.local_bodies.first) * 3;
   long long offset = matA.local_bodies.first * 3;
   std::vector<std::complex<double>> X1(lenX, std::complex<double>(0., 0.));
-  //std::vector<std::complex<float>> X1_low(lenX, std::complex<float>(0., 0.));
   std::vector<std::complex<double>> X2(lenX, std::complex<double>(0., 0.));
 
   // copy random x into X1
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
-  //std::copy(&Xbody[offset], &Xbody[offset + lenX], &X2[0]);
-  //std::cout<<"Matvec start"<<std::endl;
   // calculate H-matvec into X1
   MPI_Barrier(MPI_COMM_WORLD);
   double matvec_time = MPI_Wtime(), matvec_comm_time;
@@ -137,7 +111,6 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   matvec_time = MPI_Wtime() - matvec_time;
   matvec_comm_time = ColCommMPI::get_comm_time();
-  //std::cout<<"Matvec finished"<<std::endl;
 
   // calculate reference into X2
   MPI_Barrier(MPI_COMM_WORLD);
@@ -167,8 +140,6 @@ int main(int argc, char* argv[]) {
 
   // copy random x into X1
   std::copy(&Xbody[offset], &Xbody[offset + lenX], &X1[0]);
-  //for (long long i = 0; i<lenX; ++i)
-  //  X1_low[i] = X1[i];
   // precon matvec
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_matvec_time = MPI_Wtime(), precon_matvec_comm_time;
@@ -177,8 +148,6 @@ int main(int argc, char* argv[]) {
   precon_matvec_time = MPI_Wtime() - precon_matvec_time;
   precon_matvec_comm_time = ColCommMPI::get_comm_time();
 
-  //for (long long i = 0; i<lenX; ++i)
-  //  X1[i] = X1_low[i];
   cerr = solveRelErr(lenX, &X1[0], &X2[0]);
   MPI_Barrier(MPI_COMM_WORLD);
   if (mpi_rank == 0) {
@@ -214,8 +183,6 @@ int main(int argc, char* argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     precon_sub_time = MPI_Wtime() - precon_sub_time;
     precon_sub_comm_time = ColCommMPI::get_comm_time();
-    //for (long long i = 0; i<lenX; ++i)
-    // X1[i] = X1_low[i];
     double serr = solveRelErr(lenX, &X1[0], &X2[0]);
     subst_time.push_back(precon_sub_time);
 
@@ -227,12 +194,10 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<std::complex<double>> rhs(lenX);
-    //std::vector<double> incident = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90};
     std::vector<double> incident = {90};//, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
     double gmres_time, gmres_comm_time;
     for (size_t w = 0; w < incident.size(); w++) {
-      //std::cout<<"Incident wave: "<<incident[w]<<std::endl;
-      matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega, incident[w]);
+       matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega, incident[w]);
       
       // iterative solver
       std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));

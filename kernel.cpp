@@ -197,7 +197,7 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
   elems.resize(num_elems);
   //std::cout<<num_nodes<<" "<<num_elems<<std::endl;
   //std::cout<<"READ Fortran"<<std::endl;
-  read_mesh_fortran(num_nodes, nodes, num_elems, elems, size, spheres);
+  read_mesh_data(num_nodes, nodes, num_elems, elems, size, spheres);
   //std::cout<<num_nodes<<" "<<num_elems<<std::endl;
   nodes_idx.resize(num_nodes);
   std::iota(nodes_idx.begin(), nodes_idx.end(), 0);
