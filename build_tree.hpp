@@ -6,6 +6,7 @@
 
 #include <include/elast3d.hpp>
 
+
 class Cell {
 public:
   std::array<long long, 2> Child;
@@ -26,13 +27,4 @@ public:
   long long lookupIJ(long long i, long long j) const;
 };
 
-void buildBinaryTree(Cell* cells, double* bodies, long long nbodies, long long levels);
-void buildBinaryTree(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels);
-void buildBinaryTree(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels, long long start, long long bodies_offset);
-void buildBinaryTree2(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels);
-void buildBinaryTree3(Cell* cells, double* bodies, long long* indices, long long nbodies, long long levels, long long start, long long bodies_offset);
-void buildBinaryTreeNodes(Cell* cells, elastWave3d::nodal_point* nodes, long long num_nodes, long long levels, long long first_cell_idx);
-void buildBinaryTreeElems(Cell* cells, elastWave3d::element* elems, long long num_elems, long long levels, long long first_cell_idx);
-void buildBinaryTreeNodes(Cell* cells, const elastWave3d::nodal_point* nodes, long long* indices, long long num_nodes, long long levels, long long first_cell_idx);
-void buildBinaryTreeElems(Cell* cells, const elastWave3d::element* elems, long long* indices, long long num_elems, long long levels, long long first_cell_idx, long long num_nodes);
 void buildBinaryTreeElemsOnly(Cell* cells, const elastWave3d::element* elems, long long* indices, long long num_elems, long long levels);
