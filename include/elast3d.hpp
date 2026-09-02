@@ -6,7 +6,7 @@
 #include <ranges>
 #include <algorithm>
 
-//--------- for maruyama code -----------------
+// for interaction with fortran code
 namespace elastWave3d{
   struct nodal_point{
   public:
@@ -30,7 +30,7 @@ namespace elastWave3d{
     }
     
     bool check() const {
-      if (nel > 20)
+      if (nel > 40)
         return false;
       return true;
     };
@@ -80,21 +80,6 @@ namespace elastWave3d{
       std::fill_n(svec, 3, 0.0);
       std::fill_n(t, 3, 0.0);
     }
-//    // print this menber
-//    void show() const {
-//      std::cout << "ind[0] , " << ind[0]  << std::endl;
-//      std::cout << "ind[1] , " << ind[1]  << std::endl;
-//      std::cout << "id[0]  , " << id[0]   << std::endl;
-//      std::cout << "id[1]  , " << id[1]   << std::endl;
-//      std::cout << "leng   , " << leng    << std::endl;
-//      std::cout << "xc[0]  , " << xc[0]   << std::endl;
-//      std::cout << "xc[1]  , " << xc[1]   << std::endl;
-//      std::cout << "nvec[0], " << nvec[0] << std::endl;
-//      std::cout << "nvec[1], " << nvec[1] << std::endl;
-//      std::cout << "svec[0], " << svec[0] << std::endl;
-//      std::cout << "svec[1], " << svec[1] << std::endl;
-//      std::cout << std::endl;
-//    }
   };
 
   extern "C" {
@@ -106,18 +91,5 @@ namespace elastWave3d{
     double get_mu(const int &out_in, const int &index);
     double set_theta(const double &theta);
     void mkmat_entrywise_3d_elast(const struct nodal_point x_nodals[], const int &xNumNodeBasis, const struct element x_elems[], const int &xNumElemBasis, const int &xindex, const struct nodal_point y_nodals[], const int &yNumNodeBasis, const struct element y_elems[], const int &yNumElemBasis, const int &yindex, const double &omega, const int &out_in, const int &slp_or_dlp, const int &linear_or_const, const int &symmetric_integration, std::complex<double> dummat[]);
-//    void cpp_interface_entry_base_elast_wave_2d(const int &equation_type, const int &num_of_unkw, const int &num_basis, const int &mat_size, double &om, std::complex<double> &alpha, std::complex<double> cmat[], std::complex<double> rhs[], std::complex<double> kairef[], struct nodal_point nodals[], struct element elems[]);
-//    void mkmat_cavity_node_base_entrywise(const double &om, const std::complex<double> &alpha, const int &xnode, const int &xNumBasis, const struct nodal_point x_nodals[], const struct element x_elems[], const int &ynode, const int &yNumBasis, const struct nodal_point y_nodals[], const struct element y_elems[], std::complex<double> cmat[]);
-//    void mkmat_inclusion_entrywise_closed_curve_calderon_pmchwt(const double &om, const std::complex<double> &alpha, const int &xindex, const int &xNumBasis, const struct nodal_point x_nodals[], const struct element x_elems[], const int &yindex, const int &yNumBasis, const struct nodal_point y_nodals[], const struct element y_elems[], std::complex<double> cmat[]);
-//    void mkmat_inclusion_entrywise_u(const double &om, const std::complex<double> &alpha, const int &xindex, const int &xNumBasis, const struct nodal_point x_nodals[], const struct element x_elems[], const int &yindex, const int &yNumBasis, const struct nodal_point y_nodals[], const struct element y_elems[], std::complex<double> cmat[]);
-//    void mkmat_inclusion_entrywise_t(const double &om, const std::complex<double> &alpha, const int &xindex, const int &xNumBasis, const struct nodal_point x_nodals[], const struct element x_elems[], const int &yindex, const int &yNumBasis, const struct nodal_point y_nodals[], const struct element y_elems[], std::complex<double> cmat[]);
-//    void mkmat_inclusion_entrywise_at(const double &om, const std::complex<double> &alpha, const int &xindex, const int &xNumBasis, const struct nodal_point x_nodals[], const struct element x_elems[], const int &yindex, const int &yNumBasis, const struct nodal_point y_nodals[], const struct element y_elems[], std::complex<double> cmat[]);
-//    void mkmat_inclusion_entrywise_w(const double &om, const std::complex<double> &alpha, const int &xindex, const int &xNumBasis, const struct nodal_point x_nodals[], const struct element x_elems[], const int &yindex, const int &yNumBasis, const struct nodal_point y_nodals[], const struct element y_elems[], std::complex<double> cmat[]);
-//    void mkmat_entrywise_2d_elast(const int &out_in, const int &slp_or_dlp, const int &linear_or_const, const double &om, const std::complex<double> &alpha, const int &xindex, const int &xNumBasis, const struct nodal_point x_nodals[], const struct element x_elems[], const int &yindex, const int &yNumBasis, const struct nodal_point y_nodals[], const struct element y_elems[], std::complex<double> cmat[]);
-//    void making_mesh_om_alpha_elast_para(const int &num_basis, double &om, std::complex<double> &alpha, struct nodal_point nodals[], struct element elems[]);
-//    void making_elast_incident_wave_cavity(const int &num_basis, const double pvec[], const double &om, const std::complex<double> &alpha, const int &node_number, const struct nodal_point nodals[], const struct element elems[], const int &bm_mode, std::complex<double> rhs_mirror[]);
-//    void making_elast_incident_wave_inclusion(const int &num_basis, const double pvec[], const double &om, const int &node_number, const struct nodal_point nodals[], const struct element elems[], std::complex<double> rhs_mirror[]);
-//    void making_elast_incident_wave_u_const_galerkin(const int &num_basis, const double pvec[], const double &om, const int &node_number, const struct nodal_point nodals[], const struct element elems[], std::complex<double> rhs_mirror[]);
-//    void single_circle_mesh(const int &nnode, const double &rad, const double &x1center, const double &x2center, struct nodal_point nodals[], struct element elems[]);
   }
 }

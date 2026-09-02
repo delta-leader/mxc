@@ -3,7 +3,6 @@ module elast3d_atij_entrywise_mod
   implicit none
 contains
   !-------------------------------------
-  !subroutine elast3d_aTij_l(om,zaTij,xco,nx,ely,sing)
   subroutine elast3d_aTij_l_nonGlobal(xco, nx, y_nodals, yNumNodeBasis, ely, om, elastp, sing, zaTij)
     !\int aTij dSy
     use BEM3d_small_mod

@@ -1,15 +1,10 @@
 program GBEM3D
-   !$ use omp_lib
-  !use lapack95, only: gesv
   use f95_lapack, only: la_gesv
    use BEM3d
    use struct_type
    use elast_parameter
    use math_cst
    implicit none
-   !id_bie=0:displacement formulation
-   !id_bie=1:PMCHWT formulation
-   !id_bie=2:Burton-Miller formulation
    integer::i,j,ix,iy,ex,ey,nip,niq,ip,iq,sing,freq
    real(kind(0d0))::omega,vec(3),dten2(3,3)
    complex(kind(0d0))::alpha
@@ -70,7 +65,6 @@ subroutine zgmresk_BEM(n,a,x,b,id_ini,x0,id)
 end interface
 !==============================================================
 !==============================================================
-!$ call omp_set_num_threads(20)
 !-------------------------------------------
    call input
    open(unit=222,file="disp.out")
@@ -80,9 +74,6 @@ end interface
    nel3=3*nel
    n_mat=nnode3+nel3
    allocate(x0(n_mat)); x0=0.d0
-   !do freq=1,100
-   !   write(*,*)"frequency step=",freq
-   !   omega=dble(freq)*0.05d0
    do freq = 1, 1
       omega = 2.0d0
       allocate(rhs(n_mat),uout(n_mat),Cmat(n_mat,n_mat))
@@ -96,21 +87,7 @@ end interface
          call mkmat_transmission_BM(Cmat,rhs,omega,alpha)
       end select
 
-!      !-------------------------
-!      do i = 1, n_mat
-!         !do i = 1, 3*nnode
-!         write(*,*) 'i, rhs(i)', i, rhs(i)
-!      end do
-!      do j = 1, n_mat
-!         do i = 1, n_mat
-!            write(*,*) 'i, j, cmat(i, j)', i, j, cmat(i, j)
-!         end do
-!      end do
-!      !-------------------------
-
-!      call zgmresk_BEM(n_mat,Cmat,uout,rhs,1,x0,11)
       uout(:)=rhs(:)
-      !call gesv(a=Cmat,b=uout)
       call la_gesv(a=Cmat,b=uout)
       deallocate(Cmat,rhs)
       !-------------------------
@@ -151,12 +128,6 @@ end interface
         close(226)
       end block
       !----dbg----------------
-!-------------------------------------------
-!      write(flname_vtu(1),'("u_real",i4.4,".vtu")')freq
-!      write(flname_vtu(2),'("u_imag",i4.4,".vtu")')freq
-!      write(flname_vtu(3),'("u_abs",i4.4,".vtu")')freq
-!      call output_vtu_binary_file
-!-------------------------------------------
    end do
    deallocate(x0)
    close(222)

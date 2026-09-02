@@ -58,7 +58,6 @@ contains
     do ng=1,integ
        xco(:)=x1(:)*gzi1(ng)+x2(:)*gzi2(ng)+x3(:)*gzi3(ng)
        call cal_phiy(x1,x2,x3,xco,phix)
-!       call elast3d_aTij_l(om,ten2,xco,elx%nvec,ely,sing)
        ten2(:,:) = 0.0d0
        call elast3d_aTij_l_nonGlobal(xco, elx%nvec, y_nodals, yNumNodeBasis, ely, omega, elastp, sing, ten2)
        cst=wi(ng)*elx%Jgg*phix(ip)

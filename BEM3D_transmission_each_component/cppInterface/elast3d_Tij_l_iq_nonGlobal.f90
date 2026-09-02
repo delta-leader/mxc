@@ -94,8 +94,6 @@ contains
     !=============================================================================
     interface
        subroutine Exp_sr_series_BEM(zal_L,zal_T,zbe_L,zbe_T,zslr,zstr)
-         ! calculate ( e^{-sr} -1 +sr -(sr)^2/2 ) as zal
-         ! calculate ( e^{-sr} -1 +sr -(sr)^2/2 +(sr)^3/6 ) as zbe
          implicit none
          complex(kind(0d0)),intent(in)::zslr,zstr
          complex(kind(0d0)),intent(out)::zal_L,zal_T,zbe_L,zbe_T

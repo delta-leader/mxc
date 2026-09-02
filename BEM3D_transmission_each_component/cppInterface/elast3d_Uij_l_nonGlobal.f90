@@ -91,8 +91,6 @@ contains
 
     interface
        subroutine Exp_sr_series_BEM(zal_L,zal_T,zbe_L,zbe_T,zslr,zstr)
-         ! calculate ( e^{-sr} -1 +sr -(sr)^2/2 ) as zal
-         ! calculate ( e^{-sr} -1 +sr -(sr)^2/2 +(sr)^3/6 ) as zbe
          implicit none
          complex(kind(0d0)),intent(in)::zslr,zstr
          complex(kind(0d0)),intent(out)::zal_L,zal_T,zbe_L,zbe_T
@@ -128,8 +126,6 @@ contains
   end subroutine elastUij_dynamic_nonGlobal
   !----------------------------------------
   subroutine elast3d_Uij_l_reg_nonGlobal(xco, nx, y_nodals, yNumNodeBasis, ely, om, elastp, sing, zUij)
-    ! subroutine  elast3d_Uij_l_reg(om,zUij,xx,ely,sing)
-    !call elast3d_Uij_l_reg_nonGloba(xco, elx%nvec, y_nodals, yNumNodeBasis, ely, omega, elastp, sing, ten2)
     !parts of \int Uij dSy
     !sing=1:xco is on ely; 0:no
     use bem3d_small_mod
@@ -159,15 +155,6 @@ contains
     complex(kind(0d0)),dimension(3,3)::uij
 
     interface
-       !subroutine elastUij(x,y,cl,ct,om,duij)
-       !  !normalized by *mu
-       !  use math_cst, only: pi_4, ii
-       !  implicit none
-       !  real(kind(0d0)),intent(in)::cl,ct,om
-       !  real(kind(0d0)),dimension(3),intent(in)::x,y
-       !  complex(kind(0d0)),dimension(3,3),intent(out)::duij
-       !end subroutine elastUij
-
        subroutine Gauss_line(n,gzi,wi)
          implicit none
          integer,intent(in)::n
@@ -180,9 +167,6 @@ contains
    linteg = ngauss_l
    call Gauss_line(linteg,lgzi,lwi)
 !-------------------------------------------
-!   y1(:)=node(ely%ind(1))%xc(:)
-!   y2(:)=node(ely%ind(2))%xc(:)
-!   y3(:)=node(ely%ind(3))%xc(:)
     y1(:) = y_nodals(ely%ind(1))%xc(:)
     y2(:) = y_nodals(ely%ind(2))%xc(:)
     y3(:) = y_nodals(ely%ind(3))%xc(:)
@@ -219,7 +203,6 @@ contains
                Jgg=Jgg*dabs(0.5d0*(1.0d0+lgzi(jng)))
                coff=lwi(ing)*lwi(jng)*Jgg
                !---
-               !call elastUij(xco,yco,cl(im),ct(im),om,uij)
                call elastUij(xco, yco, elastp%cl, elastp%ct, om, uij)
                zUij(:,:)=zUij(:,:)+uij(:,:)*coff
             end do
@@ -230,7 +213,6 @@ contains
          yco(:)=y1(:)*gzi1(ngy)+y2(:)*gzi2(ngy)+y3(:)*gzi3(ngy)
          coff=wi(ngy)*ely%Jgg
          !---
-         !call elastUij(xco,yco,cl(im),ct(im),om,uij)
          call elastUij(xco, yco, elastp%cl, elastp%ct, om, uij)
          zUij(:,:)=zUij(:,:)+uij(:,:)*coff
       end do

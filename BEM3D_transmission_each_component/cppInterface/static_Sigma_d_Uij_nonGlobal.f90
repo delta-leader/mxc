@@ -3,7 +3,6 @@ module static_Sigma_d_Uij_nonGlobal_mod
 contains
   !--------------------------------------------
   subroutine static_Sigma_d_Uij_nonGlobal(xx_in,y1,y2,y3,on_id,sigma_ijk,sigma_ijk_d,Uij,elastp)
-    !modified 2023.10.25
     use math_cst
     use elast_parameter_struct_mod
     implicit none
@@ -578,53 +577,5 @@ contains
        end do
     end do
   end subroutine static_Sigma_d_Uij_nonGlobal
-  !=======================================================================================
-  !=======================================================================================
-!  subroutine trans_dia_vector_h_phi(eh1,eh2,eh3,h_phi)
-!    implicit none
-!    real(kind=8)::a1,a2,a3,b1,b2,b3,c1,c2,c3
-!    real(kind=8),dimension(3),intent(in)::eh1,eh2,eh3
-!    real(kind=8),dimension(3,3),intent(out)::h_phi
-!    !--------------------------------------------------------
-!    a1=eh1(1)
-!    a2=eh2(1)
-!    a3=eh3(1)
-!    b1=eh1(2)
-!    b2=eh2(2)
-!    b3=eh3(2)
-!    c1=eh1(3)
-!    c2=eh2(3)
-!    c3=eh3(3)
-!    h_phi(1,1)=-((-(b3*c2) + b2*c3)/(a3*b2*c1 - a2*b3*c1 - a3*b1*c2 + a1*b3*c2 + a2*b1*c3 - a1*b2*c3))
-!    h_phi(1,2)=-((-(b3*c1) + b1*c3)/(-(a3*b2*c1) + a2*b3*c1 + a3*b1*c2 - a1*b3*c2 - a2*b1*c3 + a1*b2*c3))
-!    h_phi(1,3)=-((-(b2*c1) + b1*c2)/(a3*b2*c1 - a2*b3*c1 - a3*b1*c2 + a1*b3*c2 + a2*b1*c3 - a1*b2*c3))
-! 
-!    h_phi(2,1)=-((-(a3*c2) + a2*c3)/(-(a3*b2*c1) + a2*b3*c1 + a3*b1*c2 - a1*b3*c2 - a2*b1*c3 + a1*b2*c3))
-!    h_phi(2,2)=-((-(a3*c1) + a1*c3)/(a3*b2*c1 - a2*b3*c1 - a3*b1*c2 + a1*b3*c2 + a2*b1*c3 - a1*b2*c3))
-!    h_phi(2,3)=-((-(a2*c1) + a1*c2)/(-(a3*b2*c1) + a2*b3*c1 + a3*b1*c2 - a1*b3*c2 - a2*b1*c3 + a1*b2*c3))
-! 
-!    h_phi(3,1)=-((-(a3*b2) + a2*b3)/(a3*b2*c1 - a2*b3*c1 - a3*b1*c2 + a1*b3*c2 + a2*b1*c3 - a1*b2*c3))
-!    h_phi(3,2)=-((-(a3*b1) + a1*b3)/(-(a3*b2*c1) + a2*b3*c1 + a3*b1*c2 - a1*b3*c2 - a2*b1*c3 + a1*b2*c3))
-!    h_phi(3,3)=-((-(a2*b1) + a1*b2)/(a3*b2*c1 - a2*b3*c1 - a3*b1*c2 + a1*b3*c2 + a2*b1*c3 - a1*b2*c3))
-!  end subroutine trans_dia_vector_h_phi
-  !=======================================================================================
-  !=======================================================================================
-!  subroutine trans_dia_vector_phi(eh1,eh2,eh3,phi)
-!    implicit none
-!    real(kind=8),dimension(3),intent(in)::eh1,eh2,eh3
-!    real(kind=8),dimension(3,3),intent(out)::phi
-!    !--------------------------------------------------------
-!    phi(1,1)=eh1(1)
-!    phi(1,2)=eh1(2)
-!    phi(1,3)=eh1(3)
-! 
-!    phi(2,1)=eh2(1)
-!    phi(2,2)=eh2(2)
-!    phi(2,3)=eh2(3)
-! 
-!    phi(3,1)=eh3(1)
-!    phi(3,2)=eh3(2)
-!    phi(3,3)=eh3(3)
-!  end subroutine trans_dia_vector_phi
-  !--------------------------------------------
+
 end module static_Sigma_d_Uij_nonGlobal_mod

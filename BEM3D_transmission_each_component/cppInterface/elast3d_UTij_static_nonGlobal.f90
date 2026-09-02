@@ -104,7 +104,6 @@ contains
           end if
        end if
        call in_or_not(xi,zeta,eta,in_id,pm)
-       !   if(in_id == 2)in_id=0
        !-------------------------------------------
        del=(xi(2)-xi(1))*(zeta(3)-zeta(1))
        ay(1)=-1.0d0/(xi(2)-xi(1))

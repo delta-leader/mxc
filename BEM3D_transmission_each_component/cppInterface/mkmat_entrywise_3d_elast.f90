@@ -64,7 +64,6 @@ contains
                 sing = 0
              end if
              !--- aTij ---
-             !call linear_x_aTij_freq_ip(omega,zten2,el(ex),el(ey),sing,ip)
              zten2(:, :) = 0.0d0
              call linear_x_aTij_freq_ip_nonGlobal(x_nodals, xNumNodeBasis, x_elems(ex), y_nodals, yNumNodeBasis, y_elems(ey), omega, elastp, sing, ip, zten2)
              dummat(:, :) = dummat(:, :) + zten2(:, :)
@@ -82,7 +81,6 @@ contains
                    sing = 0
                 end if
                 !--- Wij ---
-                !call linear_x_Wij_freq_ip_iq(omega, zten2, x_elems(ex), y_elems(ey), sing, ip, iq)
                 zten2(:, :) = 0.0d0
                 call linear_x_Wij_freq_ip_iq_nonGlobal(x_nodals, xNumNodeBasis, x_elems(ex), y_nodals, yNumNodeBasis, y_elems(ey), omega, elastp, sing, ip, iq, zten2)
                 dummat(:, :) = dummat(:, :) + zten2(:, :)
@@ -136,33 +134,6 @@ contains
        write(*,*) "ERROR at line", __LINE__, "in file", __FILE__
        stop
     end select
-!    if(slp_or_dlp .eq. 4) then
-!    do ix=1,nnode
-!       do nip=1,node(ix)%nel
-!          ex=node(ix)%iel(nip,1)
-!          ip=node(ix)%iel(nip,2)
-!          do iy=1,nnode
-!             do niq=1,node(iy)%nel
-!                ey=node(iy)%iel(niq,1)
-!                iq=node(iy)%iel(niq,2)
-!                if(ex == ey)then
-!                   sing=1
-!                else
-!                   sing=0
-!                end if
-!                !--- Wij ---
-!                call linear_x_Wij_freq_ip_iq(omega,zten2,el(ex),el(ey),sing,ip,iq)
-!                do i=1,3
-!                   do j=1,3
-!                      Cmat(3*(ix-1)+i,3*(iy-1)+j)&
-!                           &=Cmat(3*(ix-1)+i,3*(iy-1)+j)&
-!                           &+zten2(i,j)
-!                   end do
-!                end do
-!             end do
-!          end do
-!       end do
-!    end do
   end subroutine mkmat_entrywise_3d_elast
 
 end module mkmat_inclusion_entrywise_3d_mod

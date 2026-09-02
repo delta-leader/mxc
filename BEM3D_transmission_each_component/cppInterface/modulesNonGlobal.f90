@@ -31,12 +31,9 @@ module bem3d_small_mod
   implicit none
 
   integer::nthread,id_bie,im
-  !integer::n_mat,nnode,nel,ninf,id_inc,ix1_min,ix1_0,ix1_max,nel3,nnode3
   integer::n_mat,ninf,id_inc,ix1_min,ix1_0,ix1_max,nel3,nnode3
   real(kind(0d0))::u0,theta_in,rad
-  !   type(element),dimension(:),allocatable::el
   type(infield),dimension(:),allocatable::xinf
-  !   type(nodal_point),dimension(:),allocatable::node
   integer::icheck
   integer :: ngauss_x, ngauss_y, ngauss_l
 
@@ -45,9 +42,6 @@ module bem3d_small_mod
        implicit none
        real(kind(0d0)),dimension(3),intent(in)::aa,bb
        real(kind(0d0)),dimension(3),intent(out)::xx
-       !    xx(1)=aa(2)*bb(3)-aa(3)*bb(2)
-       !    xx(2)=aa(3)*bb(1)-aa(1)*bb(3)
-       !    xx(3)=aa(1)*bb(2)-aa(2)*bb(1)
      end subroutine out_product
   end interface
 end module BEM3d_Small_mod

@@ -2,7 +2,6 @@ module galerkin_wij_3d_entrywise_mod
   implicit none
 contains
   !----------------------------------------
-  !subroutine linear_x_Wij_freq_ip_iq(om,zWij,elx,ely,sing,ip,iq)
   subroutine linear_x_Wij_freq_ip_iq_nonGlobal(x_nodals, xNumNodeBasis, elx, y_nodals, yNumNodeBasis, ely, omega, elastp, sing, ip, iq, zWij)
     !Wij/mu if Cijkl/mu
     !\int \phi_{ip} \int \phi_{iq} Wij/mu dSy dSx
@@ -65,13 +64,6 @@ contains
        call elast3d_Wij_l_iq_nonGlobal(xco, elx%nvec, y_nodals, yNumNodeBasis, ely, omega, elastp, sing, iq, ten2)
        cst = wi(ng)*elx%Jgg*phix(ip)
        zWij(:,:) = zWij(:,:) + ten2(:,:)*cst
-       !if(isnan(dble(ten2(1, 1)))) then
-       !   write(*,*) 'ten2', ten2
-       !   write(*,*) 'xco', xco
-       !   write(*,*) 'omega', omega
-       !   write(*,*) 'sing', sing
-       !   write(*,*) 'iq', iq
-       !end if
     end do
   end subroutine linear_x_Wij_freq_ip_iq_nonGlobal
   !----------------------------------------

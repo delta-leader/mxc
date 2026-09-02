@@ -9,7 +9,6 @@ contains
     implicit none
 
     real(c_double), intent(in) :: omega
-!    complex(c_double_complex), intent(in) :: res
 
     res = ii/(omega/elout%ct)
 
@@ -153,8 +152,6 @@ contains
        end subroutine Gauss_tri
     end interface
 
-    !write(*,*) theta_in
-
     integ=3
     call Gauss_tri(integ,gzi1,gzi2,gzi3,wi)
     pvec(1)=cos(theta_in)
@@ -181,7 +178,6 @@ contains
 
     do ng=1,integ
        xco(:)=x1(:)*gzi1(ng)+x2(:)*gzi2(ng)+x3(:)*gzi3(ng)
-       !$omp simd
        do i=1,3
           uout(i)=uout(i)+u0*dvec(i)*exp(ii*kk*(dot_product(pvec,xco)))&
                &*wi(ng)*elx%Jgg
@@ -271,21 +267,6 @@ contains
              do k = 1, 3
                 tout(i) = tout(i) + (elout%lam*ud(k, k)*nvec(i) + elout%mu*(ud(i, k) + ud(k, i))*nvec(k))*phix(ip)*wi(ng)*elems(ex)%Jgg
              end do
-             !if(isnan(dble(tout(i)))) then
-             !   write(*,*) 'tout(i)', tout(i)
-             !   write(*,*) 'elout%lam', elout%lam
-             !   write(*,*) 'nvec(i)', nvec(i)
-             !   write(*,*) 'elout%mu', elout%mu
-             !   write(*,*) 'phix(ip)', phix(ip)
-             !   write(*,*) 'wi(ng)', wi(ng)
-             !   write(*,*) 'elems(ex)%Jggg', elems(ex)%Jgg
-             !   write(*,*) 'x1', x1
-             !   write(*,*) 'x2', x2
-             !   write(*,*) 'x3', x3
-             !   write(*,*) 'xco', xco
-             !   write(*,*) 'ip', ip
-             !   write(*,*) 'ex', ex
-             !end if
           end do
        end do
     end do
