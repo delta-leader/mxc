@@ -178,6 +178,7 @@ contains
 
     do ng=1,integ
        xco(:)=x1(:)*gzi1(ng)+x2(:)*gzi2(ng)+x3(:)*gzi3(ng)
+       !$omp simd
        do i=1,3
           uout(i)=uout(i)+u0*dvec(i)*exp(ii*kk*(dot_product(pvec,xco)))&
                &*wi(ng)*elx%Jgg

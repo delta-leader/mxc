@@ -67,14 +67,7 @@ subroutine zgmresk_BEM(n,a,x,b,id_ini,x0,id)
       !$OMP end single
       do j=1,k
 !--- calculate matrix-vector product ("zgemv" is Blas routine and faster than "matmul") ---
-!         call omp_matmul(n,a(:,:),v(:,j),v(:,j+1))  !\tilde{v}_{j+1} = A v_j
-!         v(:,j+1)=matmul(a,v(:,j))
          call zgemv('N',n,n,(1.0d0,0.0d0),a,n,v(:,j),1,(0.0d0,0.0d0),dum,1)
-!         call h_matrix_vector(v(:,j),dum)
-!         do i=1,n
-!            write(33,*)dum(i)
-!         end do
-!         stop
 !------------------------------------------------------------------------------------------
          do i=1,n
             v(i,j+1)=dum(i)*jacb(i) !point Jacobi
