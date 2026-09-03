@@ -30,15 +30,11 @@ add_library(elastWave3d
   module/struct_type.f90
   module/module_BEM.f90
   subroutine/integration/Gauss_line.f90
-  subroutine/integration/Gauss_tri.f90
-  subroutine/fundamental/sub_FS/shape_function.f90
-  #subroutine/fundamental/sub_FS/Dyn_Sigma_Uij.f90
-  #subroutine/fundamental/sub_FS/static_line_int.f90
-  subroutine/fundamental/sub_FS/static_Sigma_d_Uij.f90
-  subroutine/fundamental/sub_FS/elast3d_UTij_static.f90
+  subroutine/integration/Gauss_tri.f90  
+  subroutine/fundamental/sub_FS/check_int.f90
   subroutine/fundamental/sub_FS/Exp_sr_series_BEM.f90
   subroutine/fundamental/sub_FS/in_or_not.f90
-  subroutine/fundamental/sub_FS/check_int.f90
+  subroutine/fundamental/sub_FS/shape_function.f90
   #subroutine/fundamental/elast3d_Uij_l.f90
   #subroutine/fundamental/elast3d_Tij_l_iq.f90
   #subroutine/fundamental/elast3d_aTij_l.f90

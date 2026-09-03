@@ -43,48 +43,5 @@ subroutine in_or_not(xi,zeta,eta,in_id,pm)
    if(dum(1) < 0.0d0 .and.&
       &dum(2) < 0.0d0 .and.&
       &dum(3) < 0.0d0) in_id=1
-!   if(dabs(dum(1)) < 1.0d-10 .or.&
-!      &dabs(dum(2)) < 1.0d-10 .or.&
-!      &dabs(dum(3)) < 1.0d-10) in_id=2
-!
-!   !on the vertex
-!   if(dabs(dum(1)) < 1.0d-10 .and. dabs(dum(2)) < 1.0d-10)then
-!      in_id=3
-!   else if(dabs(dum(2)) < 1.0d-10 .and. dabs(dum(3)) < 1.0d-10)then
-!      in_id=4
-!   else if(dabs(dum(3)) < 1.0d-10 .and. dabs(dum(1)) < 1.0d-10)then
-!      in_id=5
-!   end if
-!
-!   !on the line
-!   if(dabs(dum(1)) < 1.0d-10 .and.&
-!      &dum(2) > 0.0d0 .and.&
-!      &dum(3) > 0.0d0)then
-!      in_id=2
-!   else if(dabs(dum(1)) < 1.0d-10 .and.&
-!      &dum(2) < 0.0d0 .and.&
-!      &dum(3) < 0.0d0)then
-!      in_id=2
-!
-!   else if(dabs(dum(2)) < 1.0d-10 .and.&
-!      &dum(3) > 0.0d0 .and.&
-!      &dum(1) > 0.0d0)then
-!      in_id=2
-!   else if(dabs(dum(2)) < 1.0d-10 .and.&
-!      &dum(3) < 0.0d0 .and.&
-!      &dum(1) < 0.0d0)then
-!      in_id=2
-!
-!   else if(dabs(dum(3)) < 1.0d-10 .and.&
-!      &dum(1) > 0.0d0 .and.&
-!      &dum(2) > 0.0d0)then
-!      in_id=2
-!   else if(dabs(dum(3)) < 1.0d-10 .and.&
-!      &dum(1) < 0.0d0 .and.&
-!      &dum(2) < 0.0d0)then
-!      in_id=2
-!
-!   end if
-
    end subroutine in_or_not
 !===========================================

@@ -7,6 +7,7 @@ contains
     !tst(i,j,iq)=\int Tij^{st} (x,y) phi_{iq}(y) dS_y
     use math_cst
     use elast_parameter_struct_mod
+    use static_Sigma_d_Uij_nonGlobal_mod
     implicit none
     integer::i,j,k,l,iq,in_id
     real(kind(0d0))::eta,area,gam1,gam2,gam3
@@ -26,14 +27,6 @@ contains
     integer::ic,icheck
     real(kind(0d0))::norm,check,ep_ixz,cvec(3),yc(3),dd
     real(kind(0d0))::Ixz_num(5,10),xx(3),ep_shift,Ixz_store(3,5,10),val(3)
-    !===================================================
-    interface
-       subroutine check_norm(Ixz1,Ixz2,norm)
-         implicit none
-         real(kind(0d0)),intent(out)::norm
-         real(kind(0d0)),intent(in)::Ixz1(5,10),Ixz2(5,10)
-       end subroutine check_norm
-    end interface
     !===================================================
     vec12(:)=y2(:)-y1(:)
     vec23(:)=y3(:)-y2(:)
