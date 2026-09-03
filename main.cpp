@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
   // testing hidr for the salt model? might be better to do it for the sphere first
-  H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems(), r1, 1, r2, 0);
+  H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems(), r1, r2, true);
   //H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
   MPI_Barrier(MPI_COMM_WORLD);
   precon_construct_time = MPI_Wtime() - precon_construct_time;
@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<std::complex<double>> rhs(lenX);
-    std::vector<double> incident = {90};//, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
+    std::vector<double> incident = {0};//, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
     double gmres_time, gmres_comm_time;
     for (size_t w = 0; w < incident.size(); w++) {
        matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega, incident[w]);
@@ -232,14 +232,14 @@ int main(int argc, char* argv[]) {
       if (mpi_rank == 0) {
         std::cout << "  Actual Residual: " << serr << std::endl;
       }*/
-      MPI_File fh;
+      /*MPI_File fh;
       std::string filename = "test2/salt_x_" + std::to_string(mpi_rank) + ".bin";
       MPI_File_open(MPI_COMM_SELF, filename.c_str(), MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
       MPI_Offset offset = 0;
       MPI_Status status;
       MPI_File_write_at(fh, offset, X1.data(), lenX, MPI_C_DOUBLE_COMPLEX, &status);
       MPI_File_close(&fh);
-      std::cout<<mpi_rank<<": "<<lenX<<std::endl;
+      std::cout<<mpi_rank<<": "<<lenX<<std::endl;*/
     }
   }
   if (mpi_rank == 0) {
