@@ -32,30 +32,30 @@ add_library(elastWave3d
   subroutine/integration/Gauss_line.f90
   subroutine/integration/Gauss_tri.f90
   subroutine/fundamental/sub_FS/shape_function.f90
-  subroutine/fundamental/sub_FS/Dyn_Sigma_Uij.f90
-  subroutine/fundamental/sub_FS/static_line_int.f90
+  #subroutine/fundamental/sub_FS/Dyn_Sigma_Uij.f90
+  #subroutine/fundamental/sub_FS/static_line_int.f90
   subroutine/fundamental/sub_FS/static_Sigma_d_Uij.f90
   subroutine/fundamental/sub_FS/elast3d_UTij_static.f90
   subroutine/fundamental/sub_FS/Exp_sr_series_BEM.f90
   subroutine/fundamental/sub_FS/in_or_not.f90
   subroutine/fundamental/sub_FS/check_int.f90
-  subroutine/fundamental/elast3d_Uij_l.f90
-  subroutine/fundamental/elast3d_Tij_l_iq.f90
-  subroutine/fundamental/elast3d_aTij_l.f90
-  subroutine/fundamental/elast3d_Wij_l_iq.f90
-  subroutine/fundamental/Galerkin_Uij_freq_ip.f90
-  subroutine/fundamental/Galerkin_Tij_freq_ip_iq.f90
-  subroutine/fundamental/Galerkin_aTij_freq_ip.f90
-  subroutine/fundamental/Galerkin_Wij_freq_ip_iq.f90
-  subroutine/input.f90
-  subroutine/tool.f90
-  subroutine/mass_mat.f90
-  subroutine/freq_inc_traction.f90
-  subroutine/freq_inc_displacement.f90
-  subroutine/mkmat_transmission_disp.f90
-  subroutine/mkmat_transmission_PMCHWT.f90
-  subroutine/mkmat_transmission_BM.f90
-  subroutine/zgmresk_BEM.f90
+  #subroutine/fundamental/elast3d_Uij_l.f90
+  #subroutine/fundamental/elast3d_Tij_l_iq.f90
+  #subroutine/fundamental/elast3d_aTij_l.f90
+  #subroutine/fundamental/elast3d_Wij_l_iq.f90
+  #subroutine/fundamental/Galerkin_Uij_freq_ip.f90
+  #subroutine/fundamental/Galerkin_Tij_freq_ip_iq.f90
+  #subroutine/fundamental/Galerkin_aTij_freq_ip.f90
+  #subroutine/fundamental/Galerkin_Wij_freq_ip_iq.f90
+  #subroutine/input.f90
+  #subroutine/tool.f90
+  #subroutine/mass_mat.f90
+  #subroutine/freq_inc_traction.f90
+  #subroutine/freq_inc_displacement.f90
+  #subroutine/mkmat_transmission_disp.f90
+  #subroutine/mkmat_transmission_PMCHWT.f90
+  #subroutine/mkmat_transmission_BM.f90
+  #subroutine/zgmresk_BEM.f90
   cppInterface/inputNonGlobal.f90
   cppInterface/modulesNonGlobal.f90
   cppInterface/incident_wave.f90
