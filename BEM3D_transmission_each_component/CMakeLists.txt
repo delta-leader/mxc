@@ -31,27 +31,10 @@ add_library(elastWave3d
   module/module_BEM.f90
   subroutine/integration/Gauss_line.f90
   subroutine/integration/Gauss_tri.f90  
-  subroutine/fundamental/sub_FS/check_int.f90
-  subroutine/fundamental/sub_FS/Exp_sr_series_BEM.f90
-  subroutine/fundamental/sub_FS/in_or_not.f90
-  subroutine/fundamental/sub_FS/shape_function.f90
-  #subroutine/fundamental/elast3d_Uij_l.f90
-  #subroutine/fundamental/elast3d_Tij_l_iq.f90
-  #subroutine/fundamental/elast3d_aTij_l.f90
-  #subroutine/fundamental/elast3d_Wij_l_iq.f90
-  #subroutine/fundamental/Galerkin_Uij_freq_ip.f90
-  #subroutine/fundamental/Galerkin_Tij_freq_ip_iq.f90
-  #subroutine/fundamental/Galerkin_aTij_freq_ip.f90
-  #subroutine/fundamental/Galerkin_Wij_freq_ip_iq.f90
-  #subroutine/input.f90
-  #subroutine/tool.f90
-  #subroutine/mass_mat.f90
-  #subroutine/freq_inc_traction.f90
-  #subroutine/freq_inc_displacement.f90
-  #subroutine/mkmat_transmission_disp.f90
-  #subroutine/mkmat_transmission_PMCHWT.f90
-  #subroutine/mkmat_transmission_BM.f90
-  #subroutine/zgmresk_BEM.f90
+  subroutine/fundamental/check_int.f90
+  subroutine/fundamental/Exp_sr_series_BEM.f90
+  subroutine/fundamental/in_or_not.f90
+  subroutine/fundamental/shape_function.f90
   cppInterface/inputNonGlobal.f90
   cppInterface/modulesNonGlobal.f90
   cppInterface/incident_wave.f90
@@ -69,10 +52,6 @@ add_library(elastWave3d
   cppInterface/elast3d_UTij_static_nonGlobal.f90
 )
 
-#add_executable(elastWave3dTransmission
-#  main/GBEM3D.f90
-#)
-
 # openmp
 find_package(OpenMP)
 if (OPENMP_FOUND)
@@ -82,32 +61,7 @@ if (OPENMP_FOUND)
   set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-# library elast_wave_2d
-#if(DEFINED ENV{LAPACK_ETC_MAKE_PATH})
-#  set(LAPACK_ETC_MAKE_PATH $ENV{LAPACK_ETC_MAKE_PATH})
-#else()
-#  message(FATAL_ERROR "Environment variable LAPACK_ETC_MAKE_PATH is not set")
-#endif()
-foreach(TARGET
-    elastWave3d
-    #elastWave3dTransmission
-  )
-  target_compile_options(${TARGET} PRIVATE
-    -cpp -march=native -O3 -fmax-errors=3 -ffree-line-length-none -fopt-info-vec
-    #-cpp -ffpe-trap=invalid,zero,overflow -Og -g -Wall -Wextra -fmax-errors=3 -ffree-line-length-none -DDEBUG
-  )
-  #target_include_directories(${TARGET} PRIVATE
-  #  "${LAPACK_ETC_MAKE_PATH}/include/lapack95_modules/"
-  #)
-  target_link_libraries(${TARGET} PRIVATE BLAS::BLAS LAPACK::LAPACK
-    #-lslatec-f2c
-    #-llapack95
-    #-llapack
-    #-lblas
-  )
-endforeach()
-
-#target_link_libraries(elastWave3dTransmission PRIVATE
-#  elastWave3d
-#  -O3
-#)
+target_compile_options(elastWave3d PRIVATE
+  -cpp -march=native -O3 -fmax-errors=3 -ffree-line-length-none -fopt-info-vec
+)
+target_link_libraries(elastWave3d PRIVATE BLAS::BLAS LAPACK::LAPACK)
