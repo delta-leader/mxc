@@ -28,6 +28,14 @@ contains
     real(kind(0d0))::norm,check,ep_ixz,cvec(3),yc(3),dd
     real(kind(0d0))::Ixz_num(5,10),xx(3),ep_shift,Ixz_store(3,5,10),val(3)
     !===================================================
+    interface
+       subroutine check_norm(Ixz1,Ixz2,norm)
+         implicit none
+         real(kind(0d0)),intent(out)::norm
+         real(kind(0d0)),intent(in)::Ixz1(5,10),Ixz2(5,10)
+       end subroutine check_norm
+    end interface
+    !===================================================
     vec12(:)=y2(:)-y1(:)
     vec23(:)=y3(:)-y2(:)
     vec31(:)=y1(:)-y3(:)
@@ -551,30 +559,4 @@ contains
   end subroutine elast3d_UTij_static_nonGlobal
   !================================================================
   !================================================================
-  !================================================================
-  subroutine check_norm(Ixz1,Ixz2,norm)
-    implicit none
-    integer::i
-    real(kind(0d0))::check
-    real(kind(0d0)),intent(out)::norm
-    real(kind(0d0)),intent(in)::Ixz1(5,10),Ixz2(5,10)
-    !================================================================
-    check=0.d0; norm=0.d0
-    do i=1,3
-       norm=norm+Ixz1(1,i)**2
-    end do
-    do i=1,10
-       norm=norm+Ixz1(3,i)**2+Ixz1(5,i)**2
-    end do
-    norm=sqrt(norm)
-    do i=1,3
-       check=check+(Ixz1(1,i)-Ixz2(1,i))**2
-    end do
-    do i=1,10
-       check=check+(Ixz1(3,i)-Ixz2(3,i))**2+(Ixz1(5,i)-Ixz2(5,i))**2
-    end do
-    check=sqrt(check)
-    norm=check/norm
-  end subroutine check_norm
-  !----------------------------------------
 end module elast3d_UTij_static_nonGlobal_mod

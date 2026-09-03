@@ -32,6 +32,7 @@ add_library(elastWave3d
   subroutine/integration/Gauss_line.f90
   subroutine/integration/Gauss_tri.f90  
   subroutine/fundamental/check_int.f90
+  subroutine/fundamental/check_norm.f90
   subroutine/fundamental/Exp_sr_series_BEM.f90
   subroutine/fundamental/in_or_not.f90
   subroutine/fundamental/shape_function.f90
@@ -42,7 +43,6 @@ add_library(elastWave3d
   cppInterface/Galerkin_Wij_freq_ip_iq_nonGlobal.f90
   cppInterface/elast3d_Wij_l_iq_nonGlobal.f90
   cppInterface/Dyn_Sigma_Uij_nonGlobal.f90
-  cppInterface/static_Sigma_d_Uij_nonGlobal.f90
   cppInterface/Galerkin_aTij_freq_ip_nonGlobal.f90
   cppInterface/elast3d_aTij_l_nonGlobal.f90
   cppInterface/Galerkin_Tij_freq_ip_iq_nonGlobal.f90
@@ -50,6 +50,7 @@ add_library(elastWave3d
   cppInterface/elast3d_Tij_l_iq_nonGlobal.f90
   cppInterface/elast3d_Uij_l_nonGlobal.f90
   cppInterface/elast3d_UTij_static_nonGlobal.f90
+  cppInterface/static_Sigma_d_Uij_nonGlobal.f90
 )
 
 # openmp
