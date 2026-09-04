@@ -70,8 +70,6 @@ contains
     open(unit=10,file='../input/analysis_condition.inp')
     !---------------------------------------------
     read(10,*)
-    read(10,*) theta_in
-    theta_in = theta_in*pi/180.0d0
     read(10,*) elout%cl, elout%ct, elout%rho
     read(10,*) elin(1)%cl, elin(1)%ct, elin(1)%rho
     read(10,*) ngauss_x, ngauss_y, ngauss_l

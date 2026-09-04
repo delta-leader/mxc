@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::vector<std::complex<double>> rhs(lenX);
-    std::vector<double> incident = {0};//, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
+    std::vector<double> incident = {0, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
     double gmres_time, gmres_comm_time;
     for (size_t w = 0; w < incident.size(); w++) {
        matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega, incident[w]);

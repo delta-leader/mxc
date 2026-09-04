@@ -84,10 +84,7 @@ namespace elastWave3d{
 
   extern "C" {
     void input_non_global(struct nodal_point nodals[], int &numNodeBasis, struct element elems[], int &numElemBasis, const int& sphere_num, const int& mat_num);
-    void inc_disp_const_x(const struct nodal_point nodals[], const int &numNodeBasis, const struct element &elx, const double &om, std::complex<double> uout[]);
-    std::complex<double> set_alpha(const double &omega);
-    double get_mu(const int &out_in, const int &index);
-    double set_theta(const double &theta);
+    void inc_disp_const_x(const struct nodal_point nodals[], const int &numNodeBasis, const struct element &elx, const double &omega, const double &theta, std::complex<double> uout[]);
     void mkmat_entrywise_3d_elast(const struct nodal_point x_nodals[], const int &xNumNodeBasis, const struct element x_elems[], const int &xNumElemBasis, const int &xindex, const struct nodal_point y_nodals[], const int &yNumNodeBasis, const struct element y_elems[], const int &yNumElemBasis, const int &yindex, const double &omega, std::complex<double> dummat[]);
   }
 }

@@ -2,50 +2,7 @@ module elast3d_incident_wave_mod
   implicit none
 contains
 !-------------------------------------------------
-  pure complex(c_double_complex) function set_alpha(omega) result(res) bind(c)
-    use iso_c_binding
-    use math_cst
-    use elast_parameter_struct_mod_global
-    implicit none
-
-    real(c_double), intent(in) :: omega
-
-    res = ii/(omega/elout%ct)
-
-  end function set_alpha
-!-------------------------------------------------
-  real(c_double) function get_mu(in_out, index) result(res) bind(c)
-    use iso_c_binding
-    use elast_parameter_struct_mod_global
-    implicit none
-
-    integer(c_int), intent(in) :: in_out
-    integer(c_int), intent(in) :: index
-
-    select case (in_out)
-    case(0)
-       res = elout%mu
-    case(1)
-       res = elin(index)%mu
-    case default
-       write(*,*) "ERROR at line", __LINE__, "in file", __FILE__
-       stop
-    end select
-
-  end function get_mu
-!-------------------------------------------------
-  subroutine set_theta(theta) bind(c)
-    use iso_c_binding
-    use math_cst
-    use BEM3d_small_mod
-    implicit none
-
-    real(c_double), intent(in) :: theta
-    theta_in = theta*pi/180.0d0
-
-  end subroutine set_theta
-!---------------------------------------
-  subroutine inc_disp_const_x(nodals, nnode, elx, om, uout) bind(c)
+  subroutine inc_disp_const_x(nodals, nnode, elx, omega, theta, uout) bind(c)
     use BEM3d_small_mod
     use math_cst
     use elast_parameter_struct_mod_global
@@ -55,11 +12,11 @@ contains
     type(nodal_point), intent(in) :: nodals(nnode)
     type(element), intent(in) :: elx
     integer(c_int), intent(in) :: nnode
-    real(c_double), intent(in) :: om
+    real(c_double), intent(in) :: omega, theta
     complex(c_double_complex), intent(out) :: uout(3)
 
     integer::i,j,k,ip,ng,integ
-    real(kind(0d0))::kk
+    real(kind(0d0))::kk, theta_in
     real(kind(0d0)),dimension(3)::x1,x2,x3,xco,pvec,dvec
     real(kind(0d0)),dimension(:),allocatable::gzi1,gzi2,gzi3,wi
 
@@ -72,7 +29,10 @@ contains
          real(kind(0d0)),dimension(:),allocatable,intent(inout)::gzi1,gzi2,gzi3,wi
        end subroutine Gauss_tri
     end interface
-
+    
+    ! convert angle
+    theta_in = theta*pi/180.0d0
+    
     integ=3
     call Gauss_tri(integ,gzi1,gzi2,gzi3,wi)
     pvec(1)=cos(theta_in)
@@ -80,7 +40,7 @@ contains
     pvec(3)=sin(theta_in)
     ! P-wave
     dvec(:)=pvec(:)
-    kk = om/elout%cl
+    kk = omega/elout%cl
     
     x1(:) = nodals(elx%ind(1))%xc(:)
     x2(:) = nodals(elx%ind(2))%xc(:)

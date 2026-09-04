@@ -10,8 +10,6 @@
 
 class MatrixGenerator {
 private:
-  double mu0;
-  double mu1;
   long long num_nodes, num_elems;
   std::vector<struct elastWave3d::nodal_point> nodes;
   std::vector<struct elastWave3d::element> elems;
@@ -37,19 +35,17 @@ public:
   void gen_matrix_sorted_single_layer(DT cmat[], long long start, const long long num_rows, const double omega) const;
   template <typename DT>
   void gen_matrix_sorted_single_layer(DT cmat[], long long row_start, const long long num_rows, const long long col_start, const long long num_cols, const double omega) const;
-  void gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, const double theta_in = 0) const;
+  void gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, const double theta = 0) const;
   template <typename DT>
   void gen_matrix_element_single_layer(DT cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
   template <typename DT>
   void gen_matrix_idx_element_single_layer(DT cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
    template <typename DT>
   void gen_matrix_hidr_sorted_single_layer(DT cmat[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
-  //void generateA(const double omega, double scale = 0);
   void writeA(const std::string& filename);
   void readA(const std::string& filename);
   void open_matrix_file(const std::string& filename);
   void open_rhs_file(const std::string& filename);
-  //void read_mat_metadata(double& mat_size, double& scale, double& omega, double& leaf_size) const;
   void read_mat_metadata_single_layer(double& mat_size, double& omega, double& leaf_size) const;
 };
 

@@ -62,9 +62,6 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
   std::iota(nodes_idx.begin(), nodes_idx.end(), 0);
   elems_idx.resize(num_elems);
   std::iota(elems_idx.begin(), elems_idx.end(), 0);
-  // this needs to be set immediately after reading the file
-  mu0 = elastWave3d::get_mu(0, 1);
-  mu1 = elastWave3d::get_mu(1, 1);
 }
 
 // generates the whole matrix for the single layer potential (no reordering)
@@ -128,15 +125,13 @@ void MatrixGenerator::gen_matrix_sorted_single_layer(DT cmat[], long long row_st
 
 // generates a certain number of rows of the RHS, taking into account the reordering
 // (for the single layer potential)
-void MatrixGenerator::gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, const double theta_in) const {
-  double theta = elastWave3d::set_theta(theta_in);
-  std::complex<double> alpha = elastWave3d::set_alpha(omega);
+void MatrixGenerator::gen_rhs_sorted_single_layer(std::complex<double> rhs[], long long start, long long num_rows, const double omega, const double theta) const {
   std::complex<double> uout[3];
   // divide by 3 to get element indices
   start /= 3;
   #pragma omp parallel for firstprivate(uout)
   for(int i = 0; i < num_rows / 3; i++){
-    elastWave3d::inc_disp_const_x(nodes.data(), num_nodes, elems[elems_idx[start + i]], omega, uout);
+    elastWave3d::inc_disp_const_x(nodes.data(), num_nodes, elems[elems_idx[start + i]], omega, theta, uout);
     for(int j = 0; j < 3; j++){
       rhs[j + 3 * i] = uout[j];   
     }
