@@ -90,6 +90,6 @@ namespace elastWave3d{
     std::complex<double> set_alpha(const double &omega);
     double get_mu(const int &out_in, const int &index);
     double set_theta(const double &theta);
-    void mkmat_entrywise_3d_elast(const struct nodal_point x_nodals[], const int &xNumNodeBasis, const struct element x_elems[], const int &xNumElemBasis, const int &xindex, const struct nodal_point y_nodals[], const int &yNumNodeBasis, const struct element y_elems[], const int &yNumElemBasis, const int &yindex, const double &omega, const int &out_in, const int &slp_or_dlp, const int &linear_or_const, const int &symmetric_integration, std::complex<double> dummat[]);
+    void mkmat_entrywise_3d_elast(const struct nodal_point x_nodals[], const int &xNumNodeBasis, const struct element x_elems[], const int &xNumElemBasis, const int &xindex, const struct nodal_point y_nodals[], const int &yNumNodeBasis, const struct element y_elems[], const int &yNumElemBasis, const int &yindex, const double &omega, std::complex<double> dummat[]);
   }
 }

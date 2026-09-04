@@ -75,12 +75,8 @@ void MatrixGenerator::gen_matrix_single_layer(DT cmat[], const double omega) con
   #pragma omp parallel for firstprivate(mat3x3) collapse(2)
   for(int xindex = 0; xindex < num_elems; xindex++){
     for(int yindex = 0; yindex < num_elems; yindex++){
-      const int out_in = 0;
-      const int slp_or_dlp = 1;
-      const int linear_or_const = 1;
-      const int slp_symmetric = 1;
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, xindex + 1, nodes.data(), num_nodes, elems.data(), num_elems, yindex + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, xindex + 1, nodes.data(), num_nodes, elems.data(), num_elems, yindex + 1, omega, mat3x3.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + (j + 3*yindex) * nmat] = -mat3x3.at(i + 3*j);
@@ -96,15 +92,11 @@ template <typename DT>
 void MatrixGenerator::gen_matrix_sorted_single_layer(DT cmat[], long long start, const long long num_rows, const double omega) const {
   long long nmat = num_elems * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
-  const int out_in = 0;
-  const int slp_or_dlp = 1;
-  const int linear_or_const = 1;
-  const int slp_symmetric = 1;
   #pragma omp parallel for firstprivate(mat3x3) collapse(2)
   for(int xindex = 0; xindex < num_rows; xindex++){
     for(int yindex = 0; yindex < num_elems; yindex++){
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex] + 1, omega, mat3x3.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[(i + 3*xindex) * nmat + j + 3*yindex] = -mat3x3.at(i + 3*j);
@@ -120,15 +112,11 @@ template <typename DT>
 void MatrixGenerator::gen_matrix_sorted_single_layer(DT cmat[], long long row_start, const long long num_rows, const long long col_start, const long long num_cols, const double omega) const {
   long long nmat = num_rows * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
-  const int out_in = 0;
-  const int slp_or_dlp = 1;
-  const int linear_or_const = 1;
-  const int slp_symmetric = 1;
   #pragma omp parallel for firstprivate(mat3x3) collapse(2)
   for(int xindex = 0; xindex < num_rows; xindex++){
     for(int yindex = 0; yindex < num_cols; yindex++){
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + row_start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex + col_start] + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + row_start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[yindex + col_start] + 1, omega, mat3x3.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + (j + 3*yindex) * nmat] = -mat3x3.at(i + 3*j);
@@ -160,17 +148,13 @@ void MatrixGenerator::gen_rhs_sorted_single_layer(std::complex<double> rhs[], lo
 template <typename DT>
 void MatrixGenerator::gen_matrix_element_single_layer(DT cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
   std::vector<std::complex<double>> mat3x3(9, 0.0);
-  const int out_in = 0;
-  const int slp_or_dlp = 1;
-  const int linear_or_const = 1;
-  const int slp_symmetric = 1;
   #pragma omp parallel for firstprivate(mat3x3)  collapse(2)
   for (long long i = 0; i < num_rows; ++i) {
     for (long long j = 0; j < num_cols; ++j) {
       long long row_idx = row_indices[i] / 3;
       long long col_idx = col_indices[j] / 3;
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, mat3x3.data());
       cmat[i + j * num_rows] = -mat3x3.at(row_indices[i]%3 + 3*(col_indices[j]%3));
     }
   }
@@ -183,17 +167,13 @@ void MatrixGenerator::gen_matrix_element_single_layer(DT cmat[], const long long
 template <typename DT>
 void MatrixGenerator::gen_matrix_idx_element_single_layer(DT cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
   std::vector<std::complex<double>> mat3x3(9, 0.0);
-  const int out_in = 0;
-  const int slp_or_dlp = 1;
-  const int linear_or_const = 1;
-  const int slp_symmetric = 1;
   #pragma omp parallel for firstprivate(mat3x3) collapse(2)
   for (long long i = 0; i < num_rows; ++i) {
     for (long long j = 0; j < num_cols; ++j) {
       long long row_idx = row_indices[i] / 3;
       long long col_idx = col_indices[j];
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[row_idx] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, mat3x3.data());
       for (long long d = 0; d < 3; ++d) {  
         cmat[i * num_cols * 3 + j * 3 + d] = -mat3x3.at(row_indices[i]%3 + 3 * d);
       }
@@ -210,16 +190,12 @@ template <typename DT>
 void MatrixGenerator::gen_matrix_hidr_sorted_single_layer(DT cmat[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const {
   long long nmat = num_rows * 3;
   std::vector<std::complex<double>> mat3x3(9, 0.0);
-  const int out_in = 0;
-  const int slp_or_dlp = 1;
-  const int linear_or_const = 1;
-  const int slp_symmetric = 1;
   #pragma omp parallel for firstprivate(mat3x3) collapse(2)
   for(int xindex = 0; xindex < num_rows; xindex++){
     for (long long y = 0; y < num_cols; ++y) {
       long long col_idx = col_indices[y];
       std::fill(mat3x3.begin(), mat3x3.end(), 0.0);
-      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + row_start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, out_in, slp_or_dlp, linear_or_const, slp_symmetric, mat3x3.data());
+      elastWave3d::mkmat_entrywise_3d_elast(nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[xindex + row_start] + 1, nodes.data(), num_nodes, elems.data(), num_elems, elems_idx[col_idx] + 1, omega, mat3x3.data());
       for(int j = 0; j < 3; j++){
         for(int i = 0; i < 3; i++){
           cmat[i + 3*xindex + (j + 3*y) * nmat] = -mat3x3.at(i + 3*j);
