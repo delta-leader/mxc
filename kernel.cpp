@@ -1,5 +1,6 @@
 #include <kernel.hpp>
 
+#include <cstdlib>
 #include <iostream>
 #include <numeric>
 
@@ -27,31 +28,32 @@ MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
   std::string filename;
   switch (spheres) {
     case 64:
-      filename = "../input/new/64_spheres_" + std::to_string(size) + ".inp";
+      filename = "../input/sphere/64_spheres_" + std::to_string(size) + ".inp";
       break;
     case 32:
-      filename = "../input/new/32_spheres_" + std::to_string(size) + ".inp";
+      filename = "../input/sphere/32_spheres_" + std::to_string(size) + ".inp";
       break;
     case 16:
-      filename = "../input/new/16_spheres_" + std::to_string(size) + ".inp";
+      filename = "../input/sphere/16_spheres_" + std::to_string(size) + ".inp";
       break;
     case 8:
-      filename = "../input/new/eight_spheres_" + std::to_string(size) + ".inp";
+      filename = "../input/sphere/8_spheres_" + std::to_string(size) + ".inp";
       break;
     case 4:
-      filename = "../input/new/four_spheres_" + std::to_string(size) + ".inp";
+      filename = "../input/sphere/4_spheres_" + std::to_string(size) + ".inp";
       break;
     case 3:
       filename = "../input/salt/salt_" + std::to_string(size) + "k.inp";
       break;
     case 2:
-      filename = "../input/new/two_spheres_" + std::to_string(size) + ".inp";
+      filename = "../input/sphere/2_spheres_" + std::to_string(size) + ".inp";
       break;
     case 1:
-      filename = "../input/new/sphere_" + std::to_string(size) + ".inp";
+      filename = "../input/sphere/sphere_" + std::to_string(size) + ".inp";
       break;
     default:
       std::cerr << spheres << " is not a valid indicator for a geometry." << std::endl;
+      std::abort();
   }
   read_mesh_specs(num_nodes, num_elems, filename);
   nodes.resize(num_nodes);

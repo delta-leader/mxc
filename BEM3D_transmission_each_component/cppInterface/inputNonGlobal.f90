@@ -24,24 +24,24 @@ contains
     character(len=50) :: filename
     write(mat_num_char , '(I10)') mat_num        ! convert integer to char
     if (sphere_num == 64) then
-      write(filename, '("../input/new/64_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+      write(filename, '("../input/sphere/64_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 32) then
-      write(filename, '("../input/new/32_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+      write(filename, '("../input/sphere/32_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 16) then
-      write(filename, '("../input/new/16_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+      write(filename, '("../input/sphere/16_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 8) then
-      write(filename, '("../input/new/eight_spheres_", A, ".inp")') trim(adjustl(mat_num_char)) 
+      write(filename, '("../input/sphere/8_spheres_", A, ".inp")') trim(adjustl(mat_num_char)) 
     else if (sphere_num == 4) then
-      write(filename, '("../input/new/four_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+      write(filename, '("../input/sphere/4_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 3) then
       write(filename, '("../input/salt/salt_", A, "k.inp")') trim(adjustl(mat_num_char)) 
     else if (sphere_num == 2) then
-      write(filename, '("../input/new/two_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
+      write(filename, '("../input/sphere/2_spheres_", A, ".inp")') trim(adjustl(mat_num_char))
     else if (sphere_num == 1) then
-      write(filename, '("../input/new/sphere_", A, ".inp")') trim(adjustl(mat_num_char))
+      write(filename, '("../input/sphere/sphere_", A, ".inp")') trim(adjustl(mat_num_char))
     else
       write(*,*) "Invalid file identifier, defaulted to single sphere"
-      write(filename, '("../input/mesh_sphere_", A, ".inp")') trim(adjustl(mat_num_char))
+      write(filename, '("../input/sphere/sphere_", A, ".inp")') trim(adjustl(mat_num_char))
    end if
 
     ! file read
