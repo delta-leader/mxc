@@ -49,7 +49,6 @@ H2MatrixSolver<DT>::H2MatrixSolver(const MatrixGenerator& matgen, double epi, lo
   } else {
     A[levels].construct(matgen, fix_rank ? (double)rank_func(levels) : epi, cells.data(), Near, comm[levels], A[levels], comm[levels], omega);
   }
-  A[levels].lowest = true;
   for (long long l = levels - 1; l >= 0; l--) {
     if (verbose && mpi_rank == 0) {
       std::cout<<"Construct level "<<l<<std::endl;
@@ -173,10 +172,6 @@ void H2MatrixSolver<DT>::factorizeM() {
     if (0 < l)
       A[l - 1].factorizeCopyNext(A[l], comm[l]);
   }
-
-  for (long long l = levels; l >= 0; l--)
-    if (A[l].info)
-      printf("singularity detected at level %lld.\n", l);
 }
 
 template <typename DT>
