@@ -1,8 +1,8 @@
 module BEM3d
    use struct_type
    implicit none
-   integer::nthread,id_bie,im
-   integer::n_mat,nnode,nel,ninf,id_inc,ix1_min,ix1_0,ix1_max,nel3,nnode3
+   integer::nthread,im
+   integer::n_mat,nnode,nel,ninf,ix1_min,ix1_0,ix1_max,nel3,nnode3
    real(kind(0d0))::u0,theta_in,rad
    real(kind(0d0)),dimension(2)::cl,ct,rho
    type(element),dimension(:),allocatable::el

@@ -30,8 +30,8 @@ module bem3d_small_mod
   use struct_type_fixed_len_node_mod
   implicit none
 
-  integer::nthread,id_bie,im
-  integer::n_mat,ninf,id_inc,ix1_min,ix1_0,ix1_max,nel3,nnode3
+  integer::nthread,im
+  integer::n_mat,ninf,ix1_min,ix1_0,ix1_max,nel3,nnode3
   real(kind(0d0))::u0,theta_in,rad
   type(infield),dimension(:),allocatable::xinf
   integer::icheck

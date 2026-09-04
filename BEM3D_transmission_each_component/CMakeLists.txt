@@ -25,23 +25,23 @@ if(CCACHE_EXE)
   endif()
 endif()
 
-add_library(elastWave3d
-  module/math_cst.f90
-  module/struct_type.f90
-  module/module_BEM.f90
-  subroutine/integration/Gauss_line.f90
-  subroutine/integration/Gauss_tri.f90  
-  subroutine/fundamental/check_int.f90
-  subroutine/fundamental/check_norm.f90
-  subroutine/fundamental/Exp_sr_series_BEM.f90
-  subroutine/fundamental/in_or_not.f90
-  subroutine/fundamental/shape_function.f90
+add_library(elastWave3d  
   cppInterface/elast3d_Uij_l_nonGlobal.f90
   cppInterface/Galerkin_Uij_freq_ip_nonGlobal.f90
   cppInterface/incident_wave.f90
   cppInterface/inputNonGlobal.f90
   cppInterface/mkmat_entrywise_3d_elast.f90
   cppInterface/modulesNonGlobal.f90
+  module/math_cst.f90
+  module/struct_type.f90
+  module/module_BEM.f90
+  subroutine/fundamental/check_int.f90
+  subroutine/fundamental/check_norm.f90
+  subroutine/fundamental/Exp_sr_series_BEM.f90
+  subroutine/fundamental/in_or_not.f90
+  subroutine/fundamental/shape_function.f90
+  subroutine/integration/Gauss_line.f90
+  subroutine/integration/Gauss_tri.f90  
 )
 
 # openmp
