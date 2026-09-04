@@ -1,14 +1,14 @@
 #include <complex>
-#include <solver.hpp>
-#include <test_funcs.hpp>
-#include <include/elast3d.hpp>
-#include <kernel.hpp>
-#include <string>
+#include <fstream>
 #include <random>
+#include <string>
 
 #include <Eigen/Dense>
 
-#include <fstream>
+#include <include/elast3d.hpp>
+#include <kernel.hpp>
+#include <solver.hpp>
+
 
 int main(int argc, char* argv[]) {
   MPI_Init(&argc, &argv);
@@ -18,28 +18,34 @@ int main(int argc, char* argv[]) {
   long long M = argc > 1 ? std::atoll(argv[1]) : 5697;
   // the geometry
   long long geom = argc > 2 ? std::atoll(argv[2]) : 1;
-  // TODO check where this is used and fix if needed
+  // the angular frequency
   double omega = argc > 3 ? std::atof(argv[3]) : 1;
   // The maximum number of elements contained in each leaf-level node
   long long leaf_size = argc > 4 ? std::atoll(argv[4]) : 32;
   // admisibility of the preconditioner
-  double theta_precon = argc > 5 ? std::atof(argv[5]) : 1e0;
+  double admis_precon = argc > 5 ? std::atof(argv[5]) : 2e0;
   // fixed rank
   long long rank = argc > 6 ? std::atoll(argv[6]) : 32;
   // leveled rank
   long long leveled_rank =  argc > 7 ? std::atoll(argv[7]) : 0;
   // accuracy
-  double epi = argc > 8 ? std::atof(argv[8]) : 1e-10;
-  // admisibility of the Hmatrix
-  double theta = argc > 9 ? std::atof(argv[9]) : 1e0;
+  double epi = argc > 8 ? std::atof(argv[8]) : 1e-8;
+  // admisibility of the H^2 in the matrix-vector products
+  double admis = argc > 9 ? std::atof(argv[9]) : 2e0;
+  // GMRES parameters
   long long inner_iter = argc > 10 ? std::atoll(argv[10]) : 10;
   long long max_iter = argc > 11 ? std::atoll(argv[11]) : 50;
   // HiDR parameters
   long long r1 = argc > 12 ? std::atoll(argv[12]) : 0;
   long long r2 = argc > 13 ? std::atoll(argv[13]) : 0;
+  // write solution
+  bool write_result = argc > 14 ? std::atoi(argv[14]) : 0;
+  // load H^2 matrix from file
+  std::string read_folder = argc > 15 ? argv[15] : "";
+  // number of runs
+  long long runs = argc > 16 ? std::atoll(argv[16]) : 1;
 
   const std::string MAT = std::to_string(M);
- 
   MatrixGenerator matgen(M, geom);
   long long Nbody = matgen.get_num_elems();
   leaf_size = Nbody < leaf_size ? Nbody : leaf_size;
@@ -57,16 +63,14 @@ int main(int argc, char* argv[]) {
   auto elems = matgen.get_elems();
   auto idx = matgen.get_elems_idx();
 
-  // enable to write the new element order to a file
-  /*
-  if (mpi_rank == 0) {
-    std::string filename2 = "test2/salt_idx.dat";
-    std::ofstream mf2(filename2);
+  if (write_result && mpi_rank == 0) {
+    std::string filename = "results/solution_indices.dat";
+    std::ofstream mf(filename);
     
     for (long long i = 0; i < matgen.get_num_elems(); ++i) {
-      mf2 <<idx[i]<<std::endl;
+      mf <<idx[i]<<std::endl;
     }
-  }*/
+  }
 
   
   // generate random x
@@ -78,20 +82,16 @@ int main(int argc, char* argv[]) {
 
   if (mpi_rank == 0) {
     std::cout<<"M = "<<M<<", geom = "<<geom<<std::endl;
-    std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis_precon = "<<theta_precon<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
-    std::cout<<", epsilon = "<<epi<<", theta = "<<theta<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter;
+    std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis_precon = "<<admis_precon<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
+    std::cout<<", epsilon = "<<epi<<", admis = "<<admis<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter;
     std::cout<<", r1 = "<<r1<<", r2 = "<<r2<<std::endl;
-    //std::cout<<", r1 = "<<r1<<", leveled_r1 = "<<leveled_r1<<", r2 = "<<r2<<", leveled_r2 = "<<leveled_r2<<std::endl; 
-    //std::cout<<"Reading file "<<filename<<std::endl;
-    std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
+     std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
     std::cout<<"Elements per leaf: "<<(matgen.get_num_elems() >> levels)<<std::endl;
   }
  
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-  std::string filename = ""; //"../tmp/";
-  std::cout<<"Reading: "<<filename<<std::endl;
-  H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, theta, levels, omega, filename, true);
+  H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, admis, levels, omega, read_folder, true);
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
@@ -131,9 +131,7 @@ int main(int argc, char* argv[]) {
   // build preconditioner
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
-  // testing hidr for the salt model? might be better to do it for the sphere first
-  H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega, matgen.get_elems(), r1, r2, true);
-  //H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, theta_precon, levels, omega);
+  H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, admis_precon, levels, omega, matgen.get_elems(), r1, r2, true);
   MPI_Barrier(MPI_COMM_WORLD);
   precon_construct_time = MPI_Wtime() - precon_construct_time;
   precon_construct_comm_time = ColCommMPI::get_comm_time();
@@ -159,14 +157,14 @@ int main(int argc, char* argv[]) {
   std::vector<double> fact_time;
   std::vector<double> subst_time;
   std::vector<double> gm_time;
-  const int RUNS = 1;
 
-  for (int i = 0; i < RUNS; ++i) {
+  for (int i = 0; i < runs; ++i) {
     // we would need to initialize X1 and X1_low here
     if (mpi_rank == 0) {
       std::cout<<"Run "<<i<<std::endl;
     }
     H2MatrixSolver<std::complex<double>> precon_tmp(precon);
+    std::vector<std::complex<double>> X1_tmp(X1);
  
     // factorize preconditioner
     MPI_Barrier(MPI_COMM_WORLD);
@@ -179,31 +177,31 @@ int main(int argc, char* argv[]) {
   
     MPI_Barrier(MPI_COMM_WORLD);
     double precon_sub_time = MPI_Wtime(), precon_sub_comm_time;
-    precon_tmp.solvePrecondition(&X1[0]);
+    precon_tmp.solvePrecondition(&X1_tmp[0]);
     MPI_Barrier(MPI_COMM_WORLD);
     precon_sub_time = MPI_Wtime() - precon_sub_time;
     precon_sub_comm_time = ColCommMPI::get_comm_time();
-    double serr = solveRelErr(lenX, &X1[0], &X2[0]);
+    double serr = solveRelErr(lenX, &X1_tmp[0], &X2[0]);
     subst_time.push_back(precon_sub_time);
 
 
-    if (!i &&mpi_rank == 0) {
+    if (!i && mpi_rank == 0) {
       std::cout << "H^2-Matrix Factorization Time: " << precon_factor_time << ", " << precon_factor_comm_time << std::endl;
       std::cout << "H^2-Matrix Substitution Time: " << precon_sub_time << ", " << precon_sub_comm_time << std::endl;
       std::cout << "H^2-Matrix Substitution Err: " << serr << std::endl;
     }
 
     std::vector<std::complex<double>> rhs(lenX);
-    std::vector<double> incident = {0, 10, 20};//, 30, 40, 50, 60, 70, 80, 90};
+    std::vector<double> thetas = {0, 10, 20, 30, 40};
     double gmres_time, gmres_comm_time;
-    for (size_t w = 0; w < incident.size(); w++) {
-       matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega, incident[w]);
+    for (auto& theta: thetas) {
+       matgen.gen_rhs_sorted_single_layer(rhs.data(), offset, lenX, omega, theta);
       
       // iterative solver
-      std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
+      std::fill(X1_tmp.begin(), X1_tmp.end(), std::complex<double>(0., 0.));
       MPI_Barrier(MPI_COMM_WORLD);
       gmres_time = MPI_Wtime();
-      matA.solveGMRES(epi, precon_tmp, &X1[0], &rhs[0], inner_iter, max_iter);
+      matA.solveGMRES(epi, precon_tmp, &X1_tmp[0], &rhs[0], inner_iter, max_iter);
       MPI_Barrier(MPI_COMM_WORLD);
       gmres_time = MPI_Wtime() - gmres_time;
       gmres_comm_time = ColCommMPI::get_comm_time();
@@ -215,46 +213,32 @@ int main(int argc, char* argv[]) {
         for (long long i = 0; i <= matA.iters; i++)
           std::cout << "    iter "<< i << ": " << matA.resid[i] << std::endl;
       }
-
-      // calculate residual with respect to the dense matrix
-      /*long long offset2 = matA.local_bodies.second * 3;
-      std::vector<long long> offsets(mpi_size+1);
-      MPI_Allgather(&offset2, 1, MPI_LONG_LONG_INT, &offsets[1], 1, MPI_LONG_LONG_INT, MPI_COMM_WORLD);
-      std::vector<int> recvcounts(offsets.size() - 1), displs(offsets.size() - 1);
-      std::transform(offsets.begin() + 1, offsets.end(), offsets.begin(), recvcounts.begin(), [](long long end, long long begin) { return (int)(end - begin); });
-      std::transform(offsets.begin(), std::prev(offsets.end()), displs.begin(), [](long long begin) { return (int)begin; });
-      Eigen::VectorXcd global_x(Nbody * 3);
-      MPI_Allgatherv(&X1[0], lenX, MPI_C_DOUBLE_COMPLEX, global_x.data(), &recvcounts[0], &displs[0], MPI_C_DOUBLE_COMPLEX, MPI_COMM_WORLD);
-
-      std::fill(X1.begin(), X1.end(), std::complex<double>(0., 0.));
-      mat_vec_reference(matgen, lenX/3, Nbody, &X1[0], global_x.data(), matA.local_bodies.first, omega);
-      serr = solveRelErr(lenX, &X1[0], &rhs[0]);
-      if (mpi_rank == 0) {
-        std::cout << "  Actual Residual: " << serr << std::endl;
-      }*/
-      /*MPI_File fh;
-      std::string filename = "test2/salt_x_" + std::to_string(mpi_rank) + ".bin";
-      MPI_File_open(MPI_COMM_SELF, filename.c_str(), MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
-      MPI_Offset offset = 0;
-      MPI_Status status;
-      MPI_File_write_at(fh, offset, X1.data(), lenX, MPI_C_DOUBLE_COMPLEX, &status);
-      MPI_File_close(&fh);
-      std::cout<<mpi_rank<<": "<<lenX<<std::endl;*/
+      
+      if (write_result) {
+        MPI_File fh;
+        std::string filename = "results/solution_" + std::to_string(mpi_rank) + ".bin";
+        MPI_File_open(MPI_COMM_SELF, filename.c_str(), MPI_MODE_CREATE|MPI_MODE_WRONLY, MPI_INFO_NULL, &fh);
+        MPI_Offset offset = 0;
+        MPI_Status status;
+        MPI_File_write_at(fh, offset, X1_tmp.data(), lenX, MPI_C_DOUBLE_COMPLEX, &status);
+        MPI_File_close(&fh);
+      }
     }
+    precon_tmp.free_all_comms();
   }
   if (mpi_rank == 0) {
-    std::cout<<std::endl<<"Factorization time: ";
+    std::cout << std::endl << "Factorization time: ";
     for (size_t i = 0; i < fact_time.size(); ++i)
-      std::cout<<fact_time[i]<<", ";
-    std::cout<<std::endl;
-    std::cout<<"Substitution time: ";
+      std::cout << fact_time[i] <<", ";
+    std::cout << std::endl;
+    std::cout << "Substitution time: ";
     for (size_t i = 0; i < subst_time.size(); ++i)
-      std::cout<<subst_time[i]<<", ";
-    std::cout<<std::endl;
-    std::cout<<"GMRES time: ";
+      std::cout << subst_time[i] <<", ";
+    std::cout << std::endl;
+    std::cout << "GMRES time: ";
     for (size_t i = 0; i < gm_time.size(); ++i)
-      std::cout<<gm_time[i]<<", ";
-    std::cout<<std::endl;
+      std::cout << gm_time[i]<<", ";
+    std::cout << std::endl;
   }
 
   matA.free_all_comms();
