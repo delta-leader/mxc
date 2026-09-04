@@ -5,7 +5,6 @@
 
 
 inline void read_mesh_specs(long long& num_nodes, long long& num_elems, const std::string& fname) {
-  //std::cout<<fname<<std::endl;
   std::ifstream file(fname);
   std::string line;
   std::getline(file, line);

@@ -9,7 +9,6 @@
 
 // complex double
 template class H2MatrixSolver<std::complex<double>>;
-template void H2MatrixSolver<std::complex<double>>::solveGMRES<std::complex<float>>(double, H2MatrixSolver<std::complex<float>>&, std::complex<double>[], const std::complex<double>[], long long, long long);
 template double solveRelErr(long long, const std::complex<double> X[], const std::complex<double> ref[], MPI_Comm);
 
 template <typename DT>
@@ -316,75 +315,6 @@ void H2MatrixSolver<DT>::solveGMRES(double tol, DT x[], const DT b[], long long 
     nsum = R.adjoint() * R;
     comm[levels].level_sum(&nsum, 1);
     resid[++iters] = std::sqrt(nsum.real()) / normb;
-  }
-}
-
-template <typename DT> template <typename OT>
-void H2MatrixSolver<DT>::solveGMRES(double tol, H2MatrixSolver<OT>& M, DT x[], const DT b[], long long inner_iters, long long outer_iters) {
-  typedef Eigen::Matrix<DT, Eigen::Dynamic, 1> Vector_dt;
-  typedef Eigen::Matrix<OT, Eigen::Dynamic, 1> Vector_ot;
-  typedef Eigen::Matrix<DT, Eigen::Dynamic, Eigen::Dynamic> Matrix_dt;
-
-  long long N = A[levels].lenX;
-  long long ld = inner_iters + 1;
-
-  Eigen::Map<const Vector_dt> B(b, N);
-  Eigen::Map<Vector_dt> X(x, N);
-
-  double nsum = B.squaredNorm();
-  comm[levels].level_sum(&nsum, 1);
-  double normb = std::sqrt(nsum);
-  if (normb == 0.)
-    normb = 1.;
-
-  Vector_dt R = B;
-  Vector_ot R_low;
-  resid.resize(outer_iters + 1);
-  resid[0] = 1.;
-  iters = 0;
-
-  while (iters < outer_iters && tol <= resid[iters]) {
-    R_low = R.template cast<OT>();
-    M.solvePrecondition(R_low.data());
-    R = R_low.template cast<DT>();
-    nsum = R.squaredNorm();
-    comm[levels].level_sum(&nsum, 1);
-
-    double beta = std::sqrt(nsum);
-    Matrix_dt H = Matrix_dt::Zero(ld, inner_iters);
-    Matrix_dt v = Matrix_dt::Zero(N, ld);
-    v.col(0) = R * (1. / beta);
-    
-    for (long long i = 0; i < inner_iters; i++) {
-      R = v.col(i);
-      matVecMul(R.data());
-      R_low = R.template cast<OT>();
-      M.solvePrecondition(R_low.data());
-      R = R_low.template cast<DT>();
-
-      H.block(0, i, i + 1, 1).noalias() = v.leftCols(i + 1).adjoint() * R;
-      comm[levels].level_sum(H.col(i).data(), i + 1);
-      R.noalias() -= v.leftCols(i + 1) * H.block(0, i, i + 1, 1);
-
-      nsum = R.squaredNorm();
-      comm[levels].level_sum(&nsum, 1);
-      H(i + 1, i) = std::sqrt(nsum);
-      v.col(i + 1) = R * ((DT)1. / H(i + 1, i));
-    }
-
-    Vector_dt s = Vector_dt::Zero(ld);
-    s(0) = beta;
-
-    R = H.householderQr().solve(s);
-    X.noalias() += v.leftCols(inner_iters) * R;
-
-    R = -X;
-    matVecMul(R.data());
-    R += B;
-
-    nsum = R.squaredNorm();
-    comm[levels].level_sum(&nsum, 1);
-    resid[++iters] = std::sqrt(nsum) / normb;
   }
 }
 

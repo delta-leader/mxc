@@ -1,10 +1,11 @@
 #include <kernel.hpp>
 
+#include <algorithm>
 #include <cstdlib>
-#include <iostream>
 #include <numeric>
 
 #include <Eigen/Dense>
+
 #include <test_funcs.hpp>
 
 
@@ -15,14 +16,6 @@ template void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<doubl
 template void MatrixGenerator::gen_matrix_element_single_layer(std::complex<double>[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
 template void MatrixGenerator::gen_matrix_idx_element_single_layer(std::complex<double>[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
 template void MatrixGenerator::gen_matrix_hidr_sorted_single_layer(std::complex<double>[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
-// complex float
-template void MatrixGenerator::gen_matrix_single_layer(std::complex<float> cmat[], const double omega) const;
-template void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<float>[], long long start, const long long num_rows, const double omega) const;
-template void MatrixGenerator::gen_matrix_sorted_single_layer(std::complex<float>[], long long row_start, const long long num_rows, const long long col_start, const long long num_cols, const double omega) const;
-template void MatrixGenerator::gen_matrix_element_single_layer(std::complex<float>[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
-template void MatrixGenerator::gen_matrix_idx_element_single_layer(std::complex<float>[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
-template void MatrixGenerator::gen_matrix_hidr_sorted_single_layer(std::complex<float>[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
-
 
 MatrixGenerator::MatrixGenerator(const int size, const int spheres) {
   std::string filename;

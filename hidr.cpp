@@ -4,8 +4,6 @@
 #include <numeric>
 #include <random>
 
-#include <build_tree.hpp>
-
 
 void sphere_grid(double* bodies, long long nbodies, double r) {
   const double phi = M_PI * (3. - std::sqrt(5.));  // golden angle in radians

@@ -292,4 +292,3 @@ void ColCommMPI::record_mpi() {
     timer.second = 0.;
   }
 }
-

@@ -17,8 +17,6 @@ long long int log2floor(const long long int &x){return 63 - __builtin_clzll(x);}
 
 // complex double
 template class H2Matrix<std::complex<double>>;
-// complex float
-template class H2Matrix<std::complex<float>>;
 
 
 template<typename MDT, typename DT>

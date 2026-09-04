@@ -120,4 +120,3 @@ void MatrixDataContainer<T>::read(MPI_File& fh, MPI_Offset& offset, MPI_Status& 
 template class MatrixDataContainer<long long>;
 template class MatrixDataContainer<double>;
 template class MatrixDataContainer<std::complex<double>>;
-template class MatrixDataContainer<std::complex<float>>;

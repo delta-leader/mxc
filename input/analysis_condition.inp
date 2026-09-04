@@ -1,0 +1,10 @@
+!--- input file for 3D frequency-domain BEM ---
+1.73205080756888d0   1.0d0   1.d0     !cl, ct, rho for domain 1 (exterior domain)
+3.d0                 1.5d0   2.d0     !cl, ct, rho for domain 2 (interior domain)
+4     4     4                         !ngauss_x, ngauss_y, ngauss_l
+!--- infield data ---
+!--- number of infield points ---
+3
+1     -2.0    0.0     0.0
+2     -3.5    0.0     0.0
+3     -5.0    0.0     0.0

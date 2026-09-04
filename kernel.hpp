@@ -3,8 +3,6 @@
 #include <complex>
 #include <vector>
 
-#include <Eigen/Dense>
-#include <mpi.h>
 #include <include/elast3d.hpp>
 
 
@@ -14,11 +12,6 @@ private:
   std::vector<struct elastWave3d::nodal_point> nodes;
   std::vector<struct elastWave3d::element> elems;
   std::vector<long long> nodes_idx, elems_idx;
-  double scale = 1;
-  Eigen::MatrixXcd A;
-  MPI_File fh_matrix, fh_rhs;
-  bool matrix_from_file = false;
-  bool rhs_from_file = false;
 
 public:
   MatrixGenerator(const int size, const int spheres=0);
@@ -42,11 +35,6 @@ public:
   void gen_matrix_idx_element_single_layer(DT cmat[], const long long row_indices[], const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
    template <typename DT>
   void gen_matrix_hidr_sorted_single_layer(DT cmat[], long long row_start, const long long num_rows, const long long col_indices[], const long long num_cols, const double omega) const;
-  void writeA(const std::string& filename);
-  void readA(const std::string& filename);
-  void open_matrix_file(const std::string& filename);
-  void open_rhs_file(const std::string& filename);
-  void read_mat_metadata_single_layer(double& mat_size, double& omega, double& leaf_size) const;
 };
 
 void mat_vec_reference(const MatrixGenerator& matgen, long long M, long long N, std::complex<double> B[], const std::complex<double> X[], const long long row_offset, const double omega);

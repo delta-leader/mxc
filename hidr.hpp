@@ -3,9 +3,8 @@
 
 #include <vector>
 
+#include <build_tree.hpp>
 
-class Cell;
-class CSR;
 
 class HiDR {
 private:
