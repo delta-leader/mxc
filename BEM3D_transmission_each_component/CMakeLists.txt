@@ -56,4 +56,8 @@ endif()
 target_compile_options(elastWave3d PRIVATE
   -cpp -march=native -O3 -fmax-errors=3 -ffree-line-length-none -fopt-info-vec
 )
-target_link_libraries(elastWave3d PRIVATE BLAS::BLAS LAPACK::LAPACK)
+if (BLA_VENDOR EQUAL OpenBLAS)
+  target_link_libraries(elastWave3d PRIVATE BLAS::BLAS LAPACK::LAPACK)
+else()
+  target_link_libraries(elastWave3d PRIVATE $<LINK_ONLY:MKL::MKL>)
+endif()
