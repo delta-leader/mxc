@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
   // leveled rank
   long long leveled_rank =  argc > 7 ? std::atoll(argv[7]) : 0;
   // accuracy
-  double epi = argc > 8 ? std::atof(argv[8]) : 1e-8;
+  double epsilon = argc > 8 ? std::atof(argv[8]) : 1e-8;
   // admisibility of the H^2 in the matrix-vector products
   double admis = argc > 9 ? std::atof(argv[9]) : 2e0;
   // GMRES parameters
@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
   if (mpi_rank == 0) {
     std::cout<<"M = "<<M<<", geom = "<<geom<<std::endl;
     std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis_precon = "<<admis_precon<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
-    std::cout<<", epsilon = "<<epi<<", admis = "<<admis<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter;
+    std::cout<<", epsilon = "<<epsilon<<", admis = "<<admis<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter;
     std::cout<<", r1 = "<<r1<<", r2 = "<<r2<<std::endl;
      std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
     std::cout<<"Elements per leaf: "<<(matgen.get_num_elems() >> levels)<<std::endl;
@@ -91,7 +91,7 @@ int main(int argc, char* argv[]) {
  
   MPI_Barrier(MPI_COMM_WORLD);
   double h2_construct_time = MPI_Wtime(), h2_construct_comm_time;
-  H2MatrixSolver<std::complex<double>> matA(matgen, epi, rank, leveled_rank, cell, admis, levels, omega, read_folder, true);
+  H2MatrixSolver<std::complex<double>> matA(matgen, epsilon, rank, leveled_rank, cell, admis, levels, omega, read_folder, true);
   MPI_Barrier(MPI_COMM_WORLD);
   h2_construct_time = MPI_Wtime() - h2_construct_time;
   h2_construct_comm_time = ColCommMPI::get_comm_time();
@@ -201,7 +201,7 @@ int main(int argc, char* argv[]) {
       std::fill(X1_tmp.begin(), X1_tmp.end(), std::complex<double>(0., 0.));
       MPI_Barrier(MPI_COMM_WORLD);
       gmres_time = MPI_Wtime();
-      matA.solveGMRES(epi, precon_tmp, &X1_tmp[0], &rhs[0], inner_iter, max_iter);
+      matA.solveGMRES(epsilon, precon_tmp, &X1_tmp[0], &rhs[0], inner_iter, max_iter);
       MPI_Barrier(MPI_COMM_WORLD);
       gmres_time = MPI_Wtime() - gmres_time;
       gmres_comm_time = ColCommMPI::get_comm_time();
