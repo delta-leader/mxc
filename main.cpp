@@ -36,8 +36,8 @@ int main(int argc, char* argv[]) {
   long long inner_iter = argc > 10 ? std::atoll(argv[10]) : 10;
   long long max_iter = argc > 11 ? std::atoll(argv[11]) : 50;
   // HiDR parameters
-  long long r1 = argc > 12 ? std::atoll(argv[12]) : 0;
-  long long r2 = argc > 13 ? std::atoll(argv[13]) : 0;
+  long long s1 = argc > 12 ? std::atoll(argv[12]) : 0;
+  long long s2 = argc > 13 ? std::atoll(argv[13]) : 0;
   // write solution
   bool write_result = argc > 14 ? std::atoi(argv[14]) : 0;
   // load H^2 matrix from file
@@ -84,7 +84,7 @@ int main(int argc, char* argv[]) {
     std::cout<<"M = "<<M<<", geom = "<<geom<<std::endl;
     std::cout<<"Omega = "<<omega<<", Leaf-size = "<<leaf_size<<", admis_precon = "<<admis_precon<<", rank = "<<rank<<", leveled rank = "<<leveled_rank;
     std::cout<<", epsilon = "<<epsilon<<", admis = "<<admis<<", inner iter = "<<inner_iter<<", max iter = "<<max_iter;
-    std::cout<<", r1 = "<<r1<<", r2 = "<<r2<<std::endl;
+    std::cout<<", s1 = "<<s1<<", s2 = "<<s2<<std::endl;
      std::cout<<"N = "<<Nbody<<", Leaf = "<<leaf_size<<", Levels = "<<levels<<", #Leafs = "<<Nleaf<<", #Cells = "<<ncells<<std::endl;
     std::cout<<"Elements per leaf: "<<(matgen.get_num_elems() >> levels)<<std::endl;
   }
@@ -131,7 +131,7 @@ int main(int argc, char* argv[]) {
   // build preconditioner
   MPI_Barrier(MPI_COMM_WORLD);
   double precon_construct_time = MPI_Wtime(), precon_construct_comm_time;
-  H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, admis_precon, levels, omega, matgen.get_elems(), r1, r2, true);
+  H2MatrixSolver<std::complex<double>> precon(matgen, 0, rank, leveled_rank, cell, admis_precon, levels, omega, matgen.get_elems(), s1, s2, true);
   MPI_Barrier(MPI_COMM_WORLD);
   precon_construct_time = MPI_Wtime() - precon_construct_time;
   precon_construct_comm_time = ColCommMPI::get_comm_time();

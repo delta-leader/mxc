@@ -36,6 +36,7 @@ The results is stored in `nbd/log` folder by default, and containing the plots, 
 # Runtime parameters
 - M: Number of nodes (not elements) in the input file (default is 5697).
 - geom: Type of the geometry stored in the input file (default is 1). Together, M and geom define which input mesh is used by the program. The following table provides an overview over the available files (note that the identifiers for the salt model are slightly different as the number of nodes is $\approx M * 1000$):
+
 | M | geom |  Mesh |  DoF  |
 |----------:|:-------------:|:------:|------:|
 | 2455 | 1 | single sphere | 14718 |
