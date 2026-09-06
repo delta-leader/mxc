@@ -3,6 +3,9 @@
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_CXX_COMPILER g++)
+set(CMAKE_Fortran_COMPILER gfortran)
+
 project ("shimo" LANGUAGES CXX Fortran)
 
 option(USE_MKL "Compile with Intel MKL" OFF)
